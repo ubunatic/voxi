@@ -1,0 +1,17 @@
+[Unit]
+Description=Voxi Continuous Eager Sentence Streaming Dictation
+Documentation=https://github.com/ubunatic/voxi
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/go/bin/voxi eager --daemon
+Restart=on-failure
+RestartSec=3
+
+Environment=XDG_RUNTIME_DIR=%t
+Environment=PATH=%h/go/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+
+[Install]
+WantedBy=graphical-session.target

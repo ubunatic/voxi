@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>voxi — standalone Linux voice input & typing engine</title>
+  <meta name="description" content="Voxi is a high-performance voice input and typing engine for Linux/Wayland with continuous eager sentence streaming and modifier gating.">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      color-scheme: light;
+      --bg:       #f7f6f3;
+      --surface:  #ffffff;
+      --border:   #e2e0da;
+      --text:     #1c1917;
+      --muted:    #6b6762;
+      --accent:   #2563eb;
+      --code-bg:  #1a1917;
+      --code-fg:  #d4d0c8;
+      --green:    #16a34a;
+      --radius:   8px;
+      --font:     -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Liberation Sans', Helvetica, Arial, sans-serif;
+      --mono:     'JetBrains Mono', 'Fira Code', 'Liberation Mono', monospace;
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      font-size: 16px;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .container { max-width: 860px; margin: 0 auto; padding: 0 1.5rem; }
+
+    header {
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      padding: 1.25rem 0;
+    }
+    .header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .logo {
+      font-weight: bold;
+      font-size: 1.25rem;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    main { padding: 3rem 0; }
+
+    .hero {
+      margin-bottom: 3rem;
+      text-align: center;
+    }
+    .hero h1 {
+      font-size: 2.5rem;
+      margin-bottom: 1rem;
+      letter-spacing: -0.02em;
+    }
+    .hero p {
+      font-size: 1.2rem;
+      color: var(--muted);
+      max-width: 640px;
+      margin: 0 auto 1.5rem auto;
+    }
+
+    .voxi-badge {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      border-radius: 999px;
+      background: #e0e7ff;
+      color: var(--accent);
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+    }
+
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 3rem;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+    }
+    .card h3 {
+      font-size: 1.1rem;
+      margin-bottom: 0.5rem;
+    }
+    .card p {
+      font-size: 0.95rem;
+      color: var(--muted);
+    }
+
+    pre {
+      background: var(--code-bg);
+      color: var(--code-fg);
+      padding: 1.25rem;
+      border-radius: var(--radius);
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      overflow-x: auto;
+      margin-bottom: 2rem;
+    }
+
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 2rem 0;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container header-inner">
+      <div class="logo">🎙️ voxi</div>
+      <nav>
+        <a href="https://codeberg.org/ubunatic/voxi" rel="noopener">Codeberg</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="container">
+      <div class="hero">
+        <span class="badge">Standalone Linux Voice Engine</span>
+        <h1>Fast, Reliable Voice Input for Wayland</h1>
+        <p>Continuous eager sentence streaming, physical modifier gating safety, and direct synthetic typing injection.</p>
+      </div>
+
+      <div class="card-grid">
+        <div class="card">
+          <h3>⚡ Continuous Eager Streaming</h3>
+          <p>Rolling Whisper inference segments speech on natural pauses with zero dropped words and sub-250ms latency.</p>
+        </div>
+        <div class="card">
+          <h3>🔒 Modifier Gating Daemon</h3>
+          <p>The <code>voxi-modifierd</code> daemon watches evdev physical modifier state, guaranteeing hotkey safety with zero keylogging.</p>
+        </div>
+        <div class="card">
+          <h3>📊 Btop-Style Resource Monitor</h3>
+          <p>Live terminal dashboard tracks transcription latency, audio level meters, CPU load, and AMD GPU Vulkan acceleration.</p>
+        </div>
+      </div>
+
+      <h2>Quick Start</h2>
+      <pre><code># Install voxi and modifier daemon
+go install ubunatic.com/voxi/cmd/voxi@latest
+go install ubunatic.com/voxi/cmd/voxi-modifierd@latest
+
+# Run continuous eager sentence dictation
+voxi eager
+
+# Live resource monitor
+voxi monitor --watch</code></pre>
+    </div>
+  </main>
+
+  <footer>
+    <div class="container">
+      <p>© 2026 ubunatic · Standalone Voice Input Engine</p>
+    </div>
+  </footer>
+</body>
+</html>

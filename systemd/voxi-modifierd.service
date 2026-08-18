@@ -1,0 +1,28 @@
+[Unit]
+Description=Voxi Modifier Daemon (evdev physical modifier monitor)
+Documentation=https://github.com/ubunatic/voxi
+After=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/voxi-modifierd --state-file /run/voxi/modifiers --interval 10ms
+Restart=always
+RestartSec=2
+
+# Security & Isolation sandbox settings
+# Needs read access to /dev/input and write access to /run/voxi
+RuntimeDirectory=voxi
+RuntimeDirectoryMode=0755
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/run/voxi
+DeviceAllow=char-input r
+SupplementaryGroups=input
+
+# Privacy protection: zero non-modifier keylogging
+CapabilityBoundingSet=
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

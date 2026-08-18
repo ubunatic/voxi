@@ -1,0 +1,7 @@
+{
+  "uuid": "voxi@ubunatic.com",
+  "name": "Voxi Voice Input",
+  "description": "Desktop companion for Voxi voice input dictation, history, retype, and settings",
+  "shell-version": ["45", "46", "47", "48", "49", "50"],
+  "version": 1
+}
