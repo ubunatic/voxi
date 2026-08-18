@@ -1,0 +1,57 @@
+# yaml-language-server: $schema=schemas/models.schema.json
+#
+# ASR model registry: every Whisper model Voxi is set up to drive through
+# voxtype, plus the hallucination stop-word patterns known to leak from
+# each model's silence/low-confidence output. See docs/Spec.md.
+#
+# stop_words are case-insensitive regex fragments (not literal strings):
+# `.*` extends a match to swallow trailing hallucinated text, and `\.`
+# escapes literal dots (e.g. domain names). They are shared across models
+# below because none of these models are known to diverge yet; split a
+# model out with its own list as soon as it shows model-specific leakage.
+
+default_model: small.en
+
+models:
+  base.en:
+    label: "Whisper Base (English)"
+    engine: whisper
+    stop_words: &common_stop_words
+      - "thank you for watching"
+      - "thanks for watching"
+      - "thank you"
+      - "thanks for listening"
+      - "please subscribe.*"
+      - "subscribe to my channel"
+      - "see you next time"
+      - "see you in the next video"
+      - "subtitles by.*"
+      - "translated by.*"
+      - "like and subscribe"
+      - "and like\\. thank you"
+      - "mcrun"
+      - "mbc"
+      - "learn english.*"
+      - ".*engvid\\.com.*"
+      - "kathryn"
+      - "in the video"
+      - "in this video"
+      - "in today's video"
+      - "free-to-use tip"
+      - "www\\.[a-z0-9-]+\\.[a-z]+"
+
+  small.en:
+    label: "Whisper Small (English)"
+    engine: whisper
+    stop_words: *common_stop_words
+
+  large-v3-turbo:
+    label: "Whisper Large v3 Turbo (English/Multilingual)"
+    engine: whisper
+    stop_words: *common_stop_words
+    # CPU RTF 2.54 (0.39x, sub-realtime) vs GPU RTF 0.59 (1.69x) on the
+    # T14 Gen2 AMD baseline — see docs/BenchBaseline.md. CPU-only would
+    # fall behind live speech in eager mode, so it's disallowed here.
+    requires_gpu: true
+    # Model to use instead when no GPU render node is present.
+    cpu_fallback: small.en

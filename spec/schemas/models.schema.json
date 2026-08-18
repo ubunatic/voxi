@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Voxi ASR Model Registry",
+  "description": "Whisper models Voxi may invoke via voxtype, and the per-model hallucination stop-word patterns used to filter transcripts.",
+  "type": "object",
+  "required": ["default_model", "models"],
+  "properties": {
+    "default_model": {
+      "type": "string",
+      "description": "Model name used when no --model flag is given. Must be a key in models."
+    },
+    "models": {
+      "type": "object",
+      "description": "Map of Whisper model name (as passed to voxtype --model) to its configuration.",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["label", "engine", "stop_words"],
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "Human-readable name shown in the monitor TUI and CLI help."
+          },
+          "engine": {
+            "type": "string",
+            "description": "Inference engine backing this model.",
+            "enum": ["whisper"]
+          },
+          "stop_words": {
+            "type": "array",
+            "description": "Case-insensitive regex fragments matching known hallucinated phrases this model tends to leak (e.g. YouTube outros, subtitle credits). Applied both to reject whole-utterance hallucinations and to strip trailing hallucinated tails from otherwise-genuine speech.",
+            "items": { "type": "string", "minLength": 1 },
+            "uniqueItems": true
+          },
+          "requires_gpu": {
+            "type": "boolean",
+            "default": false,
+            "description": "If true, this model must not run on the CPU backend: eager mode falls back to cpu_fallback (or refuses to start if unset) when no GPU render node is present, and `voxi bench` skips its cpu row instead of executing it. Set this when docs/BenchBaseline.md (or an equivalent measurement) shows CPU RTF > 1.0 (sub-realtime) for the model."
+          },
+          "cpu_fallback": {
+            "type": "string",
+            "description": "Model to substitute when requires_gpu is true and no GPU render node is present. Must name another entry in models, and that entry must not itself require a GPU. Ignored when requires_gpu is false."
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

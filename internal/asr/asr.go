@@ -8,18 +8,29 @@ import (
 var (
 	ansiEscapeRe   = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
 	rfc3339TimeRe  = regexp.MustCompile(`\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}`)
-	quoteExtractRe  = regexp.MustCompile(`Transcription completed in [^:]+:\s*"([^"]*)"`)
-	urlPatternRe    = regexp.MustCompile(`(?i)\b(https?://|www\.)[a-z0-9-]+\.[a-z]+`)
-	hallucinationRe = regexp.MustCompile(`(?i)^\s*(thank you for watching|thanks for watching|thank you|thanks for listening|please subscribe.*|subscribe to my channel|see you next time|see you in the next video|subtitles by.*|translated by.*|like and subscribe|mcrun|mbc|learn english.*|.*engvid\.com.*)\s*[.!]?\s*$`)
+	quoteExtractRe = regexp.MustCompile(`Transcription completed in [^:]+:\s*"([^"]*)"`)
+	urlPatternRe   = regexp.MustCompile(`(?i)\b(https?://|www\.)[a-z0-9-]+\.[a-z]+`)
 )
+
+// hallucinationRegexp builds a whole-line matcher from a model's stop-word
+// patterns (see spec/models.yaml). Callers pass the patterns explicitly —
+// this package holds no hardcoded stop-word list of its own.
+func hallucinationRegexp(stopWords []string) *regexp.Regexp {
+	if len(stopWords) == 0 {
+		return nil
+	}
+	return regexp.MustCompile(`(?i)^\s*(` + strings.Join(stopWords, "|") + `)\s*[.!]?\s*$`)
+}
 
 // StripANSI removes all ANSI escape sequences from s.
 func StripANSI(s string) string {
 	return ansiEscapeRe.ReplaceAllString(s, "")
 }
 
-// IsSafeToType validates that a text string contains genuine speech and no diagnostic log leakage, URLs, or hallucinations.
-func IsSafeToType(text string) bool {
+// IsSafeToType validates that a text string contains genuine speech and no
+// diagnostic log leakage, URLs, or hallucinations. stopWords are the active
+// model's hallucination patterns (see spec/models.yaml).
+func IsSafeToType(text string, stopWords []string) bool {
 	trimmed := strings.TrimSpace(text)
 	if trimmed == "" {
 		return false
@@ -41,30 +52,19 @@ func IsSafeToType(text string) bool {
 		return false
 	}
 	// Reject known Whisper silence hallucinations
-	if hallucinationRe.MatchString(trimmed) {
+	if re := hallucinationRegexp(stopWords); re != nil && re.MatchString(trimmed) {
 		return false
 	}
 	return true
 }
 
-// StripTrailingHallucinations cleans trailing YouTube / silence artifact tokens.
-func StripTrailingHallucinations(text string) string {
+// StripTrailingHallucinations cleans trailing hallucinated tokens (e.g.
+// YouTube outros, subtitle credits) from otherwise-genuine speech, using
+// the active model's stop-word patterns (see spec/models.yaml).
+func StripTrailingHallucinations(text string, stopWords []string) string {
 	clean := text
-	patterns := []string{
-		`(?i)\s*thank you for watching[.!]*`,
-		`(?i)\s*thanks for watching[.!]*`,
-		`(?i)\s*please subscribe[.!]*`,
-		`(?i)\s*mcrun[.!]*`,
-		`(?i)\s*in the video[.!]*`,
-		`(?i)\s*in this video[.!]*`,
-		`(?i)\s*in today's video[.!]*`,
-		`(?i)\s*learn english.*[.!]*`,
-		`(?i)\s*free-to-use tip[.!]*`,
-		`(?i)\s*www\.[a-z0-9-]+\.[a-z]+[.!]*`,
-		`(?i)\s*and like\.\s*thank you[.!]*`,
-	}
-	for _, p := range patterns {
-		re := regexp.MustCompile(p)
+	for _, w := range stopWords {
+		re := regexp.MustCompile(`(?i)\s*` + w + `\s*[.!]*`)
 		clean = re.ReplaceAllString(clean, "")
 	}
 	return strings.TrimSpace(clean)
@@ -72,15 +72,16 @@ func StripTrailingHallucinations(text string) string {
 
 // CleanWhisperTranscript extracts only valid human speech from Voxtype transcribe output,
 // discarding ANSI escape codes, diagnostic logs, timestamps, model metadata, and hallucinations.
-func CleanWhisperTranscript(output string) string {
+// stopWords are the active model's hallucination patterns (see spec/models.yaml).
+func CleanWhisperTranscript(output string, stopWords []string) string {
 	clean := StripANSI(output)
 
 	// Strategy 1: Look for Voxtype's explicit canonical summary line:
 	// 'Transcription completed in 1.25s: "the quick brown fox"'
 	if m := quoteExtractRe.FindStringSubmatch(clean); len(m) > 1 {
 		candidate := strings.TrimSpace(m[1])
-		candidate = StripTrailingHallucinations(candidate)
-		if IsSafeToType(candidate) {
+		candidate = StripTrailingHallucinations(candidate, stopWords)
+		if IsSafeToType(candidate, stopWords) {
 			return candidate
 		}
 	}
@@ -110,8 +111,8 @@ func CleanWhisperTranscript(output string) string {
 			rfc3339TimeRe.MatchString(trimmed) {
 			continue
 		}
-		trimmed = StripTrailingHallucinations(trimmed)
-		if IsSafeToType(trimmed) {
+		trimmed = StripTrailingHallucinations(trimmed, stopWords)
+		if IsSafeToType(trimmed, stopWords) {
 			resultLines = append(resultLines, trimmed)
 		}
 	}

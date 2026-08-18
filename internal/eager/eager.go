@@ -22,6 +22,7 @@ import (
 	"ubunatic.com/voxi/internal/deps"
 	"ubunatic.com/voxi/internal/history"
 	"ubunatic.com/voxi/internal/typing"
+	spec "ubunatic.com/voxi/spec"
 )
 
 // EagerOptions holds configuration parameters for Continuous Eager Sentence Streaming dictation.
@@ -38,7 +39,14 @@ type EagerOptions struct {
 }
 
 // DefaultEagerOptions returns standard defaults for eager sentence streaming dictation.
+// The default model name comes from spec/models.yaml, not a hardcoded value.
 func DefaultEagerOptions() EagerOptions {
+	s, err := spec.LoadModels()
+	if err != nil {
+		// spec/models.yaml is embedded at build time and schema-checked by
+		// spec's own tests; a load failure here means a broken build.
+		panic(err)
+	}
 	return EagerOptions{
 		ThresholdRMS:  150,
 		SilenceMs:     800,
@@ -48,7 +56,7 @@ func DefaultEagerOptions() EagerOptions {
 		TypeOutput:    true,
 		RecordHistory: true,
 		Daemon:        false,
-		Model:         "small.en",
+		Model:         s.DefaultModel,
 	}
 }
 
@@ -119,6 +127,13 @@ func writeVoxtypeState(state string) {
 	voxiDir := filepath.Join(runtimeDir, "voxi")
 	_ = os.MkdirAll(voxiDir, 0755)
 	_ = os.WriteFile(filepath.Join(voxiDir, "voice-state"), []byte(state+"\n"), 0644)
+}
+
+// gpuAvailable reports whether a GPU render node is present for Vulkan
+// acceleration (see internal/monitor's equivalent check).
+func gpuAvailable() bool {
+	_, err := os.Stat("/dev/dri/renderD128")
+	return err == nil
 }
 
 // RunEagerDictation orchestrates continuous audio capture, rolling phrase segmentation,
@@ -193,6 +208,23 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 		Duration float64
 	}
 
+	modelSpec, err := spec.LoadModels()
+	if err != nil {
+		return fmt.Errorf("eager: load model spec: %w", err)
+	}
+	modelName := opts.Model
+	if modelName == "" {
+		modelName = modelSpec.DefaultModel
+	}
+	resolvedModel, usedFallback, err := modelSpec.ResolveModel(modelName, gpuAvailable())
+	if err != nil {
+		return fmt.Errorf("eager: %w", err)
+	}
+	if usedFallback {
+		fmt.Fprintf(d.Stdout, "Model %q requires GPU acceleration; no GPU render node found, falling back to %q\n", modelName, resolvedModel)
+	}
+	modelName = resolvedModel
+
 	jobChan := make(chan TranscribeJob, 10)
 	var transWg sync.WaitGroup
 	var fullTranscript strings.Builder
@@ -217,10 +249,6 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 			}
 
 			writeVoxtypeState("transcribing")
-			modelName := opts.Model
-			if modelName == "" {
-				modelName = "base.en"
-			}
 			cmdArgs := []string{
 				"--model", modelName,
 				"--threads", "6",
@@ -236,8 +264,9 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 			transDuration := time.Since(transStart).Seconds()
 			writeVoxtypeState("recording")
 
-			text := asr.CleanWhisperTranscript(outBuf.String())
-			if err == nil && text != "" && asr.IsSafeToType(text) {
+			stopWords := modelSpec.StopWords(modelName)
+			text := asr.CleanWhisperTranscript(outBuf.String(), stopWords)
+			if err == nil && text != "" && asr.IsSafeToType(text, stopWords) {
 				transLock.Lock()
 				if fullTranscript.Len() > 0 {
 					fullTranscript.WriteString(" ")

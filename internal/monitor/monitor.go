@@ -22,6 +22,7 @@ import (
 	"ubunatic.com/voxi/internal/mode"
 	"ubunatic.com/voxi/internal/modifiers"
 	"ubunatic.com/voxi/internal/record"
+	spec "ubunatic.com/voxi/spec"
 )
 
 // ResourceSections defines which btop-style monitoring boxes are currently displayed.
@@ -372,9 +373,13 @@ func detectGPUStatus() string {
 }
 
 func detectActiveModel(d deps.Dependencies) string {
+	defaultModel := "unknown"
+	if s, err := spec.LoadModels(); err == nil {
+		defaultModel = s.DefaultModel
+	}
 	home := d.Getenv("HOME")
 	if home == "" {
-		return "base.en"
+		return defaultModel
 	}
 	configPath := filepath.Join(home, ".config", "voxtype", "config.toml")
 	content, err := os.ReadFile(configPath)
@@ -389,7 +394,7 @@ func detectActiveModel(d deps.Dependencies) string {
 			}
 		}
 	}
-	return "small.en"
+	return defaultModel
 }
 
 func collectVoiceProcesses() []ProcessResource {

@@ -6,9 +6,11 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
+	"ubunatic.com/voxi/internal/bench"
 	"ubunatic.com/voxi/internal/config"
 	"ubunatic.com/voxi/internal/deps"
 	"ubunatic.com/voxi/internal/eager"
@@ -123,7 +125,7 @@ func main() {
 	eagerCmd.Flags().BoolVar(&eagerOpts.TypeOutput, "type", eagerOpts.TypeOutput, "type transcribed sentences directly into the focused window via dotool")
 	eagerCmd.Flags().BoolVar(&eagerOpts.RecordHistory, "history", eagerOpts.RecordHistory, "record transcribed utterances into local dictation history")
 	eagerCmd.Flags().BoolVar(&eagerOpts.Daemon, "daemon", eagerOpts.Daemon, "run as background systemd daemon listening for toggle control")
-	eagerCmd.Flags().StringVar(&eagerOpts.Model, "model", eagerOpts.Model, "Whisper model name (default: small.en, or base.en)")
+	eagerCmd.Flags().StringVar(&eagerOpts.Model, "model", eagerOpts.Model, fmt.Sprintf("Whisper model name, see spec/models.yaml (default: %s)", eagerOpts.Model))
 
 	// 4. monitor / top / resources command
 	var watch bool
@@ -295,10 +297,62 @@ func main() {
 	}
 	daemonCmd.AddCommand(modifiers.NewModifierDaemonCommand(d))
 
-	root.AddCommand(modeCmd, recordCmd, eagerCmd, monitorCmd, historyCmd, configCmd, daemonCmd)
+	// 8. bench command
+	benchOpts := bench.DefaultOptions()
+	var benchJSONPath string
+	benchCmd := &cobra.Command{
+		Use:   "bench",
+		Short: "Benchmark CPU vs GPU transcription speed across configured Whisper models",
+		Long: "Transcribes one audio clip through every model in spec/models.yaml on each\n" +
+			"requested backend, reporting the real-time factor (RTF) and speedup for each\n" +
+			"model x backend pair. By default it uses a fixed reference clip downloaded\n" +
+			"on demand into the user cache dir (never committed to the repo); pass\n" +
+			"--record for a live microphone clip or --file for a local WAV.",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			report, err := bench.Run(cmd.Context(), d, benchOpts)
+			if err != nil {
+				return err
+			}
+			printBenchReport(d.Stdout, report)
+			if benchJSONPath != "" {
+				data, err := json.MarshalIndent(report, "", "  ")
+				if err != nil {
+					return fmt.Errorf("encode bench report: %w", err)
+				}
+				if err := os.WriteFile(benchJSONPath, data, 0644); err != nil {
+					return fmt.Errorf("write %s: %w", benchJSONPath, err)
+				}
+				fmt.Fprintf(d.Stdout, "\nWrote %s\n", benchJSONPath)
+			}
+			return nil
+		},
+	}
+	benchCmd.Flags().BoolVar(&benchOpts.Record, "record", benchOpts.Record, "record live microphone audio instead of using the downloaded reference clip")
+	benchCmd.Flags().IntVar(&benchOpts.DurationSecs, "duration", benchOpts.DurationSecs, "seconds of microphone audio to record when --record is set")
+	benchCmd.Flags().StringVar(&benchOpts.WavFile, "file", benchOpts.WavFile, "use this 16kHz mono WAV instead of the reference clip or recording")
+	benchCmd.Flags().StringSliceVar(&benchOpts.Models, "models", benchOpts.Models, "comma-separated model names to bench (default: every model in spec/models.yaml)")
+	benchCmd.Flags().StringSliceVar(&benchOpts.Backends, "backends", benchOpts.Backends, fmt.Sprintf("comma-separated backends to bench: cpu, gpu (default: %s)", strings.Join(benchOpts.Backends, ",")))
+	benchCmd.Flags().IntVar(&benchOpts.Threads, "threads", benchOpts.Threads, "CPU threads passed to voxtype")
+	benchCmd.Flags().StringVar(&benchJSONPath, "json", "", "write the full bench report as JSON to this path")
+
+	root.AddCommand(modeCmd, recordCmd, eagerCmd, monitorCmd, historyCmd, configCmd, daemonCmd, benchCmd)
 	addDebugCommands(root, d)
 
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
+	}
+}
+
+// printBenchReport renders a CPU-vs-GPU RTF/speedup table grouped by model.
+func printBenchReport(w io.Writer, report *bench.Report) {
+	fmt.Fprintf(w, "\nAudio: %.2fs (%s)\n", report.AudioSecs, report.AudioSource)
+	fmt.Fprintf(w, "%-20s %-10s %8s %10s %s\n", "MODEL", "BACKEND", "RTF", "SPEEDUP", "DETECTED")
+	for _, r := range report.Results {
+		if r.Error != "" {
+			fmt.Fprintf(w, "%-20s %-10s %8s %10s %s\n", r.Model, r.Backend, "-", "-", "error: "+r.Error)
+			continue
+		}
+		fmt.Fprintf(w, "%-20s %-10s %8.2f %9.2fx %s\n", r.Model, r.Backend, r.RTF, r.Speedup, r.DetectedBackend)
 	}
 }

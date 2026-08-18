@@ -18,6 +18,7 @@ import (
 	"ubunatic.com/voxi/internal/audio"
 	"ubunatic.com/voxi/internal/deps"
 	"ubunatic.com/voxi/internal/typing"
+	spec "ubunatic.com/voxi/spec"
 )
 
 // CanaryOptions holds tuning parameters for Voxtype streaming canary.
@@ -272,6 +273,11 @@ func RunVADProbe(ctx context.Context, d deps.Dependencies, opts VADProbeOptions)
 	}
 	segmenter := audio.NewAudioSegmenter(segOpts)
 
+	modelSpec, err := spec.LoadModels()
+	if err != nil {
+		return fmt.Errorf("load model spec: %w", err)
+	}
+
 	recCmd := exec.CommandContext(ctx, recCmdName, recArgs...)
 	audioOut, err := recCmd.StdoutPipe()
 	if err != nil {
@@ -309,7 +315,7 @@ func RunVADProbe(ctx context.Context, d deps.Dependencies, opts VADProbeOptions)
 			wavPath := filepath.Join(tmpDir, fmt.Sprintf("utt_%03d.wav", uttCount))
 			_ = audio.WriteWAVAudio(wavPath, segment, 16000)
 
-			cmd := exec.CommandContext(ctx, voxtypePath, "--model", "base.en", "-q", "transcribe", wavPath)
+			cmd := exec.CommandContext(ctx, voxtypePath, "--model", modelSpec.DefaultModel, "-q", "transcribe", wavPath)
 			out, err := cmd.Output()
 			_ = os.Remove(wavPath)
 			if err == nil {
