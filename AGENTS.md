@@ -30,9 +30,16 @@ Docs in `./docs/` are managed by harnez. <!-- harnez:bundled -->
   probe external mechanisms before building features on them
 - Spec system @docs/Spec.md,
   YAML spec files as single source of truth; Go code must not duplicate spec values
+- Make/Makefile @docs/Make.md,
+  ⚙️ phony sentinel, self-doc help, build dependency pattern
 <!-- harnez:end Language Conventions -->
 
 ## Workspace (uman)
 
 Cross-project operations go through `uman`.
 Project website publishes from `website/` via `uman website sync voxi`.
+<!-- harnez:begin Repo Setup -->
+## Repo Setup
+- Solo/hobby repo — single default branch, no PR workflow.
+- codeberg.org is primary; github.com (if present) is a synced mirror only.
+<!-- harnez:end Repo Setup -->

@@ -9,7 +9,7 @@ PREFIX   ?= /usr/local
 
 help: 🤖  # show this help
 	@grep -E '^[a-zA-Z_-]+:.*[⚙🤖].*#+' $(MAKEFILE_LIST) | \
-	awk 'BEGIN {FS = ":.*#+ "}; {printf "    $(_prim)%-20s$(_rst) %s\n", $$1, $$2}'
+	awk 'BEGIN {FS = ":.*#+ "}; {printf "    $(_prim)%-15s$(_rst) %s\n", $$1, $$2}'
 
 preflight: ⚙️  # check toolchains and dependencies
 	@command -v go >/dev/null || (echo "❌ go is not installed" && exit 1)
