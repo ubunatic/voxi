@@ -5,6 +5,12 @@
 - **Context**: [Issue 020 (OS Tools Voice Input)](../issues/020-tools-command-os-tools.md), [Issue 021 (Fluent Streaming Typing)](../issues/021-fluent-streaming-typing.md), [Issue 022 (GNOME Transcriber UI)](../issues/022-gnome-transcriber-ui.md)
 - **Primary Reference**: [docs/VoiceInput.md](VoiceInput.md)
 
+> **Note on naming:** this ADR predates the extraction of `voxi` into a standalone
+> repository. "Harnez CLI" below is now the `voxi` binary; `internal/tools/voice_*.go`
+> is now `internal/eager`, `internal/history`, `internal/config`, and `internal/typing`;
+> and `harnez tools voice-input ...` commands are now `voxi ...`. Paths and commands are
+> updated to current names; the decision and its rationale are unchanged.
+
 ---
 
 ## 1. Context & Problem Statement
@@ -27,12 +33,12 @@ flowchart TB
     subgraph AudioEngine ["1. Audio & ASR Engine (Voxtype)"]
         Mic["Microphone (PipeWire / ALSA)"] --> VDaemon["voxtype / voxtype-streaming daemon"]
         VDaemon --> Model["Local Model (Whisper batch / Parakeet streaming)"]
-        VDaemon -- "[output.post_process]\n(stdout pass-through)" --> Record["harnez tools voice-input history record"]
+        VDaemon -- "[output.post_process]\n(stdout pass-through)" --> Record["voxi history record"]
     end
 
-    subgraph HarnezCore ["2. Data & Tooling Primitives (Harnez CLI)"]
-        Record --> HStore[("history.jsonl (0600)\n~/.local/share/harnez/voice-input/")]
-        HCLI["harnez tools voice-input\n{list, copy, retype, config, mode}"]
+    subgraph HarnezCore ["2. Data & Tooling Primitives (voxi CLI)"]
+        Record --> HStore[("history.jsonl (0600)\n~/.local/share/voxi/")]
+        HCLI["voxi\n{history, config, mode, ...}"]
         HCLI <--> HStore
         HCLI <--> VConfig[("config.toml\n~/.config/voxtype/")]
         HCLI <--> Systemd["systemd --user\n(voxtype / voxtype-streaming)"]
@@ -61,7 +67,7 @@ flowchart TB
 | Layer / Component | Primary Responsibility | Explicit Non-Goals / Exclusions |
 | :--- | :--- | :--- |
 | **1. Voxtype** (`systemd --user`) | • Audio capture via ALSA/PipeWire<br>• Local offline ASR (Whisper / Parakeet)<br>• Invokes `[output.post_process]` hook<br>• Primary live dictation typing | • No GUI or history buffering<br>• No window focus tracking<br>• No clipboard management |
-| **2. Harnez CLI** (`internal/tools`) | • Local history store (`history.jsonl`, `0600`)<br>• Zero-overhead `record` filter (`cat` wrapper)<br>• Comment-preserving `config.toml` editor<br>• Standalone `retype` and `copy` CLI commands | • No persistent GUI of its own<br>• No compositor-internal window queries |
+| **2. voxi CLI** (`internal/history`, `internal/config`) | • Local history store (`history.jsonl`, `0600`)<br>• Zero-overhead `record` filter (`cat` wrapper)<br>• Comment-preserving `config.toml` editor<br>• Standalone `retype` and `copy` CLI commands | • No persistent GUI of its own<br>• No compositor-internal window queries |
 | **3. GNOME Extension** (GJS / Shell) | • Top bar status icon and history popup<br>• History list presentation<br>• Mode toggle (batch vs. streaming)<br>• Typing speed slider (`type_delay_ms`)<br>• **Mutter focus capture and restoration** | • Does not synthesize keystrokes directly<br>• Does not manage audio streams or models |
 | **4. Mutter & Wayland** | • Window focus management and input routing<br>• Global shortcut handling (`Super+X`)<br>• Emits compositor focus signals to GJS | • Agnostic to speech and transcript content |
 | **5. `dotoold` & `/dev/uinput`** | • Kernel-level synthetic keystroke injection<br>• XKB layout translation (`de`/`us`)<br>• Ultra-low latency (<10ms) via named pipe | • No window targeting (types to active surface) |
@@ -73,8 +79,8 @@ flowchart TB
 ### 4.1. Zero-Intrusion History Capture via `[output.post_process]`
 Voxtype provides a hook `[output.post_process]` that passes transcribed text on `stdin` and reads final text from `stdout`.
 
-- `harnez tools voice-input history record` acts as a pass-through filter (a recording `cat`).
-- It parses `stdin`, computes a short hash ID (`historyID`), writes to `~/.local/share/harnez/voice-input/history.jsonl` (mode `0600`, capped at 20 entries), and immediately writes the unchanged text to `stdout`.
+- `voxi history record` acts as a pass-through filter (a recording `cat`).
+- It parses `stdin`, computes a short hash ID (`historyID`), writes to `~/.local/share/voxi/history.jsonl` (mode `0600`, capped at 20 entries; falls back to reading the legacy `~/.local/share/harnez/voice-input/history.jsonl` if it exists), and immediately writes the unchanged text to `stdout`.
 - **Consequence**: Full history capture is achieved with zero upstream changes to Voxtype.
 
 ### 4.2. Safe Window Focus Restoration for Retype (Mutter Signal Handshake)
@@ -88,13 +94,13 @@ Typing into the background application from the extension menu requires eliminat
    - The extension menu closes.
    - The extension calls `targetWindow.activate(global.get_current_time())`.
 3. **Signal Settle**: The extension attaches to the window focus event (e.g. `notify::has-pointer-focus` or Mutter's focus-changed signal).
-4. **Trigger Injection**: Only after Mutter confirms the target window has regained active focus does the extension invoke `harnez tools voice-input history retype <ID>`.
+4. **Trigger Injection**: Only after Mutter confirms the target window has regained active focus does the extension invoke `voxi history retype <ID>`.
 5. **Fallback Safety**: If `targetWindow` is closed or destroyed while the menu was open, the retype action aborts safely rather than injecting keystrokes into an arbitrary window.
 
 ### 4.3. Atomic, Comment-Preserving Configuration Editing
 Voxtype's built-in `voxtype config set` CLI only supports changing the `engine` key and omits `type_delay_ms`.
 
-- Harnez implements a targeted regex line editor (`SetTypeDelayMs` in `internal/tools/voice_config.go`) that edits only `type_delay_ms` in-place, preserving comments and formatting.
+- `voxi` implements a targeted regex line editor (`SetTypeDelayMs` in `internal/config/config.go`) that edits only `type_delay_ms` in-place, preserving comments and formatting.
 - Changes are written atomically via temp-file creation and rename (`writeConfigAtomic`).
 
 ### 4.4. Development & Testing Workflow (GNOME 45–50 Devkit / Nested Sessions)
@@ -111,7 +117,7 @@ Developing and testing GNOME Shell extensions without logging out:
 
 ## 5. Security & Privacy Considerations
 
-1. **Local-Only Sensitive Data**: Voice dictations may contain sensitive tokens, passwords, or personal communications. History is stored strictly in `~/.local/share/harnez/voice-input/history.jsonl` with `0600` permissions. No network sync or background indexing is performed.
-2. **Instant History Erasure**: `harnez tools voice-input history clear` allows immediate one-click deletion of stored transcripts.
+1. **Local-Only Sensitive Data**: Voice dictations may contain sensitive tokens, passwords, or personal communications. History is stored strictly in `~/.local/share/voxi/history.jsonl` with `0600` permissions. No network sync or background indexing is performed.
+2. **Instant History Erasure**: `voxi history clear` allows immediate one-click deletion of stored transcripts.
 3. **No Added Privileges**: Input injection uses the existing user-session `/dev/uinput` access (`uaccess` tag). No root escalation or `input` group membership is requested or required.
 
