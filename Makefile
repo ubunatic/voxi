@@ -64,6 +64,9 @@ test-debug: ⚙️  # run tests with debug tag
 	go vet -tags debug ./...
 	go test -tags debug ./...
 
+canary-nested: ⚙️  # run nested GNOME Shell Wayland text-injection canary
+	go run ./scripts/canary_nested
+
 format: ⚙️  # format source code
 	go fmt ./...
 
