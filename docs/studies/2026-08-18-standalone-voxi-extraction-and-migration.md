@@ -48,6 +48,15 @@ The goal of this session was to cleanly extract the entire voice stack into a de
 - **Near-Miss**: The initial extraction left `harnez tools voice-input` as a wrapper command in Harnez.
 - **Resolution**: Through user alignment, we executed a total removal of the `tools` subsystem in Harnez. This prevented lingering domain confusion and cut over 1,100 lines of dead code and obsolete schemas.
 
+### 4.3. Extraction Scope Blindness & Tunnel Vision (Subagent Gap)
+- **Failure / Friction**: The extraction subagent focused narrowly on Go source code (`internal/tools/voice_*.go` and `cmd/harnez-modifierd`) and missed the surrounding operational artifacts:
+  - **Canary & Harness Scripts**: `scripts/canary_nested/` was left behind in Harnez.
+  - **Issue Tracking Backlog**: Seven voice-related design and bug tracking issues (`issues/021-028`) were not moved initially.
+  - **Technical Case Studies**: 5 in-depth studies (`docs/studies/2026-08-18-*.md`) remained in Harnez.
+- **Root Cause**: The subagent did not run a full recursive repository inventory (grep/find across `docs/`, `scripts/`, `issues/`, `spec/`) to build a complete domain manifest before executing the migration. It relied on a minimal checklist instead of comprehensive pattern discovery.
+- **Required Nudges**: The user had to explicitly ask why the `tools` module was still visible, prompt for doc/issue migration, and check if canaries had moved.
+- **Actionable Rule for Future Migrations**: When extracting a domain from a project, **Phase 1 must include a full repository-wide content scan** across all file trees (`docs/`, `scripts/`, `issues/`, `spec/`, `website/`, and `tests`) to create an exhaustive manifest of all domain artifacts before moving code.
+
 ---
 
 ## 5. Quality & Invariants Audit
