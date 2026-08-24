@@ -48,7 +48,7 @@ install-modifierd: ⚙️ build-modifierd  # install voxi-modifierd and enable s
 
 install-user-services: ⚙️  # install systemd user service units
 	mkdir -p $(HOME)/.config/systemd/user
-	cp systemd/voxi-eager.service $(HOME)/.config/systemd/user/
+	cp systemd/voxi-agent.service systemd/voxi-eager.service $(HOME)/.config/systemd/user/
 	systemctl --user daemon-reload
 
 uninstall: ⚙️  # remove installed binaries and services

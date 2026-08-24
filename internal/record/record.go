@@ -2,9 +2,11 @@ package record
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
+	"ubunatic.com/voxi/internal/agent"
 	"ubunatic.com/voxi/internal/deps"
 	"ubunatic.com/voxi/internal/eager"
 	"ubunatic.com/voxi/internal/mode"
@@ -21,6 +23,15 @@ const (
 
 // ControlRecording sends a recording control action to the active speech engine.
 func ControlRecording(ctx context.Context, d deps.Dependencies, action RecordAction) error {
+	if status, err := agent.DefaultClient().Record(ctx, agent.RecordAction(action)); err == nil {
+		if d.Stdout != nil {
+			fmt.Fprintln(d.Stdout, agent.RecordingMessage(status.Recording))
+		}
+		return nil
+	} else if !errors.Is(err, agent.ErrUnavailable) {
+		return fmt.Errorf("control recording through agent: %w", err)
+	}
+
 	m := mode.CurrentVoiceInputMode(ctx, d)
 	if m == mode.ModeEager {
 		return eager.ControlEagerDaemon(ctx, d, string(action))
@@ -51,6 +62,12 @@ func ControlRecording(ctx context.Context, d deps.Dependencies, action RecordAct
 
 // GetRecordingStatus queries the current recording/idle status of the speech engine.
 func GetRecordingStatus(ctx context.Context, d deps.Dependencies) (string, error) {
+	if status, err := agent.DefaultClient().Status(ctx); err == nil {
+		return string(status.Recording), nil
+	} else if !errors.Is(err, agent.ErrUnavailable) {
+		return "inactive", fmt.Errorf("get recording status through agent: %w", err)
+	}
+
 	m := mode.CurrentVoiceInputMode(ctx, d)
 	if m == mode.ModeEager {
 		return eager.GetEagerRecordingStatus(ctx, d)

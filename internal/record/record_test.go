@@ -9,6 +9,8 @@ import (
 )
 
 func TestControlRecordingVoxtype(t *testing.T) {
+	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+
 	var invokedCmd string
 	var invokedArgs []string
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"ubunatic.com/voxi/internal/agent"
 	"ubunatic.com/voxi/internal/bench"
 	"ubunatic.com/voxi/internal/config"
 	"ubunatic.com/voxi/internal/deps"
@@ -41,6 +43,12 @@ func main() {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			if len(args) == 0 {
+				if status, err := agent.DefaultClient().Status(ctx); err == nil {
+					fmt.Fprintf(d.Stdout, "%s (voxi agent, %s)\n", status.Mode, status.Recording)
+					return nil
+				} else if !errors.Is(err, agent.ErrUnavailable) {
+					return fmt.Errorf("get agent voice-input mode: %w", err)
+				}
 				fmt.Fprintln(d.Stdout, mode.DescribeVoiceInputMode(mode.CurrentVoiceInputMode(ctx, d)))
 				return nil
 			}
@@ -336,7 +344,7 @@ func main() {
 	benchCmd.Flags().IntVar(&benchOpts.Threads, "threads", benchOpts.Threads, "CPU threads passed to voxtype")
 	benchCmd.Flags().StringVar(&benchJSONPath, "json", "", "write the full bench report as JSON to this path")
 
-	root.AddCommand(modeCmd, recordCmd, eagerCmd, monitorCmd, historyCmd, configCmd, daemonCmd, benchCmd)
+	root.AddCommand(modeCmd, recordCmd, eagerCmd, monitorCmd, historyCmd, configCmd, daemonCmd, benchCmd, agent.NewCommand(d))
 	addDebugCommands(root, d)
 
 	if err := root.Execute(); err != nil {

@@ -2,11 +2,13 @@ package mode
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
+	"ubunatic.com/voxi/internal/agent"
 	"ubunatic.com/voxi/internal/deps"
 )
 
@@ -163,6 +165,17 @@ func persistSelectedService(ctx context.Context, d deps.Dependencies, wanted str
 
 // SwitchVoiceInputMode switches between batch, streaming, and eager voice-input services.
 func SwitchVoiceInputMode(ctx context.Context, d deps.Dependencies, target VoiceInputMode) error {
+	if target != ModeBatch && target != ModeStreaming && target != ModeEager {
+		return fmt.Errorf("invalid voice-input mode %q (want batch, streaming, or eager)", target)
+	}
+
+	if status, err := agent.DefaultClient().SetMode(ctx, agent.Mode(target)); err == nil {
+		fmt.Fprintf(d.Stdout, "switched voice input to %s (voxi agent, %s)\n", status.Mode, status.Recording)
+		return nil
+	} else if !errors.Is(err, agent.ErrUnavailable) {
+		return fmt.Errorf("set agent voice-input mode: %w", err)
+	}
+
 	var wanted string
 	var others []string
 
@@ -182,8 +195,6 @@ func SwitchVoiceInputMode(ctx context.Context, d deps.Dependencies, target Voice
 		}
 		wanted = EagerService
 		others = []string{BatchService, StreamingService, LegacyEagerService}
-	default:
-		return fmt.Errorf("invalid voice-input mode %q (want batch, streaming, or eager)", target)
 	}
 
 	if serviceActive(ctx, d, wanted) {

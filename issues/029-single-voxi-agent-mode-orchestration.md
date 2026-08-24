@@ -1,6 +1,6 @@
 # Single Voxi Agent for Mode Orchestration
 
-- **Status:** Proposed / Architecture Design
+- **Status:** In Progress / Architecture Design; docs, systemd unit, and install slice started
 - **Related Issues:** 021 (Fluent Streaming), 026 (Continuous Eager Sentence Streaming), 027 (Continuous Listening & Turn-Taking), 028 (Local LLM Post-Process Hook)
 
 ## Context
@@ -56,7 +56,7 @@ Preferred direction:
 
 ```text
 voxi-agent records WAV
-voxi-agent runs voxtype transcribe <wav> --model <model>
+voxi-agent runs voxtype --model <model> transcribe <wav>
 voxi-agent filters/normalizes transcript
 voxi-agent types via dotool
 ```
@@ -113,6 +113,20 @@ Do not block the first agent milestone on a full Parakeet rewrite.
    deprecate the separate eager service.
 7. Revisit streaming once batch and eager are stable behind the common agent.
 
+### Migration notes
+
+The first migration slice installs `systemd/voxi-agent.service` and keeps
+`voxi-eager.service` available as the compatibility unit. `make install-user-services`
+reloads the user manager but does not enable either unit. The initial runtime agent owns the
+systemd service and starts `voxi eager --daemon` as a child process for eager mode; batch and
+streaming remain state-only placeholders until their backend adapters land. The eager unit
+can be deprecated after restart/login testing proves the agent-owned child path is reliable.
+
+The unit intentionally uses the user-local binary at `%h/go/bin/voxi`, matching the existing
+eager service and `make install` workflow. It inherits the user runtime directory and an
+explicit PATH so child tools such as `pw-record`, `voxtype`, and `dotool` resolve the same way
+under systemd as they do from the shell.
+
 ## Acceptance Criteria
 
 - [ ] `voxi-agent.service` can be installed, enabled, and restarted as the only voice-input
@@ -122,6 +136,8 @@ Do not block the first agent milestone on a full Parakeet rewrite.
 - [ ] `voxi record start/stop/toggle/status` works through the agent for eager and batch.
 - [ ] Eager remains the default selected mode after login/session restart/system update.
 - [ ] Batch mode does not require `voxtype.service`.
+- [ ] Batch invokes Voxtype with global flags before the subcommand:
+      `voxtype --model <model> transcribe <wav>`.
 - [ ] Backend crash/startup failure leaves the agent running with useful status output.
 - [ ] Tests cover mode transitions, active-recording switch behavior, and failed backend
       startup.

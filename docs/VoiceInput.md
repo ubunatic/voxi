@@ -33,7 +33,7 @@ transcription speed numbers, see [BenchBaseline.md](BenchBaseline.md).
 git clone https://codeberg.org/ubunatic/voxi
 cd voxi
 make install                 # user binaries (~/go/bin)
-make install-user-services   # systemd user services (voxi-eager.service, ...)
+make install-user-services   # systemd user services (voxi-agent.service, compatibility eager unit)
 sudo make install-modifierd  # optional: system-wide voxi-modifierd daemon
 ```
 
@@ -66,13 +66,23 @@ voxi config set type-delay-ms <MS> # edit type_delay_ms preserving comments
 voxi daemon modifier-service      # run voxi-modifierd directly (normally a system service)
 ```
 
-`voxi mode` toggles between three mutually exclusive systemd user services:
+Until issue 029 is implemented, `voxi mode` toggles between these mutually exclusive
+systemd user services:
 - `voxtype.service` for batch mode (`base.en` Whisper, typed at end of utterance)
 - `voxtype-streaming.service` for opt-in streaming (Parakeet ONNX, typed incrementally)
 - `voxi-eager.service` for continuous eager sentence streaming (rolling Whisper inference, 0 pause drops)
 
 `voxi record toggle` acts as a universal toggle for all 3 modes, allowing a single global
 shortcut (`Super+X`) to control whichever mode is currently active.
+
+### Single-agent migration (issue 029)
+
+The target design is one always-enabled `voxi-agent.service`. It owns the control socket,
+selected mode, recording state, and backend lifecycle; `voxi mode` and `voxi record` talk to
+the agent instead of switching systemd services. `make install-user-services` installs the
+agent unit alongside the current eager compatibility unit. The first usable migration slice
+runs eager through an agent-owned child `voxi eager --daemon`; batch and streaming remain on
+the legacy service path until their backend adapters are implemented.
 
 ## Model selection & CPU/GPU behavior
 
@@ -140,7 +150,8 @@ default; switching to it requires a one-time setup and then `voxi mode streaming
    side effect that silently switches the live engine config, an undocumented
    streaming-timing constraint, and a PATH gap in ad hoc systemd units).
 2. Day to day: `voxi mode streaming` / `voxi mode batch` / `voxi mode` (see Commands
-   above) — no manual `systemctl`/two-terminal juggling needed.
+   above) — no manual `systemctl`/two-terminal juggling needed. During the issue 029
+   migration, the selected mode will move into the agent rather than systemd enablement.
 
 Known upstream limitation (Voxtype 0.7.5, not a voxi bug): pauses in speech cause
 multi-second output lag and occasionally drop words, because this streaming pipeline has

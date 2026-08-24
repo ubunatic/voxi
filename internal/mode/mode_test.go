@@ -44,6 +44,8 @@ func TestCurrentVoiceInputMode(t *testing.T) {
 }
 
 func TestSwitchVoiceInputModeValidation(t *testing.T) {
+	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+
 	var out bytes.Buffer
 	d := deps.Dependencies{
 		Getenv: func(k string) string { return "/home/test" },
@@ -60,6 +62,8 @@ func TestSwitchVoiceInputModeValidation(t *testing.T) {
 }
 
 func TestSwitchVoiceInputModePersistsAlreadyActiveEager(t *testing.T) {
+	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+
 	var out bytes.Buffer
 	var calls []string
 	d := deps.Dependencies{
