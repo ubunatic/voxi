@@ -31,3 +31,4 @@ In-depth references for architecture, decisions, and operations of the Voxi Linu
 | [2026-08-18-gnome-shell-companion-and-devkit-testing.md](studies/2026-08-18-gnome-shell-companion-and-devkit-testing.md) | GNOME Shell companion extension and devkit/nested Wayland testing harness |
 | [2026-08-18-voxtype-popular-applications.md](studies/2026-08-18-voxtype-popular-applications.md) | Survey of speech recognition models and Wayland input backends in production Linux apps |
 | [2026-08-18-omarchy-voxtype-configuration.md](studies/2026-08-18-omarchy-voxtype-configuration.md) | Omarchy 4.0.0 voice dictation reference architecture and config breakdown |
+| [2026-08-24-single-agent-mode-orchestration.md](studies/2026-08-24-single-agent-mode-orchestration.md) | Single `voxi-agent.service` migration, eager bridge, and agentic implementation notes |
