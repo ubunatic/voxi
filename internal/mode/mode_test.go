@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 
@@ -56,4 +57,53 @@ func TestSwitchVoiceInputModeValidation(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "invalid voice-input mode") {
 		t.Fatalf("expected error on invalid mode, got: %v", err)
 	}
+}
+
+func TestSwitchVoiceInputModePersistsAlreadyActiveEager(t *testing.T) {
+	var out bytes.Buffer
+	var calls []string
+	d := deps.Dependencies{
+		Getenv: func(k string) string { return "/home/test" },
+		Stdout: &out,
+		Stat: func(name string) (os.FileInfo, error) {
+			return nil, nil
+		},
+		Run: func(ctx context.Context, name string, args ...string) error {
+			call := name + " " + strings.Join(args, " ")
+			calls = append(calls, call)
+			if call == "systemctl --user is-active --quiet "+EagerService {
+				return nil
+			}
+			if strings.HasPrefix(call, "systemctl --user is-active --quiet ") {
+				return errors.New("inactive")
+			}
+			return nil
+		},
+	}
+
+	err := SwitchVoiceInputMode(context.Background(), d, ModeEager)
+	if err != nil {
+		t.Fatalf("SwitchVoiceInputMode eager returned error: %v", err)
+	}
+
+	wantCalls := []string{
+		"systemctl --user enable " + EagerService,
+		"systemctl --user disable " + BatchService,
+		"systemctl --user disable " + StreamingService,
+		"systemctl --user disable " + LegacyEagerService,
+	}
+	for _, want := range wantCalls {
+		if !hasCall(calls, want) {
+			t.Fatalf("missing call %q in %#v", want, calls)
+		}
+	}
+}
+
+func hasCall(calls []string, want string) bool {
+	for _, call := range calls {
+		if call == want {
+			return true
+		}
+	}
+	return false
 }

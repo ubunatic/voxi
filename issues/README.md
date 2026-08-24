@@ -10,3 +10,4 @@
 | [026](026-continuous-eager-sentence-streaming.md) | Continuous Eager Sentence Streaming Dictation | Complete — voxi eager & voxi-eager.service |
 | [027](027-continuous-listening-wake-word-turn-taking.md) | Continuous Listening, Wake-Word Activation & Verbal Turn-Taking | Proposed / Research & Planning |
 | [028](028-post-process-local-llm-cleanup.md) | Local LLM Post-Process Hook for Dictation Cleanup & Voice Commands | Proposed / Research & Design |
+| [029](029-single-voxi-agent-mode-orchestration.md) | Single Voxi Agent for Mode Orchestration | Proposed / Architecture Design |

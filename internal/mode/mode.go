@@ -151,6 +151,16 @@ func waitActive(ctx context.Context, d deps.Dependencies, service string) bool {
 	return false
 }
 
+func persistSelectedService(ctx context.Context, d deps.Dependencies, wanted string, others []string) error {
+	if err := d.Run(ctx, "systemctl", "--user", "enable", wanted); err != nil {
+		return fmt.Errorf("enable %s: %w", wanted, err)
+	}
+	for _, other := range others {
+		_ = d.Run(ctx, "systemctl", "--user", "disable", other)
+	}
+	return nil
+}
+
 // SwitchVoiceInputMode switches between batch, streaming, and eager voice-input services.
 func SwitchVoiceInputMode(ctx context.Context, d deps.Dependencies, target VoiceInputMode) error {
 	var wanted string
@@ -183,6 +193,9 @@ func SwitchVoiceInputMode(ctx context.Context, d deps.Dependencies, target Voice
 				return fmt.Errorf("%s is also active; stop it manually (systemctl --user stop %s)", other, other)
 			}
 		}
+		if err := persistSelectedService(ctx, d, wanted, others); err != nil {
+			return err
+		}
 		return nil
 	}
 
@@ -213,6 +226,10 @@ func SwitchVoiceInputMode(ctx context.Context, d deps.Dependencies, target Voice
 			}
 		}
 		return fmt.Errorf("%s did not become active within 10s%s", wanted, restoreErr)
+	}
+
+	if err := persistSelectedService(ctx, d, wanted, others); err != nil {
+		return err
 	}
 
 	fmt.Fprintf(d.Stdout, "switched voice input to %s (%s active)\n", target, wanted)
