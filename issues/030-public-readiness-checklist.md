@@ -36,13 +36,11 @@
 
 ### Phase 3: Community & Contribution Standards (Recommended)
 - [x] **Add `CONTRIBUTING.md`**:
-  - Documented Go conventions, conventional commit standards, spec-driven architecture, and make commands.
-- [x] **Issue & PR Templates**:
-  - Setup `.github/ISSUE_TEMPLATE/` (bug report and feature request templates).
+  - Documented Go conventions, conventional commit standards, spec-driven architecture, in-repo Markdown `issues/` process, and make commands.
 
 ### Phase 4: Automation & CI (Recommended)
 - [x] **Continuous Integration (CI)**:
-  - Added GitHub Actions workflow (`.github/workflows/ci.yml`) to run `make check` (`go vet`, unit tests, spec verification) and `make build-all` on push and pull requests.
+  - Added Forgejo CI workflow (`.forgejo/workflows/ci.yml`) to run `make check` (`go vet`, unit tests, spec verification) and `make build-all` on push and pull requests with runner-conserving path filters.
 
 ---
 
@@ -50,7 +48,7 @@
 
 1. **Step 1**: Added `LICENSE` (AGPL-3.0) to repository root.
 2. **Step 2**: Updated `README.md` with system dependencies, quickstart guide, GNOME extension setup instructions, and architecture highlights.
-3. **Step 3**: Added `CONTRIBUTING.md` and `.github/workflows/ci.yml`.
-4. **Step 4**: Added `.github/ISSUE_TEMPLATE/` templates.
+3. **Step 3**: Added `CONTRIBUTING.md` (specifying in-repo `issues/` PR process).
+4. **Step 4**: Added `.forgejo/workflows/ci.yml` workflow.
 5. **Step 5**: Updated `issues/README.md` index table.
 6. **Step 6**: Ran `make test`, `make check`, and `make install` to confirm build integrity.

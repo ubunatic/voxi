@@ -1,6 +1,6 @@
 [Unit]
 Description=Voxi Voice Input Agent
-Documentation=https://github.com/ubunatic/voxi
+Documentation=https://codeberg.org/ubunatic/voxi
 PartOf=graphical-session.target
 After=graphical-session.target
 Conflicts=voxtype.service voxtype-streaming.service voxi-eager.service harnez-voice-eager.service

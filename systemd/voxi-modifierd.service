@@ -1,6 +1,6 @@
 [Unit]
-Description=Voxi Modifier Daemon (evdev physical modifier monitor)
-Documentation=https://github.com/ubunatic/voxi
+Description=Voxi Modifier Safety Daemon (evdev physical modifier gate)
+Documentation=https://codeberg.org/ubunatic/voxi
 After=local-fs.target
 
 [Service]

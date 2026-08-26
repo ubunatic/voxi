@@ -116,7 +116,7 @@ func ensureEagerServiceUnit(ctx context.Context, d deps.Dependencies) error {
 
 	unitContent := `[Unit]
 Description=Voxi Continuous Eager Sentence Streaming Dictation
-Documentation=https://github.com/ubunatic/voxi
+Documentation=https://codeberg.org/ubunatic/voxi
 PartOf=graphical-session.target
 After=graphical-session.target
 
