@@ -1,2 +1,16 @@
 /voxi
 /voxi-modifierd
+
+# Test & coverage artifacts
+*.test
+*.out
+*.prof
+
+# Local audio recordings/caches
+*.wav
+*.mp3
+
+# Editor / IDE artifacts
+.DS_Store
+.idea/
+.vscode/
