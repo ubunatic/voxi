@@ -13,7 +13,16 @@ Applies unless overridden by a project's own AGENTS.md.
   no local feature branches unless the project's Repo Setup says otherwise.
 - Commit proactively:
   - after intermediate steps once tests are clean
-  - after finished features
+  - after finished features (with review pass)
+  - between iteration attempts on a stuck bug — each attempted fix is a checkpoint you may
+    need to roll back to; don't let several "should be fixed now" rounds pile up uncommitted
+  - immediately after filing issue-tracker entries (`issues/NNN-*.md` plus
+    `issues/README.md`), in their own small commit; tracker entries are
+    durable metadata, not behavior changes, and should not be batched with
+    unrelated code work
+- Review before commit:
+  - small fixes: commit directly if all tests pass and existing test assertions remain intact
+  - non-trivial changes / features: perform a dedicated review pass (host orchestration or a fresh reviewer subagent) before committing to verify test rigor, doc/ticket accuracy, and codebase clarity
 - Do not push unless asked.
 - Do not create remote branches or PRs unless asked.
 

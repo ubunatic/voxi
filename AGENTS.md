@@ -22,6 +22,8 @@ Docs in `./docs/` are managed by harnez. <!-- harnez:bundled -->
 
 - Go/Golang @docs/Go.md,
   Modern Go, avoid deps but use Cobra, add tests
+- Make/Makefile @docs/Make.md,
+  ⚙️ phony sentinel, self-doc help, build dependency pattern
 - Markdown @docs/Markdown.md,
   PascalCase for evergreens, kebab-case for ephemeral docs
 - Git @docs/Git.md,
@@ -30,8 +32,10 @@ Docs in `./docs/` are managed by harnez. <!-- harnez:bundled -->
   probe external mechanisms before building features on them
 - Spec system @docs/Spec.md,
   YAML spec files as single source of truth; Go code must not duplicate spec values
-- Make/Makefile @docs/Make.md,
-  ⚙️ phony sentinel, self-doc help, build dependency pattern
+- Agentic Loop Practices @docs/AgenticLoop.md,
+  5-phase loop (Advisory -> Dev -> Review -> Hygiene -> Retro), zero zombie guarantee
+- Issue Tracking Practices @docs/IssueTracking.md,
+  P0-P3 priorities, metadata headers (Status, Priority, Severity, Category), tracker sync
 <!-- harnez:end Language Conventions -->
 
 ## Workspace (uman)

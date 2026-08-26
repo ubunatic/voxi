@@ -73,5 +73,3 @@ weight: 60
 - Put tests in the same package (e.g. `package main`) to test unexported components easily.
 - Helpers: `t.Helper()`, `t.Fatalf` for setup failures, `t.Errorf` for assertion failures.
 - Standard library `testing` only — no external testing frameworks or mock generators.
-
-

@@ -115,6 +115,18 @@ These findings shaped the OCR implementation in `script.go:verifyOcrContains`.
 
 ---
 
+## Canary Scope vs Integration Tests
+
+Canaries are intentionally distinct from full integration test suites:
+
+- **Canaries** are written first, kept minimal, and prove a single environmental assumption or external capability (e.g. "RFC 5322 parsing and rewriting runs in this environment", "DB write and drop is permitted by this MariaDB user", "tar extraction over SSH preserves permissions").
+  - Once the probe succeeds, it is kept stable as a baseline reference.
+  - Canaries do **not** need to track ongoing feature evolution or refactorings unless the underlying external mechanism or environment assumption changes.
+  - A stable canary is not "stale" simply because feature code or abstractions in `internal/` evolved past it.
+- **Unit & Integration Tests** live in package test suites and CLI tests (`*_test.go`). They assert full application logic, edge cases, error handling, flag variations, and multi-component workflows.
+
+---
+
 ## Anti-patterns
 
 **Building first, then discovering the mechanism doesn't work.** If the
@@ -132,3 +144,7 @@ run in isolation to debug the environment.
 **Asserting too much in the canary.** A canary that checks formatting,
 error handling, and retry logic is a feature, not a probe. Keep it focused
 on the one mechanism you are validating.
+
+**Confusing canaries with integration test suites.** Expecting a canary script
+to continuously import production abstractions or mirror end-to-end feature logic
+defeats its purpose as an isolated, stable probe of an environment mechanism.
