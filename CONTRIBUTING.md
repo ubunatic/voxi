@@ -14,6 +14,9 @@ Thank you for your interest in contributing to `voxi`! This document outlines th
   - `refactor(scope)`: Code refactoring without behavioral change
   - `test(scope)`: Adding or updating tests
   - `chore(scope)`: Build, packaging, or repository maintenance
+- **Issue & Feature Process**:
+  - We do not use web issue trackers for general triage.
+  - Proposals, bug reports, and architectural changes are managed as Markdown files under `issues/` (e.g. `issues/NNN-topic-name.md`) and submitted via Pull/Merge Requests.
 - **Hygiene**:
   - Never commit secrets, credentials, or personal data.
   - Keep test audio files and binaries out of git tracking (handled by `.gitignore`).

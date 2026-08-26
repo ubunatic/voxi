@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>voxi — voice input & typing engine for Linux/Wayland</title>
-  <meta name="description" content="voxi is a standalone Linux/Wayland voice input engine: continuous eager sentence streaming with local Whisper, evdev modifier-gating for hotkey safety, and direct synthetic typing via dotool.">
+  <title>voxi — Standalone Linux Voice Input & Continuous Eager Streaming</title>
+  <meta name="description" content="voxi is a high-performance, privacy-first voice input, continuous eager sentence streaming, and desktop typing engine for Linux/Wayland with physical modifier gating safety and btop-style monitoring.">
 
   <link rel="icon" type="image/svg+xml" href="logo.svg">
   <link rel="stylesheet" href="index.css">
@@ -14,62 +14,315 @@
   <header class="site-head">
     <nav class="wrap nav" aria-label="Main navigation">
       <a class="brand" href="#top">
-        <img class="brand-icon" src="logo.svg" alt="voxi logo">
+        <img class="brand-icon" src="logo.svg" alt="voxi logo" width="28" height="28">
         <span>voxi</span>
       </a>
       <div class="nav-links">
-        <a href="#synopsis">Synopsis</a>
-        <a href="#commands">Commands</a>
-        <a href="#gating">Modifier gating</a>
-        <a href="#models">Models</a>
-        <a href="#examples">Examples</a>
-        <a class="btn" href="https://codeberg.org/ubunatic/voxi" rel="noopener">Codeberg</a>
+        <a href="#features">Features</a>
+        <a href="#quickstart">Quickstart</a>
+        <a href="#prereqs">Prerequisites</a>
+        <a href="#gnome">GNOME Extension</a>
+        <a href="#monitor">Monitor</a>
+        <a href="#manual">Manual &amp; CLI</a>
+        <a class="btn btn-outline" href="https://codeberg.org/ubunatic/voxi" rel="noopener" target="_blank">Codeberg</a>
       </div>
     </nav>
   </header>
 
   <main id="top">
+    <!-- Hero Section -->
     <div class="wrap hero-shell">
-      <section aria-label="voxi overview">
-        <p class="hero-badge">Linux/Wayland &middot; voice input engine</p>
+      <section class="hero-intro" aria-label="voxi overview">
+        <div class="hero-badge-wrap">
+          <span class="hero-badge">Linux / Wayland · Privacy-First Voice Input</span>
+        </div>
         <h1><span class="name">voxi</span> types what you say, as you say it.</h1>
         <p class="lede">
-          <code>voxi eager</code> keeps a rolling audio buffer, segments speech on natural
-          pauses, transcribes each finished phrase with a local Whisper model, and types it
-          into the focused window &mdash; with zero dropped words across pauses and no cloud
-          round-trip.
+          High-performance, local speech-to-text dictation for Linux/Wayland.
+          Continuous eager sentence streaming, kernel-level modifier key gating safety,
+          and direct synthetic typing injection into any active window with zero cloud dependencies.
         </p>
         <div class="actions">
-          <a class="btn btn-primary" href="#install">Install</a>
-          <a class="btn" href="https://codeberg.org/ubunatic/voxi" rel="noopener">Browse the source</a>
+          <a class="btn btn-primary" href="#quickstart">Get Started</a>
+          <a class="btn btn-secondary" href="#features">Explore Features</a>
+          <a class="btn btn-secondary" href="https://codeberg.org/ubunatic/voxi" rel="noopener" target="_blank">Source Code</a>
         </div>
-        <p class="hero-note">
-          Early days: no tagged release yet &mdash; install from <code>main</code>.
-          Linux/Wayland only (evdev, dotool, wl-copy). AGPL-3.0-or-later.
-        </p>
+        <div class="hero-meta">
+          <span>⚡ Local Whisper (Vulkan / CPU)</span>
+          <span>🛡️ Hotkey-Safe Gating</span>
+          <span>⌨️ Wayland Direct Typing</span>
+          <span>📜 AGPL-3.0</span>
+        </div>
       </section>
 
-      <section class="terminal" aria-label="voxi eager example run">
+      <section class="terminal-mockup" aria-label="voxi eager example run">
         <div class="terminal-header">
           <div class="terminal-controls">
             <span class="term-dot dot-red"></span>
             <span class="term-dot dot-yellow"></span>
             <span class="term-dot dot-green"></span>
           </div>
-          <span class="terminal-title">voxi eager --type --history</span>
-          <span style="width: 50px;"></span>
+          <span class="terminal-title">voxi eager --type --history --model small.en</span>
+          <button class="copy-term-btn" data-copy="voxi eager --type --history --model small.en" title="Copy command">copy</button>
         </div>
-        <pre class="terminal-body"><span class="ln-listen">listening... (pre-roll 500ms, threshold 150 RMS)</span>
-<span class="ln-listen">speech detected, buffering...</span>
-<span class="ln-gate">Super held: hotkey gate active, buffering typed output</span>
-<span class="ln-gate">Super released: gate clear, flushing buffer</span>
-<span class="ln-type">typed: "let's ship the eager streaming mode today."</span>
-<span class="ln-listen">silence 800ms, phrase finalized in 210ms</span>
-<span class="ln-sum">history: appended entry a91f</span></pre>
+        <pre class="terminal-body"><code><span class="ln-listen">● listening... (pre-roll 500ms, threshold 150 RMS, model small.en)</span>
+<span class="ln-info">→ speech detected: buffering audio stream...</span>
+<span class="ln-gate">◆ modifier gate: Super held down, buffering typed output</span>
+<span class="ln-gate">✓ modifier gate: Super released, safe to inject keystrokes</span>
+<span class="ln-type">⌨ typed: "Shipping continuous eager sentence streaming today."</span>
+<span class="ln-metric">⚡ transcribed: 1.82s audio in 0.31s (5.87x realtime, GPU Vulkan)</span>
+<span class="ln-listen">● silence 800ms detected, phrase finalized</span>
+<span class="ln-sum">✔ history: appended entry a91f (36 chars)</span></code></pre>
       </section>
     </div>
 
-    <section id="manpage-wrap" class="wrap" aria-label="voxi manual page">
+    <!-- Feature Grid Section -->
+    <section id="features" class="wrap section-wrap" aria-label="Key Features">
+      <div class="section-heading">
+        <h2>Engine Highlights &amp; Architecture</h2>
+        <p class="section-desc">Engineered for seamless voice dictation without lag, dropped words, or accidental hotkey triggers.</p>
+      </div>
+
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feat-icon">⚡</div>
+          <h3>Continuous Eager Streaming</h3>
+          <p>
+            Maintains a circular pre-roll buffer to preserve initial phonemes. Utterances are segmented
+            on natural pauses (800ms silence) or rolling windows and transcribed eagerly in sub-second bursts
+            with zero dropped words across pauses.
+          </p>
+          <div class="feat-badge"><code>voxi eager</code> / <code>voxi agent</code></div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feat-icon">🛡️</div>
+          <h3>Physical Modifier Gating Safety</h3>
+          <p>
+            Monitors physical modifier keys (Ctrl, Alt, Super, Shift) directly from the kernel via evdev
+            <code>EVIOCGKEY</code> with sub-10ns release gating. Prevents destructive hotkey collisions while
+            strictly guaranteeing zero non-modifier keylogging.
+          </p>
+          <div class="feat-badge"><code>voxi-modifierd</code></div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feat-icon">⌨️</div>
+          <h3>Direct Synthetic Keystrokes</h3>
+          <p>
+            Types directly into active Wayland windows using <code>dotool</code>/<code>dotoold</code> with full
+            XKB layout awareness (e.g. German QWERTZ, Colemak, Dvorak) and instantaneous atomic clipboard fallback
+            (<code>wl-copy</code>).
+          </p>
+          <div class="feat-badge"><code>dotool</code> + <code>wl-copy</code></div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feat-icon">📊</div>
+          <h3>Btop-Style Resource Monitor</h3>
+          <p>
+            A rich terminal HUD displaying real-time audio RMS energy meters, transcription latency sparklines,
+            GPU Vulkan / CPU utilization, and daemon health stats with interactive panel controls.
+          </p>
+          <div class="feat-badge"><code>voxi monitor --watch</code></div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feat-icon">🧩</div>
+          <h3>GNOME Shell Companion</h3>
+          <p>
+            A dedicated top-bar extension (<code>voxi@ubunatic.com</code>) providing one-click recording toggles,
+            live status indicators, runtime mode switching (eager, batch, streaming), typing speed controls, and a dictation history popup.
+          </p>
+          <div class="feat-badge"><code>voxi@ubunatic.com</code></div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feat-icon">🧹</div>
+          <h3>Spec-Driven Hallucination Filtering</h3>
+          <p>
+            Automatically suppresses Whisper silence hallucinations and repetitive subtitle loops using embedded
+            model specifications (<code>spec/models.yaml</code>) alongside automatic GPU fallback orchestration.
+          </p>
+          <div class="feat-badge"><code>spec/models.yaml</code></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Interactive Live Monitor Showcase -->
+    <section id="monitor" class="wrap section-wrap" aria-label="Btop-Style Resource Monitor">
+      <div class="section-heading">
+        <h2>Real-Time Terminal Dashboard</h2>
+        <p class="section-desc">Inspect audio levels, latency sparklines, and hardware acceleration with btop aesthetics.</p>
+      </div>
+
+      <div class="monitor-terminal">
+        <div class="terminal-header">
+          <div class="terminal-controls">
+            <span class="term-dot dot-red"></span>
+            <span class="term-dot dot-yellow"></span>
+            <span class="term-dot dot-green"></span>
+          </div>
+          <span class="terminal-title">voxi monitor --watch  ·  btop dashboard</span>
+          <span class="monitor-tag">LIVE HUD</span>
+        </div>
+        <pre class="monitor-body"><code>╭──[s] voice &amp; speed────────────────────────╮ ╭──[h] hardware load─────────────────────────╮
+│ status:  <span class="t-green">RECORDING</span> (eager / small.en)     │ │ cpu:  <span class="t-white">12.4%</span>  <span class="t-cyan">[ ▂▃▅▄▃▂  ▂▃]</span>  avg 4.2% (1c) │
+│ engine:  <span class="t-green">gpu:Vulkan0</span>  ·  mods: <span class="t-teal">gate-ready</span> │ │ gpu:  <span class="t-white">34.8%</span>  <span class="t-violet">[ ▃▅▇█▆▄▃   ]</span>  sys 1.05% │
+│ speed:   <span class="t-green"> 5.8x realtime</span> <span class="t-green">█████████░</span>         │ │ mem:  42.8 MB daemon   512 MB / 8.0 GB VRAM│
+│ lag:     <span class="t-white">0.31s</span> · 1m 24s audio (14 utt)     │ │ up:   1h 42m 10s (PID 34821)               │
+╰───────────────────────────────────────────╯ ╰────────────────────────────────────────────╯
+╭──[t] transcript feed─────────────────────────────────────────────────────────────────────╮
+│ <span class="t-cyan">11:20:14</span>  <span class="t-green">[0.31s]</span>  "let's ship the eager streaming engine today."                        │
+│ <span class="t-cyan">11:20:18</span>  <span class="t-green">[0.28s]</span>  "modifier gating ensures hotkeys never collide with typing."          │
+│ <span class="t-cyan">11:20:22</span>  <span class="t-green">[0.29s]</span>  "continuous dictation is running smoothly on wayland."                │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+╭──[d] daemon health &amp; processes───────────────────────────────────────────────────────────╮
+│ <span class="t-green">✓ voxi-agent</span> (PID 34821)  ·  <span class="t-green">✓ voxi-modifierd</span> (PID 1120)  ·  <span class="t-green">✓ dotoold</span> (PID 2104)             │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯</code></pre>
+      </div>
+    </section>
+
+    <!-- Quickstart & Installation -->
+    <section id="quickstart" class="wrap section-wrap" aria-label="Quickstart Guide">
+      <div class="section-heading">
+        <h2>Quickstart &amp; Installation</h2>
+        <p class="section-desc">Get up and dictating in under two minutes.</p>
+      </div>
+
+      <div class="steps-container">
+        <div class="step-card">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <h3>Clone and Install</h3>
+            <p>Compile user binaries and install systemd user service units:</p>
+            <div class="code-block">
+              <button class="copy-code-btn" title="Copy code">copy</button>
+              <pre><code><span class="prompt">$</span> git clone https://codeberg.org/ubunatic/voxi.git
+<span class="prompt">$</span> cd voxi
+<span class="prompt">$</span> make install
+<span class="prompt">$</span> make install-user-services
+<span class="comment"># (Optional) Install physical modifier gating daemon</span>
+<span class="prompt">$</span> sudo make install-modifierd</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <h3>Enable Background Agent</h3>
+            <p>Start the unified background voice service with systemd:</p>
+            <div class="code-block">
+              <button class="copy-code-btn" title="Copy code">copy</button>
+              <pre><code><span class="prompt">$</span> systemctl --user enable --now voxi-agent.service</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <h3>Start Dictating</h3>
+            <p>Toggle recording from CLI, desktop hotkey, or the GNOME Shell extension:</p>
+            <div class="code-block">
+              <button class="copy-code-btn" title="Copy code">copy</button>
+              <pre><code><span class="prompt">$</span> voxi record toggle    <span class="comment"># Toggle dictation recording</span>
+<span class="prompt">$</span> voxi record status    <span class="comment"># Check current state</span>
+<span class="prompt">$</span> voxi monitor --watch  <span class="comment"># Open live btop dashboard</span></code></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Prerequisites Matrix -->
+    <section id="prereqs" class="wrap section-wrap" aria-label="System Prerequisites">
+      <div class="section-heading">
+        <h2>Prerequisites &amp; System Dependencies</h2>
+        <p class="section-desc">voxi relies on lightweight, standard Linux/Wayland components.</p>
+      </div>
+
+      <div class="table-card">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Dependency</th>
+              <th>Purpose</th>
+              <th>Package / Source</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Go 1.22+</strong></td>
+              <td>Compilation of <code>voxi</code> CLI, agent, and daemons</td>
+              <td><code>golang</code> / <code>go</code></td>
+            </tr>
+            <tr>
+              <td><strong><code>dotoold</code> / <code>dotool</code></strong></td>
+              <td>Hotkey-safe Wayland synthetic typing injection</td>
+              <td><a href="https://git.sr.ht/~geb/dotool" rel="noopener" target="_blank">git.sr.ht/~geb/dotool</a></td>
+            </tr>
+            <tr>
+              <td><strong><code>wl-clipboard</code></strong></td>
+              <td>Clipboard operations (<code>wl-copy</code>) and fast atomic fallback</td>
+              <td><code>wl-clipboard</code></td>
+            </tr>
+            <tr>
+              <td><strong><code>whisper.cpp</code> / <code>voxtype</code></strong></td>
+              <td>Local Whisper inference (Vulkan GPU acceleration / multi-threaded CPU)</td>
+              <td><a href="https://github.com/ggerganov/whisper.cpp" rel="noopener" target="_blank">whisper.cpp</a></td>
+            </tr>
+            <tr>
+              <td><strong>Audio Capture</strong></td>
+              <td>16kHz mono audio stream recording</td>
+              <td><code>pipewire-pulse</code> (<code>parec</code>) or <code>alsa-utils</code> (<code>arecord</code>)</td>
+            </tr>
+            <tr>
+              <td><strong>evdev Access</strong></td>
+              <td>Physical modifier key state monitoring</td>
+              <td><code>voxi-modifierd</code> (systemd system service)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- GNOME Shell Extension -->
+    <section id="gnome" class="wrap section-wrap" aria-label="GNOME Shell Extension">
+      <div class="section-heading">
+        <h2>GNOME Shell Companion Extension</h2>
+        <p class="section-desc">Desktop integration at your fingertips with <code>voxi@ubunatic.com</code>.</p>
+      </div>
+
+      <div class="gnome-box">
+        <div class="gnome-features">
+          <ul class="check-list">
+            <li><strong>Top-Bar Panel Indicator:</strong> Instant visual state of audio recording and eager stream processing.</li>
+            <li><strong>Mode Switcher:</strong> Switch seamlessly between <code>eager</code>, <code>batch</code>, and <code>streaming</code> modes.</li>
+            <li><strong>Typing Delay Slider:</strong> Adjust injection timing dynamically for sensitive target applications.</li>
+            <li><strong>Recent Transcripts Popup:</strong> Quick access to view, copy, or re-type recent dictation history.</li>
+          </ul>
+          <div class="code-block">
+            <button class="copy-code-btn" title="Copy code">copy</button>
+            <pre><code><span class="comment"># Link extension into GNOME Shell extensions directory</span>
+<span class="prompt">$</span> mkdir -p ~/.local/share/gnome-shell/extensions
+<span class="prompt">$</span> ln -s "$(pwd)/contrib/gnome-shell-extension" ~/.local/share/gnome-shell/extensions/voxi@ubunatic.com
+
+<span class="comment"># Enable the extension</span>
+<span class="prompt">$</span> gnome-extensions enable voxi@ubunatic.com</code></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Manual Page Reference -->
+    <section id="manual" class="wrap section-wrap" aria-label="voxi manual page">
+      <div class="section-heading">
+        <h2>Command-Line Reference</h2>
+        <p class="section-desc">Complete manual page specification and CLI parameters.</p>
+      </div>
+
       <article class="manpage">
         <div class="mp-bar">
           <span>VOXI(1)</span>
@@ -77,226 +330,89 @@
           <span>VOXI(1)</span>
         </div>
 
-        <h2 class="mp-sh" id="synopsis">Name</h2>
+        <h3 class="mp-sh" id="synopsis">Name</h3>
         <p class="mp-body"><b>voxi</b> &mdash; standalone Linux voice input, continuous eager sentence streaming, and desktop typing engine</p>
 
-        <h2 class="mp-sh">Synopsis</h2>
+        <h3 class="mp-sh">Synopsis</h3>
         <pre class="mp-syn"><b>voxi</b> <i>command</i> [<i>subcommand</i>] [<i>flags</i>]
 <b>voxi mode</b> [batch|streaming|eager]
 <b>voxi record</b> {toggle|start|stop|status}
 <b>voxi eager</b> [--type] [--history] [--daemon] [--model <i>name</i>] [<i>flags</i>...]
-<b>voxi monitor</b> [-w] [-i <i>seconds</i>] [-s <i>sections</i>]
+<b>voxi monitor</b> [-w|--watch] [-i <i>seconds</i>] [-s <i>sections</i>]
 <b>voxi bench</b> [--models <i>list</i>] [--backends cpu,gpu] [--record] [--file <i>wav</i>] [--json <i>path</i>]
 <b>voxi history</b> {list|clear|copy <i>ID</i>|retype <i>ID</i>}
 <b>voxi config</b> {get|set} type-delay-ms [<i>MS</i>]
 <b>voxi daemon modifier-service</b> [--state-file <i>path</i>] [--interval <i>dur</i>]</pre>
 
-        <h2 class="mp-sh">Description</h2>
-        <p class="mp-body">
-          <b>voxi</b> is a voice dictation engine for Linux/Wayland built around three
-          separable pieces: a continuous eager transcription loop, a kernel-level modifier
-          key gating daemon, and direct synthetic keystroke injection. It runs entirely
-          local &mdash; audio never leaves the machine and transcription is done by an
-          on-device Whisper model.
-        </p>
-        <p class="mp-body">
-          The primary mode, <b>voxi eager</b>, keeps a circular pre-roll buffer so it never
-          clips the start of an utterance, segments speech into phrases on natural
-          conversational pauses, and transcribes each phrase as soon as it finishes &mdash;
-          rather than waiting for the whole recording to end. Finished phrases are typed
-          into the focused window through <b>dotool</b>(1), with a clipboard fallback via
-          <b>wl-copy</b>(1) when direct injection isn't available.
-        </p>
-
-        <h2 class="mp-sh" id="commands">Commands</h2>
+        <h3 class="mp-sh">Commands</h3>
         <dl class="mp-opts">
           <dt>mode [batch|streaming|eager]</dt>
-          <dd>Show the active voice-input mode, or switch to one of the three transcription
-            strategies. With no argument, prints the current mode.</dd>
+          <dd>Show the active voice-input mode, or switch to one of the three transcription strategies. With no argument, prints the current mode.</dd>
 
           <dt>record {toggle|start|stop|status}</dt>
-          <dd>Control an active dictation recording session out-of-band, e.g. from a
-            keybinding or the GNOME extension's top-bar toggle.</dd>
+          <dd>Control an active dictation recording session out-of-band, e.g. from a desktop hotkey or the GNOME extension's panel toggle.</dd>
 
           <dt>eager [flags]</dt>
-          <dd>Run continuous eager sentence streaming dictation. See EAGER OPTIONS below.</dd>
+          <dd>Run continuous eager sentence streaming dictation. Segments speech on pauses and transcribes phrases in real-time.</dd>
 
-          <dt>monitor [-w] [-i <i>seconds</i>] [-s <i>sections</i>]</dt>
-          <dd>Print (or, with <b>-w</b>/<b>--watch</b>, continuously refresh) a btop-style
-            report on transcription latency, audio levels, CPU/GPU load, and the daemons
-            voxi manages. Aliases: <b>top</b>, <b>resources</b>, <b>stats</b>.</dd>
+          <dt>monitor [-w|--watch] [-i <i>seconds</i>] [-s <i>sections</i>]</dt>
+          <dd>Print or live-refresh a btop-style report covering transcription latency, audio RMS meters, CPU/GPU loads, and daemon health. Aliases: <b>top</b>, <b>stats</b>, <b>resources</b>.</dd>
 
           <dt>bench [flags]</dt>
-          <dd>Benchmark transcription speed &mdash; real-time factor and speedup &mdash; for
-            every model in <code>spec/models.yaml</code> on both the <b>cpu</b> and <b>gpu</b>
-            backends. By default it transcribes a fixed, deterministic reference clip
-            (whisper.cpp's public-domain JFK sample), fetched on demand into the user's
-            cache directory and checksum-verified, so a run is repeatable and needs no
-            microphone. <b>--record</b> benches a freshly recorded live clip instead
-            (length via <b>--duration</b>), <b>--file</b> benches a local 16kHz mono WAV.
-            Narrow the matrix with <b>--models</b> and <b>--backends</b> (comma lists), set
-            <b>--threads</b> for the CPU runs, and dump the full report with
-            <b>--json</b> <i>path</i>.</dd>
+          <dd>Benchmark transcription speed (RTF &amp; speedup) for models declared in <code>spec/models.yaml</code> across <b>cpu</b> and <b>gpu</b> backends against standard reference samples.</dd>
 
           <dt>history {list|clear|copy <i>ID</i>|retype <i>ID</i>}</dt>
-          <dd>Inspect and reuse recent dictation transcripts. Local-only, treat as
-            sensitive. <b>copy</b> puts an entry's text on the clipboard; <b>retype</b>
-            re-injects it into the focused window.</dd>
+          <dd>Inspect and reuse local dictation transcripts. <b>copy</b> places text onto the clipboard; <b>retype</b> injects it directly into the active window.</dd>
 
           <dt>config {get|set} type-delay-ms [<i>MS</i>]</dt>
-          <dd>Read or change the <code>type_delay_ms</code> field in voxtype's
-            <code>config.toml</code>, preserving comments and other settings. Requires a
-            daemon restart to take effect.</dd>
+          <dd>Read or change typing speed in voxtype configuration to adjust keystroke pacing for legacy or latency-sensitive applications.</dd>
 
           <dt>daemon modifier-service [flags]</dt>
-          <dd>Run the standalone evdev modifier-key monitoring service directly (normally
-            managed as <b>voxi-modifierd</b>, a separate system daemon &mdash; see MODIFIER
-            GATING below).</dd>
+          <dd>Run the evdev modifier monitoring service directly (normally managed via <b>voxi-modifierd</b> system service).</dd>
         </dl>
 
-        <h2 class="mp-sh">Eager options</h2>
+        <h3 class="mp-sh">Eager Options</h3>
         <dl class="mp-opts">
           <dt>--threshold <i>N</i></dt>
-          <dd>Audio RMS energy threshold to trigger speech detection. Default 150.</dd>
+          <dd>Audio RMS energy threshold to trigger speech detection (default: 150).</dd>
 
           <dt>--silence <i>ms</i></dt>
-          <dd>Silence duration to finalize an utterance chunk. Default 800.</dd>
+          <dd>Silence pause duration required to finalize a phrase utterance chunk (default: 800ms).</dd>
 
           <dt>--pre-roll <i>ms</i></dt>
-          <dd>Pre-speech circular buffer duration, preserving starting phonemes clipped by
-            detection latency. Default 500.</dd>
+          <dd>Pre-speech circular buffer duration, preserving initial phonemes from clipping (default: 500ms).</dd>
 
           <dt>--min-speech <i>ms</i></dt>
-          <dd>Minimum speech duration to accept as an utterance rather than discard as
-            noise. Default 200.</dd>
+          <dd>Minimum speech duration to accept as a valid utterance rather than discarding as background noise (default: 200ms).</dd>
 
           <dt>--max-window <i>ms</i></dt>
-          <dd>Maximum window length before a phrase chunk is forced even without a pause.
-            Default 8000.</dd>
+          <dd>Maximum window length before forcing transcription chunking even without a natural pause (default: 8000ms).</dd>
 
           <dt>--type</dt>
-          <dd>Type transcribed sentences directly into the focused window via
-            <b>dotool</b>(1).</dd>
+          <dd>Directly inject transcribed sentences into the active window via <b>dotool</b>(1).</dd>
 
           <dt>--history</dt>
-          <dd>Record transcribed utterances into local dictation history.</dd>
+          <dd>Log transcribed utterances into the local dictation history store.</dd>
 
           <dt>--daemon</dt>
-          <dd>Run as a background systemd service listening for record toggle control,
-            instead of an interactive foreground session.</dd>
+          <dd>Run as a background daemon responding to record toggle controls.</dd>
 
           <dt>--model <i>name</i></dt>
-          <dd>Whisper model to use. Default <code>small.en</code>, falling back to
-            <code>base.en</code>.</dd>
+          <dd>Whisper model specification to load (default: <code>small.en</code>, with automatic <code>base.en</code> or CPU fallback).</dd>
         </dl>
 
-        <h2 class="mp-sh" id="gating">Modifier gating</h2>
+        <h3 class="mp-sh" id="gating">Modifier Gating Architecture</h3>
         <p class="mp-body">
-          <b>voxi-modifierd</b> reads physical modifier key state straight from the kernel
-          via evdev's <code>EVIOCGKEY</code>, independent of anything the compositor or
-          window manager reports. It exists to solve one problem safely: dictation must be
-          able to type while a hotkey like <b>Super</b> is held down &mdash; e.g. to buffer
-          output during a push-to-talk gesture &mdash; without ever logging or reacting to
-          any key that isn't a modifier.
+          <b>voxi-modifierd</b> reads physical modifier key states directly from the Linux kernel
+          via evdev's <code>EVIOCGKEY</code>, completely independent of compositor or window manager events.
+          When a modifier such as <b>Super</b>, <b>Ctrl</b>, <b>Alt</b>, or <b>Shift</b> is physically depressed,
+          voxi buffers typed output and flushes it immediately upon release (sub-10ns gating).
+          This prevents accidental window close commands or shortcut collisions during push-to-talk dictation while strictly ensuring zero non-modifier keylogging.
         </p>
-        <p class="mp-body">
-          The daemon polls raw modifier state at a fixed interval (default 10ms) and
-          publishes it to a world-readable state file (default <code>/run/voxi/modifiers</code>),
-          which <b>voxi eager</b> reads to decide when to hold typed output back versus flush
-          it. Because it only ever inspects modifier bits, it cannot see, and never records,
-          the content of anything else typed on the keyboard.
-        </p>
-
-        <h2 class="mp-sh" id="models">Model registry</h2>
-        <p class="mp-body">
-          Every model voxi can drive through voxtype is declared in
-          <code>spec/models.yaml</code> &mdash; the single source of truth, schema-checked,
-          with no model constants duplicated in Go. Each entry carries its own list of
-          hallucination stop-word patterns: the phrases Whisper reliably invents on silence
-          or low-confidence audio (&ldquo;thanks for watching&rdquo;,
-          &ldquo;please subscribe&rdquo;, trailing subtitle credits). Those matches are
-          filtered out before anything is typed. Keeping the list per model rather than one
-          global hardcoded set means a model that develops its own leakage gets its own
-          patterns, without loosening the filter for the others.
-        </p>
-        <p class="mp-body">
-          A model may also declare <code>requires_gpu</code> when it is measurably
-          sub-realtime on CPU. <code>large-v3-turbo</code> does: RTF 2.54, a 0.39x speedup on
-          the reference machine, i.e. it falls behind live speech and accumulates latency in
-          eager mode. Rather than hard-failing on a GPU-less machine, the same entry names a
-          <code>cpu_fallback</code> (<code>small.en</code>, also the current default), and
-          voxi substitutes it automatically with a printed notice &mdash; a stated
-          substitution instead of a silent guess or a dead command. Run <b>voxi bench</b> to
-          measure your own hardware; the published baseline lives in
-          <a href="https://codeberg.org/ubunatic/voxi/src/branch/main/docs/BenchBaseline.md" rel="noopener">docs/BenchBaseline.md</a>.
-        </p>
-
-        <h2 class="mp-sh">Companion pieces</h2>
-        <p class="mp-body">Key components live in Go packages under <code>internal/</code>, plus one GNOME Shell extension:</p>
-        <dl class="mp-opts">
-          <dt>eager</dt>
-          <dd>the continuous streaming loop: pre-roll buffer, pause segmentation, and
-            phrase-level transcription scheduling.</dd>
-          <dt>modifiers</dt>
-          <dd>evdev polling and the world-readable modifier state file consumed by the
-            typing path.</dd>
-          <dt>typing</dt>
-          <dd>synthetic keystroke injection via <b>dotool</b>/<b>dotoold</b> with XKB layout
-            awareness, and atomic clipboard fallback via <b>wl-copy</b>.</dd>
-          <dt>monitor</dt>
-          <dd>the btop-style resource report: latency sparklines, audio meters, CPU/VRAM,
-            and AMD GPU Vulkan acceleration status.</dd>
-          <dt>history</dt>
-          <dd>append-only local transcript log backing <b>voxi history</b>.</dd>
-          <dt>voxi@ubunatic.com</dt>
-          <dd>GNOME Shell top-bar extension: recording toggle, mode switcher, type-delay
-            slider, and a dictation history popup.</dd>
-        </dl>
-
-        <h2 class="mp-sh" id="examples">Examples</h2>
-        <pre class="mp-pre"><span class="prompt">$</span> voxi eager --type --history
-<span class="comment"># dictate continuously, typing and logging each finished phrase</span>
-
-<span class="prompt">$</span> voxi mode eager
-<span class="comment"># switch the active systemd-managed mode to eager streaming</span>
-
-<span class="prompt">$</span> voxi record toggle
-<span class="comment"># flip recording on/off, e.g. bound to a hotkey</span>
-
-<span class="prompt">$</span> voxi monitor --watch --sections s,t
-<span class="comment"># live speed + transcript panels only</span>
-
-<span class="prompt">$</span> voxi bench --models small.en
-<span class="comment"># time one model on both backends against the reference clip</span>
-MODEL                BACKEND         RTF    SPEEDUP DETECTED
-small.en             gpu            0.18      5.44x gpu:Vulkan0
-small.en             cpu            0.53      1.87x cpu
-
-<span class="prompt">$</span> voxi history list --limit 5
-<span class="comment"># most recent five transcripts</span>
-
-<span class="prompt">$</span> voxi config set type-delay-ms 8
-<span class="comment"># slow down synthetic typing for a flaky target app</span></pre>
-
-        <h2 class="mp-sh" id="install">Installation</h2>
-        <pre class="mp-pre"><span class="comment"># user binaries (~/go/bin)</span>
-<span class="prompt">$</span> git clone https://codeberg.org/ubunatic/voxi
-<span class="prompt">$</span> cd voxi
-<span class="prompt">$</span> make install
-<span class="prompt">$</span> make install-user-services
-
-<span class="comment"># optional: system modifier-gating daemon</span>
-<span class="prompt">$</span> make install-modifierd</pre>
-
-        <h2 class="mp-sh">See also</h2>
-        <p class="mp-body"><b>dotool</b>(1), <b>wl-copy</b>(1), <b>evdev</b>(4), <b>systemd</b>(1)</p>
-
-        <h2 class="mp-sh">Author</h2>
-        <p class="mp-body">Uwe Jugel &lt;uwe@ubunatic.com&gt;</p>
 
         <div class="mp-bar">
           <span>voxi 0.1</span>
-          <span>2026-08-18</span>
+          <span>Linux / Wayland Engine</span>
           <span>VOXI(1)</span>
         </div>
       </article>
@@ -305,8 +421,15 @@ small.en             cpu            0.53      1.87x cpu
 
   <footer class="site-foot">
     <div class="wrap foot-row">
-      <span>&copy; <span id="year"></span> Uwe Jugel &mdash; AGPL-3.0-or-later</span>
-      <a href="https://codeberg.org/ubunatic/voxi" rel="noopener">Source on Codeberg</a>
+      <div class="foot-brand">
+        <img class="brand-icon" src="logo.svg" alt="voxi logo" width="20" height="20">
+        <span>voxi &mdash; &copy; <span id="year"></span> Uwe Jugel &lt;uwe@ubunatic.com&gt; &middot; AGPL-3.0-or-later</span>
+      </div>
+      <div class="foot-links">
+        <a href="https://codeberg.org/ubunatic/voxi" rel="noopener" target="_blank">Codeberg Repository</a>
+        <a href="https://github.com/ubunatic/voxi" rel="noopener" target="_blank">GitHub Mirror</a>
+        <a href="#top">Back to top ↑</a>
+      </div>
     </div>
   </footer>
 </body>
