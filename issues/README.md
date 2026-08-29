@@ -12,3 +12,4 @@
 | [028](028-post-process-local-llm-cleanup.md) | Local LLM Post-Process Hook for Dictation Cleanup & Voice Commands | Proposed / Research & Design |
 | [029](029-single-voxi-agent-mode-orchestration.md) | Single Voxi Agent for Mode Orchestration | In Progress / Docs, systemd, install slice |
 | [030](030-public-readiness-checklist.md) | Public Release Readiness & Publication Checklist | Complete |
+| [031](031-claude-code-and-agent-cli-voice-pipeline-research.md) | Claude Code and agent CLI voice pipeline research | Proposed / Research |
