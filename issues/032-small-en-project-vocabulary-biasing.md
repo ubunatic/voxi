@@ -117,6 +117,17 @@ with `--vocabulary Voxi,dotool` or placed one per line in
 receives the prompt. Other models, disabled/empty context, transcript cleaning,
 typing, and history retain their existing behavior.
 
+Persistent terms can also be managed without editing the file directly:
+
+```sh
+voxi feedback vocabulary add TLDR
+voxi feedback vocabulary list
+voxi feedback vocabulary remove TLDR
+```
+
+This feedback vocabulary supplies initial-prompt hints only. It does not store
+error variants, fuzzy-match transcripts, or post-correct recognized text.
+
 The builder enforces the spec-owned 50-term, 400-character, and 64-character
 per-term limits; sanitizes controls and paths to basenames; deduplicates without
 case; and prioritizes explicit, shipped, then repository-derived terms. Local

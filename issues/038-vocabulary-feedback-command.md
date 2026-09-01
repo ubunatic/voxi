@@ -1,6 +1,6 @@
 # 038: Vocabulary Feedback Command
 
-**Status**: In Progress
+**Status**: Closed — resolved in cb8b214
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Feature
@@ -41,3 +41,21 @@ the file private to the user.
 - Unit tests cover command behavior, normalization, persistence, and failure
   cases.
 - `go test ./...`, `make check`, `make install`, and `git diff --check` pass.
+
+## 4. Implemented Behavior
+
+The commands manage the same `~/.config/voxi/vocabulary.txt` file consumed by
+`voxi eager --speech-context`. For example:
+
+```sh
+voxi feedback vocabulary add TLDR
+voxi feedback vocabulary list
+voxi feedback vocabulary remove TLDR
+```
+
+Terms are initial-prompt hints for Whisper. Voxi does not collect mistaken
+transcript variants, fuzzy-match output, or post-correct phrases: examples such
+as “TLD all” remain benchmark evidence for whether the decoder hint helps.
+
+Verified with `go test ./...`, `make check`, `make install`, and
+`git diff --check` on 2026-09-01.
