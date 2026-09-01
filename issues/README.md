@@ -17,3 +17,4 @@
 | [033](033-user-stop-word-feedback.md) | User Stop-Word Feedback for Dictation Hallucinations | Complete — local feedback CLI & eager filtering |
 | [034](034-isolated-silence-artifact-feedback.md) | Isolated Silence-Artifact Feedback for Ambiguous Dictation Words | Complete — whole-utterance feedback filter |
 | [035](035-ssh-remote-transcription-server-research.md) | SSH-Managed Remote Voxi Transcription Server Research | Proposed / Research |
+| [038](038-vocabulary-feedback-command.md) | Vocabulary Feedback Command | In Progress |
