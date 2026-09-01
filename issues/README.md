@@ -16,3 +16,4 @@
 | [032](032-small-en-project-vocabulary-biasing.md) | Small.en Project Vocabulary Biasing for Technical Dictation | Open |
 | [033](033-user-stop-word-feedback.md) | User Stop-Word Feedback for Dictation Hallucinations | Complete — local feedback CLI & eager filtering |
 | [034](034-isolated-silence-artifact-feedback.md) | Isolated Silence-Artifact Feedback for Ambiguous Dictation Words | Complete — whole-utterance feedback filter |
+| [035](035-ssh-remote-transcription-server-research.md) | SSH-Managed Remote Voxi Transcription Server Research | Proposed / Research |
