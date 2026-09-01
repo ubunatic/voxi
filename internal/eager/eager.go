@@ -22,6 +22,7 @@ import (
 	"ubunatic.com/voxi/internal/deps"
 	"ubunatic.com/voxi/internal/feedback"
 	"ubunatic.com/voxi/internal/history"
+	"ubunatic.com/voxi/internal/speechcontext"
 	"ubunatic.com/voxi/internal/typing"
 	spec "ubunatic.com/voxi/spec"
 )
@@ -37,6 +38,8 @@ type EagerOptions struct {
 	RecordHistory bool
 	Daemon        bool
 	Model         string
+	SpeechContext bool
+	Vocabulary    []string
 }
 
 // DefaultEagerOptions returns standard defaults for eager sentence streaming dictation.
@@ -226,6 +229,30 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 	}
 	modelName = resolvedModel
 	stopWords := modelSpec.StopWords(modelName)
+	initialPrompt := ""
+	if shouldUseSpeechContext(modelName, opts.SpeechContext) {
+		explicit := append([]string(nil), opts.Vocabulary...)
+		vocabularyPath := speechcontext.VocabularyPath(d.Getenv("HOME"))
+		if vocabularyPath != "" && d.ReadFile != nil {
+			if data, readErr := d.ReadFile(vocabularyPath); readErr == nil {
+				explicit = append(explicit, speechcontext.ParseVocabulary(data)...)
+			} else if !os.IsNotExist(readErr) {
+				fmt.Fprintf(d.Stdout, "Warning: cannot load local speech vocabulary: %v\n", readErr)
+			}
+		}
+		cwd, _ := os.Getwd()
+		initialPrompt = speechcontext.Build(speechcontext.Options{
+			Enabled:      true,
+			PromptPrefix: modelSpec.SpeechContext.PromptPrefix,
+			MaxTerms:     modelSpec.SpeechContext.MaxTerms,
+			MaxChars:     modelSpec.SpeechContext.MaxChars,
+			MaxTermChars: modelSpec.SpeechContext.MaxTermChars,
+		}, speechcontext.Sources{
+			Explicit:   explicit,
+			Static:     modelSpec.SpeechContext.Terms,
+			Repository: speechcontext.DiscoverRepositoryTerms(ctx, cwd, 12),
+		})
+	}
 	var silenceArtifacts []string
 	if overrides, loadErr := feedback.Load(feedback.Path(d.Getenv("HOME"))); loadErr != nil {
 		fmt.Fprintf(d.Stdout, "Warning: cannot load local stop-word feedback; using built-ins: %v\n", loadErr)
@@ -258,11 +285,7 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 			}
 
 			writeVoxtypeState("transcribing")
-			cmdArgs := []string{
-				"--model", modelName,
-				"--threads", "6",
-				"-q", "transcribe", wavPath,
-			}
+			cmdArgs := voxtypeTranscribeArgs(modelName, wavPath, initialPrompt)
 			cmd := exec.CommandContext(context.Background(), voxtypePath, cmdArgs...)
 			cmd.Env = append(os.Environ(), "NO_COLOR=1", "RUST_LOG=error")
 			var outBuf bytes.Buffer
@@ -407,6 +430,18 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 	}
 
 	return nil
+}
+
+func voxtypeTranscribeArgs(modelName, wavPath, initialPrompt string) []string {
+	args := []string{"--model", modelName, "--threads", "6"}
+	if initialPrompt != "" {
+		args = append(args, "--initial-prompt", initialPrompt)
+	}
+	return append(args, "-q", "transcribe", wavPath)
+}
+
+func shouldUseSpeechContext(modelName string, enabled bool) bool {
+	return enabled && modelName == "small.en"
 }
 
 // acceptTranscript is the single gate before an eager result can affect either

@@ -12,6 +12,26 @@
 
 default_model: small.en
 
+# Decoder-only terminology hints for the opt-in small.en speech context. These
+# values never rewrite output and never leave the machine.
+speech_context:
+  prompt_prefix: "Technical dictation. Terms:"
+  max_terms: 50
+  max_chars: 400
+  max_term_chars: 64
+  terms:
+    - Voxi
+    - voxtype
+    - dotool
+    - PipeWire
+    - Wayland
+    - systemd
+    - Cobra
+    - Golang
+    - YAML
+    - JSON
+    - Git
+
 models:
   base.en:
     label: "Whisper Base (English)"

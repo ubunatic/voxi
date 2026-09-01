@@ -10,6 +10,9 @@ func TestLoadModels(t *testing.T) {
 	if _, ok := s.Models[s.DefaultModel]; !ok {
 		t.Fatalf("default_model %q not defined in models", s.DefaultModel)
 	}
+	if len(s.SpeechContext.Terms) == 0 || s.SpeechContext.MaxTerms != 50 {
+		t.Fatalf("speech_context not loaded: %+v", s.SpeechContext)
+	}
 	for name, m := range s.Models {
 		if m.Label == "" {
 			t.Errorf("model %q: label must not be empty", name)
@@ -68,6 +71,12 @@ func TestResolveModel(t *testing.T) {
 func TestLoadModelsRejectsFallbackChain(t *testing.T) {
 	yamlDoc := []byte(`
 default_model: a
+speech_context:
+  prompt_prefix: "Terms:"
+  terms: [Go]
+  max_terms: 10
+  max_chars: 100
+  max_term_chars: 20
 models:
   a:
     label: A

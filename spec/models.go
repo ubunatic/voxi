@@ -32,8 +32,19 @@ type StopWord struct {
 
 // ModelSpec is the parsed contents of spec/models.yaml.
 type ModelSpec struct {
-	DefaultModel string           `yaml:"default_model"`
-	Models       map[string]Model `yaml:"models"`
+	DefaultModel  string            `yaml:"default_model"`
+	SpeechContext SpeechContextSpec `yaml:"speech_context"`
+	Models        map[string]Model  `yaml:"models"`
+}
+
+// SpeechContextSpec defines the bounded decoder prompt used by opt-in
+// technical-dictation context. It is data rather than runtime user config.
+type SpeechContextSpec struct {
+	PromptPrefix string   `yaml:"prompt_prefix"`
+	Terms        []string `yaml:"terms"`
+	MaxTerms     int      `yaml:"max_terms"`
+	MaxChars     int      `yaml:"max_chars"`
+	MaxTermChars int      `yaml:"max_term_chars"`
 }
 
 // LoadModels parses the embedded model spec. It fails if the spec is
@@ -55,6 +66,15 @@ func parseModelSpec(data []byte) (*ModelSpec, error) {
 	}
 	if _, ok := s.Models[s.DefaultModel]; !ok {
 		return nil, fmt.Errorf("spec: default_model %q is not defined in models", s.DefaultModel)
+	}
+	if s.SpeechContext.PromptPrefix == "" {
+		return nil, fmt.Errorf("spec: speech_context.prompt_prefix must not be empty")
+	}
+	if len(s.SpeechContext.Terms) == 0 {
+		return nil, fmt.Errorf("spec: speech_context.terms must not be empty")
+	}
+	if s.SpeechContext.MaxTerms <= 0 || s.SpeechContext.MaxChars <= 0 || s.SpeechContext.MaxTermChars <= 0 {
+		return nil, fmt.Errorf("spec: speech_context limits must be positive")
 	}
 	for name, m := range s.Models {
 		seen := make(map[string]bool)

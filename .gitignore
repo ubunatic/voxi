@@ -14,3 +14,5 @@
 .DS_Store
 .idea/
 .vscode/
+# Private local speech-context benchmark recordings.
+testdata/speech-context/*.wav
