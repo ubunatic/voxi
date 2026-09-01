@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -47,8 +48,8 @@ func Build(opts Options, sources Sources) string {
 	terms := make([]string, 0, opts.MaxTerms)
 	for _, group := range [][]string{sources.Explicit, sources.Static, sources.Repository} {
 		for _, raw := range group {
-			term := sanitizeTerm(raw, opts.MaxTermChars)
-			if term == "" {
+			term, err := NormalizeTerm(raw, opts.MaxTermChars)
+			if err != nil {
 				continue
 			}
 			key := strings.ToLower(term)
@@ -76,7 +77,17 @@ func render(prefix string, terms []string) string {
 	return prefix + " " + strings.Join(terms, ", ")
 }
 
-func sanitizeTerm(raw string, maxChars int) string {
+// NormalizeTerm applies the same privacy and character rules used by Build.
+// It is exported so persistent vocabulary management cannot drift from the
+// decoder prompt sanitizer.
+func NormalizeTerm(raw string, maxChars int) (string, error) {
+	if maxChars <= 0 {
+		return "", fmt.Errorf("vocabulary term limit must be positive")
+	}
+	if strings.TrimSpace(raw) == "" {
+		return "", fmt.Errorf("vocabulary term must not be empty")
+	}
+
 	// Keep only the basename if a caller accidentally supplies a path. This
 	// prevents parent directories (which may contain usernames or secrets)
 	// from entering the decoder prompt.
@@ -99,10 +110,13 @@ func sanitizeTerm(raw string, maxChars int) string {
 		}
 	}
 	term := strings.Join(strings.Fields(cleaned.String()), " ")
-	if !hasLetterOrDigit || term == "" || utf8.RuneCountInString(term) > maxChars {
-		return ""
+	if !hasLetterOrDigit || term == "" {
+		return "", fmt.Errorf("vocabulary term must contain a letter or digit")
 	}
-	return term
+	if utf8.RuneCountInString(term) > maxChars {
+		return "", fmt.Errorf("vocabulary term must be at most %d characters", maxChars)
+	}
+	return term, nil
 }
 
 // ParseVocabulary reads a privacy-simple one-term-per-line vocabulary. Blank

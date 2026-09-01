@@ -352,7 +352,7 @@ func main() {
 	if err != nil {
 		panic(fmt.Sprintf("load embedded model specification: %v", err))
 	}
-	root.AddCommand(modeCmd, recordCmd, eagerCmd, monitorCmd, historyCmd, configCmd, daemonCmd, benchCmd, feedback.NewCommand(d.Stdout, d.Getenv("HOME"), modelSpec.BuiltinStopWords(modelSpec.DefaultModel)), agent.NewCommand(d))
+	root.AddCommand(modeCmd, recordCmd, eagerCmd, monitorCmd, historyCmd, configCmd, daemonCmd, benchCmd, feedback.NewCommand(d.Stdout, d.Getenv("HOME"), modelSpec.BuiltinStopWords(modelSpec.DefaultModel), modelSpec.SpeechContext.MaxTermChars), agent.NewCommand(d))
 	addDebugCommands(root, d)
 
 	if err := root.Execute(); err != nil {

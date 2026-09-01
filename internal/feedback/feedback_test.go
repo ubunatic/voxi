@@ -87,7 +87,7 @@ func TestLiteralPatternsAndCommand(t *testing.T) {
 		t.Fatalf("pattern %q did not quote literal", p)
 	}
 	var out bytes.Buffer
-	cmd := NewCommand(&out, t.TempDir(), rules)
+	cmd := NewCommand(&out, t.TempDir(), rules, 64)
 	cmd.SetArgs([]string{"stop-word", "add", "bye"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
@@ -112,7 +112,7 @@ func TestLiteralPatternsAndCommand(t *testing.T) {
 
 func TestSilenceArtifactCommandAndPersistence(t *testing.T) {
 	var out bytes.Buffer
-	cmd := NewCommand(&out, t.TempDir(), rules)
+	cmd := NewCommand(&out, t.TempDir(), rules, 64)
 	cmd.SetArgs([]string{"silence-artifact", "add", " bye! "})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
@@ -152,5 +152,49 @@ func TestIsSilenceArtifactMatchesOnlyWholeNormalizedUtterance(t *testing.T) {
 		if IsSilenceArtifact(text, o.SilenceArtifacts) {
 			t.Errorf("%q was incorrectly rejected", text)
 		}
+	}
+}
+
+func TestVocabularyCommandAddListRemove(t *testing.T) {
+	home := t.TempDir()
+	var out bytes.Buffer
+
+	run := func(args ...string) error {
+		cmd := NewCommand(&out, home, rules, 64)
+		cmd.SetArgs(args)
+		return cmd.Execute()
+	}
+	if err := run("vocabulary", "add", " Pipe|Wire "); err != nil {
+		t.Fatal(err)
+	}
+	if got := out.String(); !strings.Contains(got, `Added vocabulary term "Pipe Wire"`) || !strings.Contains(got, "--speech-context") {
+		t.Fatalf("add output = %q", got)
+	}
+	if err := run("vocabulary", "add", "TLDR"); err != nil {
+		t.Fatal(err)
+	}
+	if err := run("vocabulary", "add", "tldr"); err == nil {
+		t.Fatal("case-insensitive duplicate add succeeded")
+	}
+	out.Reset()
+	if err := run("vocabulary", "list"); err != nil {
+		t.Fatal(err)
+	}
+	if got := out.String(); got != "Pipe Wire\nTLDR\n" {
+		t.Fatalf("list output = %q", got)
+	}
+	out.Reset()
+	if err := run("vocabulary", "remove", "PIPE WIRE"); err != nil {
+		t.Fatal(err)
+	}
+	if got := out.String(); !strings.Contains(got, `Removed vocabulary term "Pipe Wire"`) || !strings.Contains(got, "add") {
+		t.Fatalf("remove output = %q", got)
+	}
+	data, err := os.ReadFile(filepath.Join(home, ".config", "voxi", "vocabulary.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(data); got != "TLDR\n" {
+		t.Fatalf("persisted vocabulary = %q", got)
 	}
 }

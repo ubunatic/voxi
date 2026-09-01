@@ -5,12 +5,13 @@ import (
 	"io"
 
 	"github.com/spf13/cobra"
+	"ubunatic.com/voxi/internal/speechcontext"
 	"ubunatic.com/voxi/spec"
 )
 
 // NewCommand creates the local feedback command. home is injected to keep the
 // CLI testable and to avoid relying on a global process home directory.
-func NewCommand(out io.Writer, home string, builtins []spec.StopWord) *cobra.Command {
+func NewCommand(out io.Writer, home string, builtins []spec.StopWord, maxVocabularyTermChars int) *cobra.Command {
 	path := Path(home)
 	load := func() (Overrides, error) { return Load(path) }
 	cmd := &cobra.Command{Use: "feedback", Short: "Manage local dictation feedback"}
@@ -134,5 +135,50 @@ func NewCommand(out io.Writer, home string, builtins []spec.StopWord) *cobra.Com
 	)
 	cmd.AddCommand(stop)
 	cmd.AddCommand(artifact)
+	vocabularyPath := speechcontext.VocabularyPath(home)
+	vocabulary := &cobra.Command{Use: "vocabulary", Short: "Manage persistent speech-context terms"}
+	vocabulary.AddCommand(
+		&cobra.Command{Use: "add TERM", Args: cobra.ExactArgs(1), RunE: func(_ *cobra.Command, a []string) error {
+			terms, err := speechcontext.LoadVocabulary(vocabularyPath, maxVocabularyTermChars)
+			if err != nil {
+				return err
+			}
+			terms, term, err := speechcontext.AddVocabulary(terms, a[0], maxVocabularyTermChars)
+			if err != nil {
+				return err
+			}
+			if err := speechcontext.SaveVocabulary(vocabularyPath, terms, maxVocabularyTermChars); err != nil {
+				return err
+			}
+			fmt.Fprintf(out, "Added vocabulary term %q. Use it with: voxi eager --speech-context\n", term)
+			return nil
+		}},
+		&cobra.Command{Use: "list", Args: cobra.NoArgs, RunE: func(_ *cobra.Command, _ []string) error {
+			terms, err := speechcontext.LoadVocabulary(vocabularyPath, maxVocabularyTermChars)
+			if err != nil {
+				return err
+			}
+			for _, term := range terms {
+				fmt.Fprintln(out, term)
+			}
+			return nil
+		}},
+		&cobra.Command{Use: "remove TERM", Args: cobra.ExactArgs(1), RunE: func(_ *cobra.Command, a []string) error {
+			terms, err := speechcontext.LoadVocabulary(vocabularyPath, maxVocabularyTermChars)
+			if err != nil {
+				return err
+			}
+			terms, term, err := speechcontext.RemoveVocabulary(terms, a[0], maxVocabularyTermChars)
+			if err != nil {
+				return err
+			}
+			if err := speechcontext.SaveVocabulary(vocabularyPath, terms, maxVocabularyTermChars); err != nil {
+				return err
+			}
+			fmt.Fprintf(out, "Removed vocabulary term %q. Add it again with: voxi feedback vocabulary add %q\n", term, term)
+			return nil
+		}},
+	)
+	cmd.AddCommand(vocabulary)
 	return cmd
 }
