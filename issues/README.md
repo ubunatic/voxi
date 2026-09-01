@@ -14,3 +14,4 @@
 | [030](030-public-readiness-checklist.md) | Public Release Readiness & Publication Checklist | Complete |
 | [031](031-claude-code-and-agent-cli-voice-pipeline-research.md) | Claude Code and agent CLI voice pipeline research | Proposed / Research |
 | [032](032-small-en-project-vocabulary-biasing.md) | Small.en Project Vocabulary Biasing for Technical Dictation | Open |
+| [033](033-user-stop-word-feedback.md) | User Stop-Word Feedback for Dictation Hallucinations | Open |
