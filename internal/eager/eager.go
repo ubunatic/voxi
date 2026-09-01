@@ -20,6 +20,7 @@ import (
 	"ubunatic.com/voxi/internal/asr"
 	"ubunatic.com/voxi/internal/audio"
 	"ubunatic.com/voxi/internal/deps"
+	"ubunatic.com/voxi/internal/feedback"
 	"ubunatic.com/voxi/internal/history"
 	"ubunatic.com/voxi/internal/typing"
 	spec "ubunatic.com/voxi/spec"
@@ -224,6 +225,12 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 		fmt.Fprintf(d.Stdout, "Model %q requires GPU acceleration; no GPU render node found, falling back to %q\n", modelName, resolvedModel)
 	}
 	modelName = resolvedModel
+	stopWords := modelSpec.StopWords(modelName)
+	if overrides, loadErr := feedback.Load(feedback.Path(d.Getenv("HOME"))); loadErr != nil {
+		fmt.Fprintf(d.Stdout, "Warning: cannot load local stop-word feedback; using built-ins: %v\n", loadErr)
+	} else {
+		stopWords = feedback.ActivePatterns(modelSpec.BuiltinStopWords(modelName), overrides)
+	}
 
 	jobChan := make(chan TranscribeJob, 10)
 	var transWg sync.WaitGroup
@@ -264,7 +271,6 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 			transDuration := time.Since(transStart).Seconds()
 			writeVoxtypeState("recording")
 
-			stopWords := modelSpec.StopWords(modelName)
 			text := asr.CleanWhisperTranscript(outBuf.String(), stopWords)
 			if err == nil && text != "" && asr.IsSafeToType(text, stopWords) {
 				transLock.Lock()

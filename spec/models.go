@@ -16,11 +16,18 @@ var modelsYAML []byte
 
 // Model describes one Whisper model Voxi can invoke.
 type Model struct {
-	Label       string   `yaml:"label"`
-	Engine      string   `yaml:"engine"`
-	StopWords   []string `yaml:"stop_words"`
-	RequiresGPU bool     `yaml:"requires_gpu"`
-	CPUFallback string   `yaml:"cpu_fallback"`
+	Label       string     `yaml:"label"`
+	Engine      string     `yaml:"engine"`
+	StopWords   []StopWord `yaml:"stop_words"`
+	RequiresGPU bool       `yaml:"requires_gpu"`
+	CPUFallback string     `yaml:"cpu_fallback"`
+}
+
+// StopWord is a shipped hallucination filter. ID is stable so a user can
+// disable a rule without editing the model specification.
+type StopWord struct {
+	ID      string `yaml:"id"`
+	Pattern string `yaml:"pattern"`
 }
 
 // ModelSpec is the parsed contents of spec/models.yaml.
@@ -50,6 +57,16 @@ func parseModelSpec(data []byte) (*ModelSpec, error) {
 		return nil, fmt.Errorf("spec: default_model %q is not defined in models", s.DefaultModel)
 	}
 	for name, m := range s.Models {
+		seen := make(map[string]bool)
+		for _, word := range m.StopWords {
+			if word.ID == "" || word.Pattern == "" {
+				return nil, fmt.Errorf("spec: model %q has stop_word without id or pattern", name)
+			}
+			if seen[word.ID] {
+				return nil, fmt.Errorf("spec: model %q has duplicate stop_word id %q", name, word.ID)
+			}
+			seen[word.ID] = true
+		}
 		if m.CPUFallback == "" {
 			continue
 		}
@@ -67,6 +84,16 @@ func parseModelSpec(data []byte) (*ModelSpec, error) {
 // StopWords returns the hallucination stop-word patterns for name, falling
 // back to the default model's list if name is unknown or empty.
 func (s *ModelSpec) StopWords(name string) []string {
+	words := s.BuiltinStopWords(name)
+	patterns := make([]string, 0, len(words))
+	for _, word := range words {
+		patterns = append(patterns, word.Pattern)
+	}
+	return patterns
+}
+
+// BuiltinStopWords returns the shipped rules, including stable IDs.
+func (s *ModelSpec) BuiltinStopWords(name string) []StopWord {
 	if m, ok := s.Models[name]; ok {
 		return m.StopWords
 	}

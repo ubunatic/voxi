@@ -1,6 +1,6 @@
 # 033: User Stop-Word Feedback for Dictation Hallucinations
 
-**Status**: Open  
+**Status**: Complete
 **Priority**: P2 (Medium)  
 **Severity**: Moderate  
 **Category**: Feature  
@@ -83,3 +83,15 @@ them.
   permissions, and never invokes an LLM or network request.
 - Existing `small.en` filtering behavior is unchanged with no feedback file.
 - `make check` and `make install` pass before the ticket is closed.
+
+## Implementation
+
+Implemented 2026-09-01. `voxi feedback stop-word` now supports `add`, `list`,
+`remove`, `disable`, and `enable`. Overrides are stored atomically at
+`~/.config/voxi/stop-words.json` with mode `0600`; malformed local data makes
+eager mode warn and continue using shipped rules. Built-in rules have stable
+spec-owned IDs, and user phrases are literal, case-insensitive,
+phrase-boundary matches. Active feedback is loaded once after eager model
+selection, so normal operation with no feedback file retains existing filtering.
+
+Verification: `go test ./...`, `make check`, and `make install` passed.

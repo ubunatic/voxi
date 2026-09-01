@@ -29,8 +29,15 @@
           "stop_words": {
             "type": "array",
             "description": "Case-insensitive regex fragments matching known hallucinated phrases this model tends to leak (e.g. YouTube outros, subtitle credits). Applied both to reject whole-utterance hallucinations and to strip trailing hallucinated tails from otherwise-genuine speech.",
-            "items": { "type": "string", "minLength": 1 },
-            "uniqueItems": true
+            "items": {
+              "type": "object",
+              "required": ["id", "pattern"],
+              "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "pattern": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            }
           },
           "requires_gpu": {
             "type": "boolean",

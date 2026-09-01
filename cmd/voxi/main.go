@@ -16,12 +16,14 @@ import (
 	"ubunatic.com/voxi/internal/config"
 	"ubunatic.com/voxi/internal/deps"
 	"ubunatic.com/voxi/internal/eager"
+	"ubunatic.com/voxi/internal/feedback"
 	"ubunatic.com/voxi/internal/history"
 	"ubunatic.com/voxi/internal/mode"
 	"ubunatic.com/voxi/internal/modifiers"
 	"ubunatic.com/voxi/internal/monitor"
 	"ubunatic.com/voxi/internal/record"
 	"ubunatic.com/voxi/internal/typing"
+	"ubunatic.com/voxi/spec"
 )
 
 func main() {
@@ -344,7 +346,11 @@ func main() {
 	benchCmd.Flags().IntVar(&benchOpts.Threads, "threads", benchOpts.Threads, "CPU threads passed to voxtype")
 	benchCmd.Flags().StringVar(&benchJSONPath, "json", "", "write the full bench report as JSON to this path")
 
-	root.AddCommand(modeCmd, recordCmd, eagerCmd, monitorCmd, historyCmd, configCmd, daemonCmd, benchCmd, agent.NewCommand(d))
+	modelSpec, err := spec.LoadModels()
+	if err != nil {
+		panic(fmt.Sprintf("load embedded model specification: %v", err))
+	}
+	root.AddCommand(modeCmd, recordCmd, eagerCmd, monitorCmd, historyCmd, configCmd, daemonCmd, benchCmd, feedback.NewCommand(d.Stdout, d.Getenv("HOME"), modelSpec.BuiltinStopWords(modelSpec.DefaultModel)), agent.NewCommand(d))
 	addDebugCommands(root, d)
 
 	if err := root.Execute(); err != nil {

@@ -72,13 +72,13 @@ models:
   a:
     label: A
     engine: whisper
-    stop_words: ["x"]
+    stop_words: [{id: x, pattern: x}]
     requires_gpu: true
     cpu_fallback: b
   b:
     label: B
     engine: whisper
-    stop_words: ["x"]
+    stop_words: [{id: x, pattern: x}]
     requires_gpu: true
 `)
 	if _, err := parseModelSpec(yamlDoc); err == nil {

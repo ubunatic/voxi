@@ -17,28 +17,28 @@ models:
     label: "Whisper Base (English)"
     engine: whisper
     stop_words: &common_stop_words
-      - "thank you for watching"
-      - "thanks for watching"
-      - "thank you"
-      - "thanks for listening"
-      - "please subscribe.*"
-      - "subscribe to my channel"
-      - "see you next time"
-      - "see you in the next video"
-      - "subtitles by.*"
-      - "translated by.*"
-      - "like and subscribe"
-      - "and like\\. thank you"
-      - "mcrun"
-      - "mbc"
-      - "learn english.*"
-      - ".*engvid\\.com.*"
-      - "kathryn"
-      - "in the video"
-      - "in this video"
-      - "in today's video"
-      - "free-to-use tip"
-      - "www\\.[a-z0-9-]+\\.[a-z]+"
+      - { id: thanks-watching, pattern: "thank you for watching" }
+      - { id: thanks-for-watching, pattern: "thanks for watching" }
+      - { id: thank-you, pattern: "thank you" }
+      - { id: thanks-listening, pattern: "thanks for listening" }
+      - { id: subscribe, pattern: "please subscribe.*" }
+      - { id: subscribe-channel, pattern: "subscribe to my channel" }
+      - { id: see-you-next-time, pattern: "see you next time" }
+      - { id: see-you-next-video, pattern: "see you in the next video" }
+      - { id: subtitles-by, pattern: "subtitles by.*" }
+      - { id: translated-by, pattern: "translated by.*" }
+      - { id: like-subscribe, pattern: "like and subscribe" }
+      - { id: and-like-thank-you, pattern: "and like\\. thank you" }
+      - { id: mcrun, pattern: "mcrun" }
+      - { id: mbc, pattern: "mbc" }
+      - { id: learn-english, pattern: "learn english.*" }
+      - { id: engvid, pattern: ".*engvid\\.com.*" }
+      - { id: kathryn, pattern: "kathryn" }
+      - { id: in-video, pattern: "in the video" }
+      - { id: in-this-video, pattern: "in this video" }
+      - { id: in-todays-video, pattern: "in today's video" }
+      - { id: free-to-use-tip, pattern: "free-to-use tip" }
+      - { id: www-domain, pattern: "www\\.[a-z0-9-]+\\.[a-z]+" }
 
   small.en:
     label: "Whisper Small (English)"

@@ -58,3 +58,22 @@ Transcription completed in 0.45s: "Testing the voice input extraction."
 		t.Fatalf("expected 'Testing the voice input extraction.', got %q", got)
 	}
 }
+
+func TestUserStopWordLiteralBoundaries(t *testing.T) {
+	stopWords := []string{`(?:^|[\s\p{P}])bye(?:$|[\s\p{P}])`, `(?:^|[\s\p{P}])A\.\+\(x\)(?:$|[\s\p{P}])`}
+	if IsSafeToType("bye", stopWords) {
+		t.Fatal("whole user stop word was accepted")
+	}
+	if !IsSafeToType("goodbye", stopWords) {
+		t.Fatal("substring was incorrectly rejected")
+	}
+	if got := StripTrailingHallucinations("hello bye", stopWords); got != "hello" {
+		t.Fatalf("trailing word = %q", got)
+	}
+	if got := StripTrailingHallucinations("hello A.+(x)", stopWords); got != "hello" {
+		t.Fatalf("literal punctuation phrase = %q", got)
+	}
+	if !IsSafeToType("hello ax", stopWords) {
+		t.Fatal("regex-shaped phrase was interpreted as regex")
+	}
+}
