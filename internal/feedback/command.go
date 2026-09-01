@@ -89,6 +89,50 @@ func NewCommand(out io.Writer, home string, builtins []spec.StopWord) *cobra.Com
 		}}
 	}
 	stop.AddCommand(add, list, remove, set(false), set(true))
+	artifact := &cobra.Command{Use: "silence-artifact", Short: "Manage whole-utterance silence artifacts"}
+	artifact.AddCommand(
+		&cobra.Command{Use: "add PHRASE", Args: cobra.ExactArgs(1), RunE: func(_ *cobra.Command, a []string) error {
+			o, err := load()
+			if err != nil {
+				return err
+			}
+			o, err = AddSilenceArtifact(o, a[0])
+			if err != nil {
+				return err
+			}
+			if err = Save(path, o); err != nil {
+				return err
+			}
+			fmt.Fprintf(out, "Added silence artifact %q. It is discarded only as a whole utterance. Remove it with: voxi feedback silence-artifact remove %q\n", a[0], a[0])
+			return nil
+		}},
+		&cobra.Command{Use: "remove PHRASE", Args: cobra.ExactArgs(1), RunE: func(_ *cobra.Command, a []string) error {
+			o, err := load()
+			if err != nil {
+				return err
+			}
+			o, err = RemoveSilenceArtifact(o, a[0])
+			if err != nil {
+				return err
+			}
+			if err = Save(path, o); err != nil {
+				return err
+			}
+			fmt.Fprintf(out, "Removed silence artifact %q. Add it again with: voxi feedback silence-artifact add %q\n", a[0], a[0])
+			return nil
+		}},
+		&cobra.Command{Use: "list", Args: cobra.NoArgs, RunE: func(_ *cobra.Command, _ []string) error {
+			o, err := load()
+			if err != nil {
+				return err
+			}
+			for _, p := range o.SilenceArtifacts {
+				fmt.Fprintf(out, "silence-artifact\t%s\n", p)
+			}
+			return nil
+		}},
+	)
 	cmd.AddCommand(stop)
+	cmd.AddCommand(artifact)
 	return cmd
 }

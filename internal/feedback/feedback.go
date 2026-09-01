@@ -17,8 +17,9 @@ import (
 const fileName = "stop-words.json"
 
 type Overrides struct {
-	User     []string `json:"user,omitempty"`
-	Disabled []string `json:"disabled_builtin,omitempty"`
+	User             []string `json:"user,omitempty"`
+	Disabled         []string `json:"disabled_builtin,omitempty"`
+	SilenceArtifacts []string `json:"silence_artifacts,omitempty"`
 }
 
 func Path(home string) string { return filepath.Join(home, ".config", "voxi", fileName) }
@@ -39,6 +40,13 @@ func Load(path string) (Overrides, error) {
 		if err := validate(phrase); err != nil {
 			return Overrides{}, fmt.Errorf("invalid stored stop word: %w", err)
 		}
+	}
+	for i, phrase := range o.SilenceArtifacts {
+		normalized, err := normalizeArtifact(phrase)
+		if err != nil {
+			return Overrides{}, fmt.Errorf("invalid stored silence artifact: %w", err)
+		}
+		o.SilenceArtifacts[i] = normalized
 	}
 	return normalize(o), nil
 }
@@ -86,6 +94,60 @@ func Add(o Overrides, phrase string) (Overrides, error) {
 	}
 	o.User = append(o.User, phrase)
 	return normalize(o), nil
+}
+
+// AddSilenceArtifact records a phrase which is discarded only when it is the
+// complete transcript of an utterance. It intentionally does not share the
+// stop-word matching semantics: ordinary occurrences in longer speech remain.
+func AddSilenceArtifact(o Overrides, phrase string) (Overrides, error) {
+	phrase, err := normalizeArtifact(phrase)
+	if err != nil {
+		return o, err
+	}
+	for _, p := range o.SilenceArtifacts {
+		if strings.EqualFold(p, phrase) {
+			return o, fmt.Errorf("silence artifact %q is already present", phrase)
+		}
+	}
+	o.SilenceArtifacts = append(o.SilenceArtifacts, phrase)
+	return normalize(o), nil
+}
+
+func RemoveSilenceArtifact(o Overrides, phrase string) (Overrides, error) {
+	phrase, err := normalizeArtifact(phrase)
+	if err != nil {
+		return o, err
+	}
+	found := false
+	out := o.SilenceArtifacts[:0]
+	for _, p := range o.SilenceArtifacts {
+		if strings.EqualFold(p, phrase) {
+			found = true
+		} else {
+			out = append(out, p)
+		}
+	}
+	if !found {
+		return o, fmt.Errorf("silence artifact %q was not found", phrase)
+	}
+	o.SilenceArtifacts = out
+	return normalize(o), nil
+}
+
+// IsSilenceArtifact reports whether text is exactly a configured artifact
+// after harmless surface normalization. It never matches a phrase embedded in
+// a larger transcript.
+func IsSilenceArtifact(text string, artifacts []string) bool {
+	text, err := normalizeArtifact(text)
+	if err != nil {
+		return false
+	}
+	for _, artifact := range artifacts {
+		if strings.EqualFold(text, artifact) {
+			return true
+		}
+	}
+	return false
 }
 func Remove(o Overrides, phrase string) (Overrides, error) {
 	phrase = strings.TrimSpace(phrase)
@@ -163,9 +225,23 @@ func validate(phrase string) error {
 	}
 	return nil
 }
+
+func normalizeArtifact(phrase string) (string, error) {
+	if err := validate(phrase); err != nil {
+		return "", err
+	}
+	phrase = strings.TrimSpace(phrase)
+	phrase = strings.TrimRight(phrase, ".!?")
+	phrase = strings.TrimSpace(phrase)
+	if phrase == "" {
+		return "", fmt.Errorf("silence artifact must not be empty")
+	}
+	return phrase, nil
+}
 func normalize(o Overrides) Overrides {
 	o.User = uniqueSorted(o.User, true)
 	o.Disabled = uniqueSorted(o.Disabled, false)
+	o.SilenceArtifacts = uniqueSorted(o.SilenceArtifacts, true)
 	return o
 }
 func uniqueSorted(in []string, fold bool) []string {

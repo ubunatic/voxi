@@ -109,3 +109,48 @@ func TestLiteralPatternsAndCommand(t *testing.T) {
 		t.Fatalf("list output %q", out.String())
 	}
 }
+
+func TestSilenceArtifactCommandAndPersistence(t *testing.T) {
+	var out bytes.Buffer
+	cmd := NewCommand(&out, t.TempDir(), rules)
+	cmd.SetArgs([]string{"silence-artifact", "add", " bye! "})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "whole utterance") || !strings.Contains(out.String(), "remove") {
+		t.Fatalf("add output %q", out.String())
+	}
+	out.Reset()
+	cmd.SetArgs([]string{"silence-artifact", "list"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if got := out.String(); got != "silence-artifact\tbye\n" {
+		t.Fatalf("list = %q", got)
+	}
+	out.Reset()
+	cmd.SetArgs([]string{"silence-artifact", "remove", "Bye"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "Add it again") {
+		t.Fatalf("remove output %q", out.String())
+	}
+}
+
+func TestIsSilenceArtifactMatchesOnlyWholeNormalizedUtterance(t *testing.T) {
+	o, err := AddSilenceArtifact(Overrides{}, "bye")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, text := range []string{"bye", "Bye!", "  bye  "} {
+		if !IsSilenceArtifact(text, o.SilenceArtifacts) {
+			t.Errorf("%q was not rejected", text)
+		}
+	}
+	for _, text := range []string{"goodbye", "hello bye", "bye for now", "say goodbye"} {
+		if IsSilenceArtifact(text, o.SilenceArtifacts) {
+			t.Errorf("%q was incorrectly rejected", text)
+		}
+	}
+}

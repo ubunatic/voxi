@@ -226,10 +226,12 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 	}
 	modelName = resolvedModel
 	stopWords := modelSpec.StopWords(modelName)
+	var silenceArtifacts []string
 	if overrides, loadErr := feedback.Load(feedback.Path(d.Getenv("HOME"))); loadErr != nil {
 		fmt.Fprintf(d.Stdout, "Warning: cannot load local stop-word feedback; using built-ins: %v\n", loadErr)
 	} else {
 		stopWords = feedback.ActivePatterns(modelSpec.BuiltinStopWords(modelName), overrides)
+		silenceArtifacts = overrides.SilenceArtifacts
 	}
 
 	jobChan := make(chan TranscribeJob, 10)
@@ -272,7 +274,7 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 			writeVoxtypeState("recording")
 
 			text := asr.CleanWhisperTranscript(outBuf.String(), stopWords)
-			if err == nil && text != "" && asr.IsSafeToType(text, stopWords) {
+			if acceptTranscript(err, text, stopWords, silenceArtifacts) {
 				transLock.Lock()
 				if fullTranscript.Len() > 0 {
 					fullTranscript.WriteString(" ")
@@ -405,6 +407,12 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 	}
 
 	return nil
+}
+
+// acceptTranscript is the single gate before an eager result can affect either
+// the focused application or local history.
+func acceptTranscript(err error, text string, stopWords, silenceArtifacts []string) bool {
+	return err == nil && text != "" && asr.IsSafeToType(text, stopWords) && !feedback.IsSilenceArtifact(text, silenceArtifacts)
 }
 
 func runEagerDaemon(ctx context.Context, d deps.Dependencies, opts EagerOptions) error {

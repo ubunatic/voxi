@@ -1,6 +1,6 @@
 # 034: Isolated Silence-Artifact Feedback for Ambiguous Dictation Words
 
-**Status**: Open  
+**Status**: Complete
 **Priority**: P2 (Medium)  
 **Severity**: Moderate  
 **Category**: Feature  
@@ -67,3 +67,11 @@ whole utterance, and show the reversal command after `add`.
 - A genuine phrase containing `bye` remains intact in every position.
 - The feature is local, reversible, tested, and does not alter the active
   `small.en` model or its decoding settings.
+
+## 6. Completion Notes
+
+Implemented `voxi feedback silence-artifact add|list|remove` using the
+existing atomic, local `0600` feedback store. Eager transcription now checks
+configured artifacts after existing transcript filtering and before it can
+type or append history. Matching is case-insensitive and whole-utterance only,
+after whitespace and terminal `.`, `!`, or `?` normalization.
