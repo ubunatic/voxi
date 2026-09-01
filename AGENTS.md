@@ -15,6 +15,14 @@ Run from project root.
 
 After making changes, always run `make install` so installed binaries are current.
 
+`make install` does not affect the running `voxi-agent.service` (systemd --user) —
+it keeps executing the old binary already loaded in memory until restarted.
+If you touched code the live daemon actually runs (`internal/eager`, `internal/record`,
+`internal/modifiers`, `cmd/voxi`'s `agent`/`eager` paths, etc.), run
+`make restart-service` instead of `make install` — it rebuilds, installs, and
+restarts `voxi-agent.service` so the change takes effect. Purely on-demand
+subcommands invoked fresh each run (e.g. `voxi monitor`) don't need a restart.
+
 <!-- harnez:begin Language Conventions -->
 Adhere to the following conventions.
 

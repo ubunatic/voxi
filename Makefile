@@ -37,6 +37,9 @@ install-debug: ⚙️ build-debug  # install debug binary to ~/go/bin
 install-all: ⚙️ install  # install user binaries
 	go install ./cmd/voxi-modifierd
 
+restart-service: ⚙️ install  # rebuild, install, and restart the running voxi-agent user service
+	systemctl --user restart voxi-agent.service
+
 install-system: ⚙️ build  # install binary to PREFIX/bin via sudo (system-wide)
 	sudo install -m 0755 $(BINARY) $(PREFIX)/bin/$(BINARY)
 
