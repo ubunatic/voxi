@@ -22,14 +22,15 @@ In-depth references for architecture, decisions, and operations of the Voxi Linu
 
 ---
 
-## Technical Case Studies (`docs/studies/`)
+## Technical Case Studies (**`docs/studies/`**)
 
-| Case Study | Topic |
-| :--- | :--- |
-| [2026-08-18-standalone-voxi-extraction-and-migration.md](studies/2026-08-18-standalone-voxi-extraction-and-migration.md) | Architectural extraction of the voice input engine from harnez into standalone voxi |
-| [2026-08-18-continuous-eager-streaming-and-resource-monitor.md](studies/2026-08-18-continuous-eager-streaming-and-resource-monitor.md) | Continuous eager sentence streaming, GPU acceleration, and btop TUI dashboard |
-| [2026-08-18-modifier-key-gating-and-system-daemon.md](studies/2026-08-18-modifier-key-gating-and-system-daemon.md) | Physical modifier key gating, dedicated evdev daemon architecture, and synthetic input safety |
-| [2026-08-18-gnome-shell-companion-and-devkit-testing.md](studies/2026-08-18-gnome-shell-companion-and-devkit-testing.md) | GNOME Shell companion extension and devkit/nested Wayland testing harness |
-| [2026-08-18-voxtype-popular-applications.md](studies/2026-08-18-voxtype-popular-applications.md) | Survey of speech recognition models and Wayland input backends in production Linux apps |
-| [2026-08-18-omarchy-voxtype-configuration.md](studies/2026-08-18-omarchy-voxtype-configuration.md) | Omarchy 4.0.0 voice dictation reference architecture and config breakdown |
-| [2026-08-24-single-agent-mode-orchestration.md](studies/2026-08-24-single-agent-mode-orchestration.md) | Single `voxi-agent.service` migration, eager bridge, and agentic implementation notes |
+| File | Topic |
+|------|-------|
+| [studies/2026-08-18-continuous-eager-streaming-and-resource-monitor.md](studies/2026-08-18-continuous-eager-streaming-and-resource-monitor.md) | Continuous Eager Sentence Streaming, AMD Radeon Vulkan 1.4 GPU acceleration, plosive & stop-consonant audio protection, zombie pipeline teardown, and Option A Btop Grid Resource Monitor TUI |
+| [studies/2026-08-18-gnome-shell-companion-and-devkit-testing.md](studies/2026-08-18-gnome-shell-companion-and-devkit-testing.md) | GNOME 45–50 companion extension, live nested devkit canary testbed, Mutter window focus coordination, and zero-leak recording toggle |
+| [studies/2026-08-18-modifier-key-gating-and-system-daemon.md](studies/2026-08-18-modifier-key-gating-and-system-daemon.md) | Physical Modifier Key Gating, Dedicated Daemon Architecture, and Synthetic Input Safety |
+| [studies/2026-08-18-omarchy-voxtype-configuration.md](studies/2026-08-18-omarchy-voxtype-configuration.md) | Omarchy 4.0.0 ("Quattro") Arch Linux distribution, Voxtype voice-to-text daemon (`peteonrails/voxtype`), Hyprland Wayland compositor integration, systemd user services, output drivers, status bars, and audio feedback. |
+| [studies/2026-08-18-standalone-voxi-extraction-and-migration.md](studies/2026-08-18-standalone-voxi-extraction-and-migration.md) | Standalone Voice Input Engine Extraction (`ubunatic/voxi`) & Decoupling |
+| [studies/2026-08-18-voxtype-popular-applications.md](studies/2026-08-18-voxtype-popular-applications.md) | Linux Wayland/X11 compositors (Hyprland, Sway, GNOME, KDE, River), status bars (Waybar, Polybar), editor workflows (Obsidian, Neovim), LLM post-processing (Ollama), meeting pipelines, and engine setups (Whisper, Parakeet, Soniox). |
+| [studies/2026-08-24-single-agent-mode-orchestration.md](studies/2026-08-24-single-agent-mode-orchestration.md) | Single Agent Mode Orchestration |
+
