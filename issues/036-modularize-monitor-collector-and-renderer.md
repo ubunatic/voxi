@@ -1,10 +1,10 @@
 # 036: Modularize Monitor Collector and TUI Renderer
 
-**Status**: Open
+**Status**: Complete — split into collector.go/render.go/monitor.go
 **Priority**: P3 (Low)
 **Severity**: Minor
 **Category**: Code Quality / Refactor
-**Related**: [internal/monitor/monitor.go](../internal/monitor/monitor.go), [internal/monitor/monitor_test.go](../internal/monitor/monitor_test.go)
+**Related**: [internal/monitor/monitor.go](../internal/monitor/monitor.go), [internal/monitor/collector.go](../internal/monitor/collector.go), [internal/monitor/render.go](../internal/monitor/render.go), [internal/monitor/monitor_test.go](../internal/monitor/monitor_test.go)
 
 ---
 
@@ -43,3 +43,8 @@ Decompose `internal/monitor/monitor.go` within `package monitor` into distinct f
 1. Run `go test ./internal/monitor/...` in `voxi`.
 2. Run `harnez assess voxi` to confirm `internal/monitor/monitor.go` is decomposed below the 500 LOC warning threshold.
 3. Run `make install` and test `voxi monitor` interactively.
+
+## 4. Resolution Notes
+
+- The spec's function names (`checkDaemonStatus`, `drawSpeedBox`, `RunMonitor`, etc.) did not match the actual codebase; the real collection/render/loop entry points are `CollectVoiceResources`, `PrintVoiceResourceReport`, and `RunWatchResources`. Split along the same collector/render/core-loop responsibility boundaries using the real names.
+- Result: `monitor.go` 155 LOC, `collector.go` 395 LOC, `render.go` 492 LOC — all under the 500 LOC threshold. `go build ./...`, `go test ./...`, `gofmt -l`, `go vet` all clean; `make install` succeeded.
