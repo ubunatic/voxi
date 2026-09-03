@@ -75,3 +75,42 @@ existing atomic, local `0600` feedback store. Eager transcription now checks
 configured artifacts after existing transcript filtering and before it can
 type or append history. Matching is case-insensitive and whole-utterance only,
 after whitespace and terminal `.`, `!`, or `?` normalization.
+
+## 7. Bug Fix (2026-09-03): Asymmetric Punctuation Trim
+
+**Reported by user**: after adding artifacts (e.g. `.com`), a hallucinated
+`.` (and other near-variants) still typed through during trailing-silence
+segments at the end of recording — "still see the dot popping in" despite
+having "already added a stopwatch stop words and ignored phrases."
+
+**Root cause**: `normalizeArtifact` (`internal/feedback/feedback.go`) only
+trimmed trailing `.!?` (`strings.TrimRight`), not leading. A stored artifact
+`.com` therefore normalized to itself (`.com`, leading dot untouched), while
+Whisper's actual hallucinated output `com.` normalized to `com` (trailing dot
+stripped) — two different strings, so `IsSilenceArtifact`'s exact-match never
+matched them against each other even though they're the same underlying
+hallucination with the punctuation on the opposite side.
+
+**Fix**: changed the trim to `strings.Trim(phrase, ".!?")` (both ends), so
+`.com`, `com.`, `Com!`, and whitespace variants all normalize to the same
+`com` key and match each other, while `yamal.com` (punctuation embedded
+mid-string, not at an edge) is correctly left as a distinct phrase and still
+does not match. Added `TestIsSilenceArtifactMatchesEitherSideOfPunctuation`
+in `internal/feedback/feedback_test.go` covering this. This is a symmetric
+normalization fix, not a design change — Section 3's whole-utterance-only,
+no-substring-match constraint is unchanged.
+
+**Known remaining limitation (not fixed here, by design per Section 3)**:
+this mechanism is still a finite literal-string allowlist. In the same
+session, freshly observed hallucinations `"Mwah!"` and `"and all that."`
+(distinct from the previously-added `"bye"` and `"and all of that"` entries)
+were typed through because they're simply not yet in the list — expected
+behavior for this design, not a bug, but worth the user knowing new
+hallucinated variants will keep requiring `voxi feedback silence-artifact
+add` one at a time rather than being caught automatically. No ticket filed
+for this; Section 3's non-goals already documents the deliberate choice not
+to use RMS/duration heuristics or fuzzy matching.
+
+Verification: `go build ./...`, `go vet ./...`, `go test ./...`, `make
+check` all pass. `make restart-service` run (this touches
+`internal/feedback`, used live by `internal/eager`).

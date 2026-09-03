@@ -1,10 +1,29 @@
 # 050: Optional Warm-Model / Daemon-Mode Transcription (Avoid Per-Utterance GPU Reload)
 
-**Status**: Investigated — No Viable Mechanism (closed without code changes)
+**Status**: Reopened — Proposed / Research (see 051's narrower gate below)
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Enhancement
-**Related**: [046 speech-context default-on](046-speech-context-default-on.md) (ruled out as cause), [032 small.en vocabulary biasing](032-small-en-project-vocabulary-biasing.md)
+**Related**: [046 speech-context default-on](046-speech-context-default-on.md) (ruled out as cause), [032 small.en vocabulary biasing](032-small-en-project-vocabulary-biasing.md), [051 warm-model prior art research](051-warm-model-prior-art-research.md) (reopens this ticket with a narrower gate)
+
+---
+
+## 0. Reopened (2026-09-03) — See 051
+
+This ticket's Section 6 "Decision" (below) closed it on the assumption that
+avoiding a per-utterance reload required either replacing
+`internal/eager`'s VAD/segmentation pipeline outright, or taking on an
+unrelated third-party server dependency. Issue 051's prior-art research
+found a third option neither considered: `whisper.cpp` (the upstream
+project `voxtype` itself already wraps) ships its own `examples/server`
+HTTP server that keeps a model resident and accepts externally-supplied
+WAV files over `/inference` — same upstream project, unchanged
+`internal/eager` capture pipeline, only the per-utterance dispatch target
+in `runEagerCaptureSession` would change. See 051 Section 4 for the gate
+that must be cleared (starting with confirming the installed `voxtype`
+build actually exposes/bundles that server binary) before any
+implementation resumes. Sections 1-6 below are the original investigation
+and remain accurate history; they are not rewritten.
 
 ---
 
