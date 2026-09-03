@@ -76,3 +76,58 @@ Crucially, there are two distinct technical hypotheses for why this occurs:
 
 - Re-play `chunk_0034.wav` and test whether it is rejected pre-ASR or correctly silenced.
 - Verify that genuine short utterances (e.g. "Yes.", "No.", "Stop.", "Go ahead.") still transcribe reliably.
+
+---
+
+## 5. Intermediate Review Feedback (2026-09-03)
+
+The pending implementation compiles and the full Go test suite passes, but Issue
+054 is not ready to close. The current worktree also mixes this work with the
+Issue 053/055 chunk ring-buffer and save-chunk implementation; keep the eventual
+Issue 054 change reviewable and independently verifiable.
+
+### Findings
+
+1. The acoustic defaults are too permissive for the reported failure mode.
+   `MinVoicedFrames: 3` and `MinVoicedRunFrames: 2` represent only 60ms total
+   and 40ms consecutive energy at 20ms per frame. A roughly 300ms transient can
+   therefore pass the gate. Calibrate these values against saved noise and
+   genuine short-utterance fixtures instead of treating the current defaults as
+   sufficient.
+2. The energy-density implementation is unfinished. `audio.AnalyzePCM` computes
+   mean RMS and voiced ratio, but it has no caller, and neither metric influences
+   segment acceptance. Implement and calibrate the planned mean-energy and/or
+   voiced-ratio gate, or remove the unused API if canary evidence rejects that
+   approach.
+3. Acoustically rejected audio is currently lost. `AudioSegmenter.ProcessFrame`
+   returns `nil` for a rejected candidate, so `internal/eager` cannot store its
+   audio or emit the required `rej:low_energy_transient` ring-buffer metadata.
+   The segmenter/eager boundary needs to return a rejected candidate plus a
+   structured reason, or provide an equivalent diagnostic path without invoking
+   ASR.
+4. Tests do not exercise the new rejection behavior. Add focused cases for an
+   isolated spike, separated spikes, the minimum accepted sustained run,
+   `Flush`, the max-window path, and genuine short speech. Also test the acoustic
+   statistics if they remain part of the design.
+5. The context-priming investigation is still outstanding. Record controlled
+   with-prompt versus without-prompt results for the same audio. The named
+   `chunk_0034.wav`, `kt-sentences-plus-silence`, and `bug-d-etc` fixtures were
+   not present in `testdata/speech-context` during review; only
+   `artifact-keyboard-smash.wav` was available.
+6. Post-ASR duration/speech-rate plausibility gating has not been implemented or
+   explicitly ruled out based on evidence.
+7. `git diff --check` reports trailing whitespace in the newly added
+   `artifact-keyboard-smash` corpus row; clean this up before committing.
+
+### Pickup Checklist
+
+- Run the prompt/no-prompt and decoder-threshold canaries on identical saved
+  chunks and document commands, model, output, and conclusions here.
+- Choose acoustic thresholds from fixture evidence, including false-negative
+  checks for "Yes", "No", "Stop", and "Go ahead".
+- Carry structured acoustic rejection diagnostics into the chunk ring buffer
+  without spawning `voxtype`.
+- Add regression tests for all acceptance and rejection boundaries.
+- Run `gofmt`, `git diff --check`, and `go test ./...`.
+- Because this changes the live eager daemon path, finish by running
+  `make restart-service` rather than only `make install`.
