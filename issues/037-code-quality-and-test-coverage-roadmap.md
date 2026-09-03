@@ -37,7 +37,8 @@ This umbrella improvement ticket tracks four focused initiatives:
 - Add CLI regression tests in `cmd/voxi/` covering flag validation, subcommand routing, and exit codes.
 - Introduce mock/synthetic audio buffer tests for `internal/audio/` and `internal/asr/` to lift overall project test coverage above 25%.
 
-### Work Item 3: GNOME Shell Extension Modularization
+### Work Item 3: GNOME Shell Extension Modularization (Deprioritized — P4)
+- User does not currently use the GNOME Shell extension; the built-in OS recording indicator is sufficient. Defer until extension usage resumes.
 - Split `contrib/gnome-shell-extension/extension.js` into modular GJS files:
   - `client.js`: D-Bus / IPC messaging with the daemon.
   - `indicator.js`: Panel status icon & animations.

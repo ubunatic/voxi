@@ -12,8 +12,9 @@
 
 default_model: small.en
 
-# Decoder-only terminology hints for the opt-in small.en speech context. These
-# values never rewrite output and never leave the machine.
+# Decoder-only terminology hints for the small.en speech context, active by
+# default (disable per invocation with --speech-context=false). These values
+# never rewrite output and never leave the machine.
 speech_context:
   prompt_prefix: "Technical dictation. Terms:"
   max_terms: 50
@@ -46,6 +47,7 @@ models:
       - { id: see-you-next-time, pattern: "see you next time" }
       - { id: see-you-next-video, pattern: "see you in the next video" }
       - { id: subtitles-by, pattern: "subtitles by.*" }
+      - { id: subs-byuk, pattern: "subs byuk" }
       - { id: translated-by, pattern: "translated by.*" }
       - { id: like-subscribe, pattern: "like and subscribe" }
       - { id: and-like-thank-you, pattern: "and like\\. thank you" }

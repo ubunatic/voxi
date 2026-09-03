@@ -11,7 +11,7 @@ weight: 60
 > **Read this if** — you are about to add a dependency, a global, or a test framework.
 >
 > **Takeaways**
-> 1. Standard library first; every dependency needs a reason and approval (`cobra` for CLI, `yaml.v3` for config).
+> 1. Standard library first; every dependency needs a reason and approval (`cobra` for CLI, `yaml.v3` for config, `x/term` for raw-mode terminal input).
 > 2. No package-level mutable state and no `panic()` outside boot.
 > 3. Table-driven tests in the same package, standard `testing` only.
 
@@ -20,7 +20,7 @@ weight: 60
 ## Language & Deps
 - **Modern Go**: Leverage current features like `any` and generics, but only where they explicitly reduce boilerplate/noise.
 - **Minimise external deps**: Default to the Go Standard Library. If you need an external library, get approval first.
-- **Allowed CLI & Config Libraries**: `github.com/spf13/cobra` for CLI tools, `gopkg.in/yaml.v3` for config files.
+- **Allowed CLI & Config Libraries**: `github.com/spf13/cobra` for CLI tools, `gopkg.in/yaml.v3` for config files, `golang.org/x/term` for raw-mode terminal input (interactive line editing; the stdlib has no raw-mode primitive — see issue 045).
 - **No Heavy Frameworks**: No ORMs (write raw SQL), no logging frameworks (use standard `log`), no Dependency Injection (DI) containers (pass dependencies explicitly).
 
 ## Project Layout

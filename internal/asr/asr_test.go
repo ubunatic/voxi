@@ -59,6 +59,36 @@ Transcription completed in 0.45s: "Testing the voice input extraction."
 	}
 }
 
+func TestStripLeadingHallucinations(t *testing.T) {
+	stopWords := []string{"subs byuk"}
+
+	got := StripLeadingHallucinations("Subs byuk, hello team, let's start the standup.", stopWords)
+	want := "hello team, let's start the standup."
+	if got != want {
+		t.Fatalf("StripLeadingHallucinations() = %q, want %q", got, want)
+	}
+
+	// A stop-word-like substring occurring mid-sentence must not be
+	// stripped -- only a true leading match should be removed.
+	midSentence := "I was reading about subs byuk hallucinations yesterday."
+	if got := StripLeadingHallucinations(midSentence, stopWords); got != midSentence {
+		t.Fatalf("StripLeadingHallucinations() stripped a mid-sentence match: got %q, want unchanged %q", got, midSentence)
+	}
+}
+
+func TestCleanWhisperTranscriptStripsLeadingHallucination(t *testing.T) {
+	out := `
+[2026-09-02T10:00:00Z INFO] Loading audio file: /tmp/utt_002.wav
+[2026-09-02T10:00:01Z INFO] Model loaded in 0.2s
+Transcription completed in 0.45s: "Subs byuk, hello team, let's start the standup."
+`
+	got := CleanWhisperTranscript(out, testStopWords(t))
+	want := "hello team, let's start the standup."
+	if got != want {
+		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
+
 func TestUserStopWordLiteralBoundaries(t *testing.T) {
 	stopWords := []string{`(?:^|[\s\p{P}])bye(?:$|[\s\p{P}])`, `(?:^|[\s\p{P}])A\.\+\(x\)(?:$|[\s\p{P}])`}
 	if IsSafeToType("bye", stopWords) {

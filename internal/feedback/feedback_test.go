@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"ubunatic.com/voxi/internal/deps"
 	"ubunatic.com/voxi/spec"
 )
 
@@ -87,7 +88,7 @@ func TestLiteralPatternsAndCommand(t *testing.T) {
 		t.Fatalf("pattern %q did not quote literal", p)
 	}
 	var out bytes.Buffer
-	cmd := NewCommand(&out, t.TempDir(), rules, 64)
+	cmd := NewCommand(&out, t.TempDir(), rules, 64, nil, deps.Dependencies{})
 	cmd.SetArgs([]string{"stop-word", "add", "bye"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
@@ -112,7 +113,7 @@ func TestLiteralPatternsAndCommand(t *testing.T) {
 
 func TestSilenceArtifactCommandAndPersistence(t *testing.T) {
 	var out bytes.Buffer
-	cmd := NewCommand(&out, t.TempDir(), rules, 64)
+	cmd := NewCommand(&out, t.TempDir(), rules, 64, nil, deps.Dependencies{})
 	cmd.SetArgs([]string{"silence-artifact", "add", " bye! "})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
@@ -160,7 +161,7 @@ func TestVocabularyCommandAddListRemove(t *testing.T) {
 	var out bytes.Buffer
 
 	run := func(args ...string) error {
-		cmd := NewCommand(&out, home, rules, 64)
+		cmd := NewCommand(&out, home, rules, 64, nil, deps.Dependencies{})
 		cmd.SetArgs(args)
 		return cmd.Execute()
 	}

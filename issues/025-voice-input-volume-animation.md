@@ -1,6 +1,7 @@
 # Voice Input: Real-time audio input volume / VU meter animation in recording indicator
 
 - **Status:** Open — Enhancement to issues 022 & 024
+- **Priority:** P4 (Low — user does not currently use the GNOME Shell extension; the built-in OS recording indicator is sufficient)
 
 ## Context
 

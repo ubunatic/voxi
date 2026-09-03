@@ -70,6 +70,20 @@ func StripTrailingHallucinations(text string, stopWords []string) string {
 	return strings.TrimSpace(clean)
 }
 
+// StripLeadingHallucinations cleans a leading hallucinated prefix (e.g. a
+// garbled "subtitles by ..." credit artifact) from otherwise-genuine speech,
+// using the active model's stop-word patterns (see spec/models.yaml). Unlike
+// StripTrailingHallucinations, the match is anchored to the start of the
+// text so a stop-word-like substring occurring mid-sentence is left alone.
+func StripLeadingHallucinations(text string, stopWords []string) string {
+	clean := text
+	for _, w := range stopWords {
+		re := regexp.MustCompile(`(?i)^\s*` + w + `\s*[.!,]*\s*`)
+		clean = re.ReplaceAllString(clean, "")
+	}
+	return strings.TrimSpace(clean)
+}
+
 // CleanWhisperTranscript extracts only valid human speech from Voxtype transcribe output,
 // discarding ANSI escape codes, diagnostic logs, timestamps, model metadata, and hallucinations.
 // stopWords are the active model's hallucination patterns (see spec/models.yaml).
@@ -80,6 +94,12 @@ func CleanWhisperTranscript(output string, stopWords []string) string {
 	// 'Transcription completed in 1.25s: "the quick brown fox"'
 	if m := quoteExtractRe.FindStringSubmatch(clean); len(m) > 1 {
 		candidate := strings.TrimSpace(m[1])
+		// Strip leading before trailing: both are anchored to their own end
+		// of the string, so order doesn't change which hallucinations get
+		// caught, but stripping the leading prefix first keeps the
+		// remaining text's start clean for readability if a caller
+		// inspects the intermediate candidate.
+		candidate = StripLeadingHallucinations(candidate, stopWords)
 		candidate = StripTrailingHallucinations(candidate, stopWords)
 		if IsSafeToType(candidate, stopWords) {
 			return candidate
@@ -111,6 +131,7 @@ func CleanWhisperTranscript(output string, stopWords []string) string {
 			rfc3339TimeRe.MatchString(trimmed) {
 			continue
 		}
+		trimmed = StripLeadingHallucinations(trimmed, stopWords)
 		trimmed = StripTrailingHallucinations(trimmed, stopWords)
 		if IsSafeToType(trimmed, stopWords) {
 			resultLines = append(resultLines, trimmed)

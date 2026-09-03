@@ -1,6 +1,7 @@
 # GNOME transcriber UI: Visual typing feedback indicator (keyboard icon during synthesis)
 
 - **Status:** Open — Enhancement to issue 022
+- **Priority:** P4 (Low — user does not currently use the GNOME Shell extension; the built-in OS recording indicator is sufficient)
 
 ## Context
 

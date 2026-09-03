@@ -37,8 +37,10 @@ type ModelSpec struct {
 	Models        map[string]Model  `yaml:"models"`
 }
 
-// SpeechContextSpec defines the bounded decoder prompt used by opt-in
-// technical-dictation context. It is data rather than runtime user config.
+// SpeechContextSpec defines the bounded decoder prompt used by the
+// technical-dictation context, active by default for small.en (see
+// EagerOptions.SpeechContext / --speech-context=false to disable). It is
+// data rather than runtime user config.
 type SpeechContextSpec struct {
 	PromptPrefix string   `yaml:"prompt_prefix"`
 	Terms        []string `yaml:"terms"`

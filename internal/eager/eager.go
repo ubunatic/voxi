@@ -61,6 +61,7 @@ func DefaultEagerOptions() EagerOptions {
 		RecordHistory: true,
 		Daemon:        false,
 		Model:         s.DefaultModel,
+		SpeechContext: true,
 	}
 }
 

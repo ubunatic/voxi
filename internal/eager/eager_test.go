@@ -33,12 +33,14 @@ func TestVoxtypeTranscribeArgsPutInitialPromptBeforeSubcommand(t *testing.T) {
 	}
 }
 
-func TestSpeechContextIsOptInAndSmallEnOnly(t *testing.T) {
+func TestSpeechContextIsSmallEnOnlyAndDisableable(t *testing.T) {
 	for _, test := range []struct {
 		model   string
 		enabled bool
 		want    bool
 	}{
+		// enabled=false models an explicit --speech-context=false: prompting
+		// must be fully disabled regardless of model (issue 046).
 		{model: "small.en", enabled: false, want: false},
 		{model: "small.en", enabled: true, want: true},
 		{model: "base.en", enabled: true, want: false},
@@ -47,5 +49,22 @@ func TestSpeechContextIsOptInAndSmallEnOnly(t *testing.T) {
 		if got := shouldUseSpeechContext(test.model, test.enabled); got != test.want {
 			t.Errorf("shouldUseSpeechContext(%q, %t) = %t, want %t", test.model, test.enabled, got, test.want)
 		}
+	}
+}
+
+// TestDefaultEagerOptionsEnableSpeechContext locks in issue 046's flipped
+// default: a fresh `voxi eager` invocation with no --speech-context flag
+// must have prompting active (small.en is also the default model, so the
+// shouldUseSpeechContext gate above will fire). Explicit
+// --speech-context=false still overrides this via the Cobra flag binding
+// in cmd/voxi/main.go, which is exercised by TestSpeechContextIsSmallEnOnlyAndDisableable
+// above (the enabled=false cases).
+func TestDefaultEagerOptionsEnableSpeechContext(t *testing.T) {
+	opts := DefaultEagerOptions()
+	if !opts.SpeechContext {
+		t.Fatal("DefaultEagerOptions().SpeechContext = false, want true (issue 046: default-on)")
+	}
+	if !shouldUseSpeechContext(opts.Model, opts.SpeechContext) {
+		t.Fatalf("shouldUseSpeechContext(%q, true) = false, want true for the default model", opts.Model)
 	}
 }

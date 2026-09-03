@@ -1,6 +1,6 @@
 # 032: Small.en Project Vocabulary Biasing for Technical Dictation
 
-**Status**: Implemented / Opt-in Canary  
+**Status**: Implemented / Default-on — Measurement Gate Closed, default flipped in [046](046-speech-context-default-on.md)  
 **Priority**: P2 (Medium)  
 **Severity**: Moderate  
 **Category**: Feature  
@@ -68,9 +68,11 @@ Constraints:
 ## 4. Acceptance Criteria
 
 - `small.en` is still the default model and remains entirely local.
-- Vocabulary context is off by default until the canary proves support and the
-  benchmark shows a meaningful keyterm-recall gain with no material general-WER
-  or latency regression.
+- Vocabulary context is on by default for `small.en`, now that Section 7.2's
+  benchmark showed a meaningful keyterm-recall gain (0.35 -> 0.90) with no
+  material general-WER (0.259 -> 0.095) or latency regression (~2% median);
+  it stayed off by default until that measurement gate closed. Explicit
+  `--speech-context=false` restores the unprompted path (see issue 046).
 - The generated prompt obeys the term and size limits and contains no file
   contents or secrets.
 - Tests cover deterministic construction and sanitisation; a manual canary
@@ -154,3 +156,70 @@ go run ./scripts/speech_context_bench -corpus testdata/speech-context
 Record the paired aggregate output here. Keep the feature opt-in unless the
 full corpus shows meaningful keyterm-recall gain without material general-WER,
 latency, hallucination, or repetition regression.
+
+### 7.1 First real-microphone data point (2026-09-02, via issue 042)
+
+Issue 042 shipped `voxi feedback sample record` for building a private,
+real-microphone corpus at `~/.config/voxi/samples/`, corpus.tsv-compatible
+with this gate's runner. The user recorded three ad hoc samples
+(`hello-voxi-thinkpad`, `hello-voxi-webcam`, `my-toolchain`) and ran:
+
+```sh
+go run ./scripts/speech_context_bench -corpus ~/.config/voxi/samples
+```
+
+Result: mean WER 0.40 unprompted vs. 0.10 prompted across the three fixtures;
+keyterm recall read 0/0 because none of the three phrases happened to contain
+an exact static-vocabulary keyterm (see issue 042 Section 7 for the full
+per-fixture table). This is real signal that `--speech-context` prompting
+helps on genuine microphone audio, not just synthesized eSpeak NG fixtures —
+but it is not yet the gate this section calls for: three ad hoc phrases are a
+small, keyterm-sparse sample, not the deliberately keyterm-dense fixture set
+this gate was written for.
+
+**Still open**: record a corpus specifically designed to exercise the
+technical vocabulary (Voxi, voxtype, dotool, PipeWire, Wayland, file/package
+names, etc., matching `testdata/speech-context/corpus.tsv`'s phrasing style)
+via `voxi feedback sample record`, then re-run the bench and record the
+aggregate here before considering opt-out or default-on behavior.
+
+### 7.2 Keyterm-dense corpus result (2026-09-02, via issue 044) — Gate Closed
+
+The user recorded the 10 phrases proposed in issue 044 (8 technical, 2
+ordinary control) with `voxi feedback sample record`. Two rows in the
+generated `~/.config/voxi/samples/corpus.tsv` were missing their trailing
+tab for the (empty) keyterms field — a data-entry artifact, not a code bug —
+and every row's keyterms column was empty (the recorder does not infer
+keyterms, only text), so both were fixed by hand before benching, populating
+keyterms per fixture from the static vocabulary terms actually present in
+each phrase (e.g. `Voxi|voxtype|dotool|PipeWire|Wayland` for `kt-core`).
+
+```sh
+go run ./scripts/speech_context_bench -corpus ~/.config/voxi/samples
+```
+
+Aggregate over all 13 fixtures (10 from issue 044 plus the 3 from issue 042's
+first pass):
+
+| | mean WER | keyterm recall | median latency | adjacent repeats |
+|---|---|---|---|---|
+| Unprompted | 0.259 | 0.35 (7/20) | 1703 ms | 0 |
+| Prompted | 0.095 | 0.90 (18/20) | 1733 ms | 0 |
+
+Prompting more than doubles keyterm recall (0.35 → 0.90) and roughly halves
+mean WER (0.26 → 0.09), with a ~30 ms (1.8%) median latency delta and zero
+hallucination/repetition regressions in either mode. Per-fixture detail:
+unprompted runs consistently mangled brand/technical terms into
+phonetically-similar ordinary words (`Voxi` → `Foxy`/`Voxy`, `voxtype` →
+`FoxType`, `PipeWire` → `Pyfire`, `Wayland` → `Waydend`, `systemd` → `system
+D`), which the prompted runs corrected in every case except `kt-config`
+(`models.yaml`/`context_test.go` stayed partially wrong in both modes — the
+weakest fixture, likely because file-name-shaped terms don't tokenize the
+same way as single words) and `kt-mixed-2` (prompted recovered `Voxi` but not
+`voxtype`, transcribed as `VoxType`).
+
+**Gate closed**: this meets the acceptance criteria in Section 4 — meaningful
+keyterm-recall gain, no material general-WER or latency regression. `voxi
+eager --speech-context` remains a documented opt-in flag rather than
+switching to default-on in this ticket; a separate follow-up would be needed
+to change the default given this is now a P2, not urgent, decision.

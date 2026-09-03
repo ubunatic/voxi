@@ -136,7 +136,7 @@ func main() {
 	eagerCmd.Flags().BoolVar(&eagerOpts.RecordHistory, "history", eagerOpts.RecordHistory, "record transcribed utterances into local dictation history")
 	eagerCmd.Flags().BoolVar(&eagerOpts.Daemon, "daemon", eagerOpts.Daemon, "run as background systemd daemon listening for toggle control")
 	eagerCmd.Flags().StringVar(&eagerOpts.Model, "model", eagerOpts.Model, fmt.Sprintf("Whisper model name, see spec/models.yaml (default: %s)", eagerOpts.Model))
-	eagerCmd.Flags().BoolVar(&eagerOpts.SpeechContext, "speech-context", eagerOpts.SpeechContext, "opt in to bounded local vocabulary hints for small.en")
+	eagerCmd.Flags().BoolVar(&eagerOpts.SpeechContext, "speech-context", eagerOpts.SpeechContext, "bounded local vocabulary hints for small.en (default: on; use --speech-context=false to disable)")
 	eagerCmd.Flags().StringSliceVar(&eagerOpts.Vocabulary, "vocabulary", eagerOpts.Vocabulary, "additional comma-separated speech-context terms (requires --speech-context)")
 
 	// 4. monitor / top / resources command
@@ -352,7 +352,7 @@ func main() {
 	if err != nil {
 		panic(fmt.Sprintf("load embedded model specification: %v", err))
 	}
-	root.AddCommand(modeCmd, recordCmd, eagerCmd, monitorCmd, historyCmd, configCmd, daemonCmd, benchCmd, feedback.NewCommand(d.Stdout, d.Getenv("HOME"), modelSpec.BuiltinStopWords(modelSpec.DefaultModel), modelSpec.SpeechContext.MaxTermChars), agent.NewCommand(d))
+	root.AddCommand(modeCmd, recordCmd, eagerCmd, monitorCmd, historyCmd, configCmd, daemonCmd, benchCmd, feedback.NewCommand(d.Stdout, d.Getenv("HOME"), modelSpec.BuiltinStopWords(modelSpec.DefaultModel), modelSpec.SpeechContext.MaxTermChars, modelSpec.SpeechContext.Terms, d), agent.NewCommand(d))
 	addDebugCommands(root, d)
 
 	if err := root.Execute(); err != nil {
