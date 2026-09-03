@@ -35,5 +35,6 @@
 | 051 | [051-warm-model-prior-art-research.md](051-warm-model-prior-art-research.md) | 051: Warm-Model Prior Art Research (How Other Whisper Dictation Tools Avoid Per-Utterance Reload) | Research Complete — 050 Reopened With Narrower Scope (gate items 1-4 outstanding) |
 | 052 | [052-cpu-gpu-priority-under-load.md](052-cpu-gpu-priority-under-load.md) | 052: CPU and GPU Scheduling Priority Research for Responsive Dictation Under Load | Open — Research |
 | 053 | [053-ring-buffer-recent-audio-chunks-and-transcripts.md](053-ring-buffer-recent-audio-chunks-and-transcripts.md) | 053: Ring Buffer of Last 10 Recorded Audio Chunks and Transcription Metadata | Closed |
-| 054 | [054-short-pause-acoustic-gating-and-context-priming.md](054-short-pause-acoustic-gating-and-context-priming.md) | 054: Short-Pause Hallucination Gating: Acoustic Validation and Context Priming Analysis | Open |
+| 054 | [054-short-pause-acoustic-gating-and-context-priming.md](054-short-pause-acoustic-gating-and-context-priming.md) | 054: Short-Pause Hallucination Gating: Acoustic Validation and Context Priming Analysis | Implemented |
 | 055 | [055-save-chunk-by-index-feedback-command.md](055-save-chunk-by-index-feedback-command.md) | 055: Save Any Chunk as Dev Sample by Index (`voxi feedback sample save-chunk`) | Implemented |
+| 056 | [056-end-to-end-stress-session-testing-with-noise-and-load.md](056-end-to-end-stress-session-testing-with-noise-and-load.md) | 056: End-to-End Stress Session Integration Testing with Interleaved Acoustic Noise and CPU/GPU Contention | Open |

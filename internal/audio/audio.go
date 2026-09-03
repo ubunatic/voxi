@@ -10,21 +10,27 @@ import (
 
 // SegmenterOptions holds configuration parameters for audio segmentation.
 type SegmenterOptions struct {
-	ThresholdRMS int
-	SilenceMs    int
-	PreRollMs    int
-	MinSpeechMs  int
-	MaxWindowMs  int
+	ThresholdRMS       int
+	SilenceMs          int
+	PreRollMs          int
+	MinSpeechMs        int
+	MaxWindowMs        int
+	MinVoicedFrames    int // Minimum number of voiced frames (>= ThresholdRMS) across the segment (default: 8 = 160ms)
+	MinVoicedRunFrames int // Minimum consecutive voiced frames required to accept a segment (default: 7 = 140ms)
+	MinMeanRMS         int // Minimum average RMS across candidate segment (default: 120)
 }
 
 // DefaultSegmenterOptions returns standard defaults.
 func DefaultSegmenterOptions() SegmenterOptions {
 	return SegmenterOptions{
-		ThresholdRMS: 150,
-		SilenceMs:    800,
-		PreRollMs:    500,
-		MinSpeechMs:  200,
-		MaxWindowMs:  8000,
+		ThresholdRMS:       150,
+		SilenceMs:          800,
+		PreRollMs:          500,
+		MinSpeechMs:        200,
+		MaxWindowMs:        8000,
+		MinVoicedFrames:    8,
+		MinVoicedRunFrames: 7,
+		MinMeanRMS:         120,
 	}
 }
 
@@ -75,6 +81,16 @@ func NewAudioSegmenter(opts SegmenterOptions) *AudioSegmenter {
 
 	maxWindowFrames := (opts.MaxWindowMs + frameMs - 1) / frameMs
 
+	if opts.MinVoicedFrames <= 0 {
+		opts.MinVoicedFrames = 8
+	}
+	if opts.MinVoicedRunFrames <= 0 {
+		opts.MinVoicedRunFrames = 7
+	}
+	if opts.MinMeanRMS <= 0 {
+		opts.MinMeanRMS = 120
+	}
+
 	return &AudioSegmenter{
 		opts:                opts,
 		frameBytes:          frameBytes,
@@ -90,11 +106,40 @@ func NewAudioSegmenter(opts SegmenterOptions) *AudioSegmenter {
 	}
 }
 
+// SegmentCandidate holds an extracted audio slice along with whether it passes acoustic plausibility
+// and its rejection reason if not.
+type SegmentCandidate struct {
+	Audio           []byte
+	Plausible       bool
+	RejectionReason string
+	Stats           AudioStats
+}
+
+// CheckCandidateAcoustics checks whether frames represent genuine speech rather than transients.
+func (s *AudioSegmenter) CheckCandidateAcoustics(frames [][]byte) (bool, string, AudioStats) {
+	if len(frames) == 0 {
+		return false, "empty", AudioStats{}
+	}
+	pcm := FlattenAudioFrames(frames)
+	stats := AnalyzePCM(pcm, s.opts.ThresholdRMS)
+
+	if stats.VoicedFrames < s.opts.MinVoicedFrames {
+		return false, "low_energy_transient", stats
+	}
+	if stats.MaxVoicedRun < s.opts.MinVoicedRunFrames {
+		return false, "unvoiced_transient", stats
+	}
+	if s.opts.MinMeanRMS > 0 && stats.MeanRMS < s.opts.MinMeanRMS {
+		return false, "low_energy_transient", stats
+	}
+	return true, "", stats
+}
+
 // ProcessFrame ingests a 20ms frame of S16_LE PCM audio.
-// Returns a non-nil speech segment slice if an utterance chunk has finished/triggered.
-func (s *AudioSegmenter) ProcessFrame(frame []byte) (speechSegment []byte, speechStarted bool, isSpeaking bool) {
+// Returns a SegmentCandidate if an utterance chunk has finished/triggered, along with speechStarted and isSpeaking flags.
+func (s *AudioSegmenter) ProcessFrame(frame []byte) (candidate SegmentCandidate, speechStarted bool, isSpeaking bool) {
 	if len(frame) < s.frameBytes {
-		return nil, false, s.isSpeaking
+		return SegmentCandidate{}, false, s.isSpeaking
 	}
 
 	frameCopy := make([]byte, s.frameBytes)
@@ -134,7 +179,13 @@ func (s *AudioSegmenter) ProcessFrame(frame []byte) (speechSegment []byte, speec
 
 				if actualSpeechLen >= s.minSpeechFrames {
 					trimmedFrames := s.speechFrames[:actualSpeechLen]
-					speechSegment = FlattenAudioFrames(trimmedFrames)
+					plausible, reason, stats := s.CheckCandidateAcoustics(trimmedFrames)
+					candidate = SegmentCandidate{
+						Audio:           FlattenAudioFrames(trimmedFrames),
+						Plausible:       plausible,
+						RejectionReason: reason,
+						Stats:           stats,
+					}
 				}
 				s.speechFrames = nil
 			}
@@ -149,7 +200,13 @@ func (s *AudioSegmenter) ProcessFrame(frame []byte) (speechSegment []byte, speec
 
 	// Safety check: if utterance runs continuously longer than MaxWindowMs, force chunk
 	if s.isSpeaking && s.maxWindowFrames > 0 && len(s.speechFrames) >= s.maxWindowFrames {
-		speechSegment = FlattenAudioFrames(s.speechFrames)
+		plausible, reason, stats := s.CheckCandidateAcoustics(s.speechFrames)
+		candidate = SegmentCandidate{
+			Audio:           FlattenAudioFrames(s.speechFrames),
+			Plausible:       plausible,
+			RejectionReason: reason,
+			Stats:           stats,
+		}
 		overlapFrames := s.preRollFrames
 		if len(s.speechFrames) < overlapFrames {
 			overlapFrames = len(s.speechFrames)
@@ -159,20 +216,26 @@ func (s *AudioSegmenter) ProcessFrame(frame []byte) (speechSegment []byte, speec
 		s.speechFrames = overlap
 	}
 
-	return speechSegment, speechStarted, s.isSpeaking
+	return candidate, speechStarted, s.isSpeaking
 }
 
-// Flush forces any currently buffered speech into a segment.
-func (s *AudioSegmenter) Flush() []byte {
+// Flush forces any currently buffered speech into a segment candidate.
+func (s *AudioSegmenter) Flush() SegmentCandidate {
 	if s.isSpeaking && len(s.speechFrames) >= s.minSpeechFrames {
-		res := FlattenAudioFrames(s.speechFrames)
+		plausible, reason, stats := s.CheckCandidateAcoustics(s.speechFrames)
+		res := SegmentCandidate{
+			Audio:           FlattenAudioFrames(s.speechFrames),
+			Plausible:       plausible,
+			RejectionReason: reason,
+			Stats:           stats,
+		}
 		s.speechFrames = nil
 		s.isSpeaking = false
 		return res
 	}
 	s.speechFrames = nil
 	s.isSpeaking = false
-	return nil
+	return SegmentCandidate{}
 }
 
 // ComputeAudioRMS calculates the Root Mean Square amplitude of 16-bit PCM audio frame.
@@ -251,3 +314,52 @@ func WriteWAVAudio(path string, pcmData []byte, sampleRate int) error {
 
 	return os.WriteFile(path, buf.Bytes(), 0600)
 }
+
+// AudioStats holds acoustic energy and voicing metrics for an audio segment.
+type AudioStats struct {
+	TotalFrames  int
+	VoicedFrames int
+	MaxVoicedRun int
+	MeanRMS      int
+	VoicedRatio  float64
+}
+
+// AnalyzePCM calculates acoustic energy and frame voicing metrics for a 16kHz S16_LE PCM slice.
+func AnalyzePCM(pcmData []byte, thresholdRMS int) AudioStats {
+	const frameBytes = 640 // 20ms @ 16kHz mono 16-bit
+	totalFrames := len(pcmData) / frameBytes
+	if totalFrames == 0 {
+		return AudioStats{}
+	}
+
+	voicedFrames := 0
+	maxVoicedRun := 0
+	currVoicedRun := 0
+	var sumRMS int64
+
+	for i := 0; i+frameBytes <= len(pcmData); i += frameBytes {
+		rms := ComputeAudioRMS(pcmData[i : i+frameBytes])
+		sumRMS += int64(rms)
+		if rms >= thresholdRMS {
+			voicedFrames++
+			currVoicedRun++
+			if currVoicedRun > maxVoicedRun {
+				maxVoicedRun = currVoicedRun
+			}
+		} else {
+			currVoicedRun = 0
+		}
+	}
+
+	meanRMS := int(sumRMS / int64(totalFrames))
+	ratio := float64(voicedFrames) / float64(totalFrames)
+
+	return AudioStats{
+		TotalFrames:  totalFrames,
+		VoicedFrames: voicedFrames,
+		MaxVoicedRun: maxVoicedRun,
+		MeanRMS:      meanRMS,
+		VoicedRatio:  ratio,
+	}
+}
+

@@ -1,7 +1,9 @@
 package eager
 
 import (
+	"fmt"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -66,5 +68,26 @@ func TestDefaultEagerOptionsEnableSpeechContext(t *testing.T) {
 	}
 	if !shouldUseSpeechContext(opts.Model, opts.SpeechContext) {
 		t.Fatalf("shouldUseSpeechContext(%q, true) = false, want true for the default model", opts.Model)
+	}
+}
+
+func TestRejectionReason(t *testing.T) {
+	artifacts := []string{"bye"}
+	stopWords := []string{"thank you"}
+
+	if r := rejectionReason(fmt.Errorf("fail"), "", "", nil, nil); !strings.HasPrefix(r, "transcribe_error") {
+		t.Errorf("expected transcribe_error, got %q", r)
+	}
+	if r := rejectionReason(nil, "", "", nil, nil); r != "empty" {
+		t.Errorf("expected empty, got %q", r)
+	}
+	if r := rejectionReason(nil, "bye.", "bye", nil, artifacts); r != "silence_artifact" {
+		t.Errorf("expected silence_artifact, got %q", r)
+	}
+	if r := rejectionReason(nil, "Thank you.", "Thank you.", stopWords, nil); r != "stop_word" {
+		t.Errorf("expected stop_word, got %q", r)
+	}
+	if r := rejectionReason(nil, "Hello world", "Hello world", stopWords, artifacts); r != "" {
+		t.Errorf("expected empty reason for valid text, got %q", r)
 	}
 }

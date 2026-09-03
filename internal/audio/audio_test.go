@@ -31,11 +31,14 @@ func TestComputeAudioRMS(t *testing.T) {
 
 func TestAudioSegmenter(t *testing.T) {
 	opts := SegmenterOptions{
-		ThresholdRMS: 500,
-		SilenceMs:    60,  // 3 frames @ 20ms
-		PreRollMs:    40,  // 2 frames
-		MinSpeechMs:  40,  // 2 frames
-		MaxWindowMs:  200, // 10 frames
+		ThresholdRMS:       500,
+		SilenceMs:          60,  // 3 frames @ 20ms
+		PreRollMs:          40,  // 2 frames
+		MinSpeechMs:        40,  // 2 frames
+		MaxWindowMs:        200, // 10 frames
+		MinVoicedFrames:    2,
+		MinVoicedRunFrames: 2,
+		MinMeanRMS:         200,
 	}
 
 	segmenter := NewAudioSegmenter(opts)
@@ -44,30 +47,30 @@ func TestAudioSegmenter(t *testing.T) {
 
 	// 1. Send 3 silence frames (pre-roll buffer filling)
 	for i := 0; i < 3; i++ {
-		seg, started, speaking := segmenter.ProcessFrame(silenceFrame)
-		if seg != nil || started || speaking {
-			t.Fatalf("unexpected state during initial silence: seg=%v, started=%v, speaking=%v", seg, started, speaking)
+		cand, started, speaking := segmenter.ProcessFrame(silenceFrame)
+		if len(cand.Audio) > 0 || started || speaking {
+			t.Fatalf("unexpected state during initial silence: cand=%v, started=%v, speaking=%v", cand, started, speaking)
 		}
 	}
 
 	// 2. Send 3 speech frames
 	for i := 0; i < 3; i++ {
-		seg, started, speaking := segmenter.ProcessFrame(speechFrame)
+		cand, started, speaking := segmenter.ProcessFrame(speechFrame)
 		if i == 0 && !started {
 			t.Fatalf("expected speechStarted on first speech frame")
 		}
 		if !speaking {
 			t.Fatalf("expected speaking true")
 		}
-		if seg != nil {
+		if len(cand.Audio) > 0 {
 			t.Fatalf("unexpected segment before silence")
 		}
 	}
 
 	// 3. Send 3 silence frames (trigger pause cutoff)
-	var finalSeg []byte
+	var finalCand SegmentCandidate
 	for i := 0; i < 3; i++ {
-		seg, started, speaking := segmenter.ProcessFrame(silenceFrame)
+		cand, started, speaking := segmenter.ProcessFrame(silenceFrame)
 		if started {
 			t.Fatalf("unexpected started during silence")
 		}
@@ -75,15 +78,132 @@ func TestAudioSegmenter(t *testing.T) {
 			t.Fatalf("expected still speaking during silence buffer")
 		}
 		if i == 2 {
-			finalSeg = seg
+			finalCand = cand
 			if speaking {
 				t.Fatalf("expected speaking false after silence threshold reached")
 			}
 		}
 	}
 
-	if len(finalSeg) == 0 {
+	if len(finalCand.Audio) == 0 {
 		t.Fatalf("expected non-empty speech segment on pause")
+	}
+	if !finalCand.Plausible {
+		t.Fatalf("expected plausible candidate, got rejected: %s", finalCand.RejectionReason)
+	}
+}
+
+func TestAcousticGatingRejectsIsolatedSpike(t *testing.T) {
+	opts := SegmenterOptions{
+		ThresholdRMS:       500,
+		SilenceMs:          60,
+		PreRollMs:          40,
+		MinSpeechMs:        40,
+		MaxWindowMs:        400,
+		MinVoicedFrames:    4,
+		MinVoicedRunFrames: 3,
+		MinMeanRMS:         200,
+	}
+	segmenter := NewAudioSegmenter(opts)
+	silenceFrame := make([]byte, 640)
+	spikeFrame := generateSineFrame(320, 440, 2000) // RMS = 2000
+
+	// 1 spike frame followed by silence (resembling keyboard click / breath spike)
+	segmenter.ProcessFrame(silenceFrame)
+	segmenter.ProcessFrame(silenceFrame)
+	segmenter.ProcessFrame(spikeFrame)
+
+	var candidate SegmentCandidate
+	for i := 0; i < 3; i++ {
+		cand, _, _ := segmenter.ProcessFrame(silenceFrame)
+		if len(cand.Audio) > 0 {
+			candidate = cand
+		}
+	}
+
+	if len(candidate.Audio) == 0 {
+		t.Fatal("expected candidate to be emitted for diagnostic tracking")
+	}
+	if candidate.Plausible {
+		t.Fatalf("expected isolated spike to be rejected as implausible, got plausible")
+	}
+	if candidate.RejectionReason != "low_energy_transient" && candidate.RejectionReason != "unvoiced_transient" {
+		t.Fatalf("unexpected rejection reason: %s", candidate.RejectionReason)
+	}
+}
+
+func TestAcousticGatingAcceptsGenuineShortSpeech(t *testing.T) {
+	opts := SegmenterOptions{
+		ThresholdRMS:       150,
+		SilenceMs:          60,
+		PreRollMs:          40,
+		MinSpeechMs:        100, // 5 frames
+		MaxWindowMs:        800,
+		MinVoicedFrames:    8,
+		MinVoicedRunFrames: 7,
+		MinMeanRMS:         120,
+	}
+	segmenter := NewAudioSegmenter(opts)
+	silenceFrame := make([]byte, 640)
+	speechFrame := generateSineFrame(320, 440, 400) // RMS = 400 > 150
+
+	// Pre-roll
+	segmenter.ProcessFrame(silenceFrame)
+	segmenter.ProcessFrame(silenceFrame)
+
+	// Sustained word (e.g. 10 frames = 200ms of "Stop" or "Yes")
+	for i := 0; i < 10; i++ {
+		segmenter.ProcessFrame(speechFrame)
+	}
+
+	var candidate SegmentCandidate
+	for i := 0; i < 3; i++ {
+		cand, _, _ := segmenter.ProcessFrame(silenceFrame)
+		if len(cand.Audio) > 0 {
+			candidate = cand
+		}
+	}
+
+	if len(candidate.Audio) == 0 {
+		t.Fatal("expected candidate for short speech")
+	}
+	if !candidate.Plausible {
+		t.Fatalf("expected sustained short speech to be accepted as plausible, rejected with: %s (stats: %+v)", candidate.RejectionReason, candidate.Stats)
+	}
+}
+
+func TestAcousticGatingFlushAndMaxWindow(t *testing.T) {
+	opts := SegmenterOptions{
+		ThresholdRMS:       200,
+		SilenceMs:          100,
+		PreRollMs:          40,
+		MinSpeechMs:        40,
+		MaxWindowMs:        100, // 5 frames forces chunk
+		MinVoicedFrames:    3,
+		MinVoicedRunFrames: 3,
+		MinMeanRMS:         150,
+	}
+	segmenter := NewAudioSegmenter(opts)
+	speechFrame := generateSineFrame(320, 440, 500)
+
+	// 1. MaxWindow trigger
+	var maxWinCand SegmentCandidate
+	for i := 0; i < 5; i++ {
+		cand, _, _ := segmenter.ProcessFrame(speechFrame)
+		if len(cand.Audio) > 0 {
+			maxWinCand = cand
+		}
+	}
+	if len(maxWinCand.Audio) == 0 || !maxWinCand.Plausible {
+		t.Fatalf("expected plausible candidate from MaxWindow trigger, got %+v", maxWinCand)
+	}
+
+	// 2. Flush trigger
+	segmenter.ProcessFrame(speechFrame)
+	segmenter.ProcessFrame(speechFrame)
+	flushCand := segmenter.Flush()
+	if len(flushCand.Audio) == 0 || !flushCand.Plausible {
+		t.Fatalf("expected plausible candidate from Flush, got %+v", flushCand)
 	}
 }
 

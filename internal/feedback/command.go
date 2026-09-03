@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"ubunatic.com/voxi/internal/chunks"
 	"ubunatic.com/voxi/internal/deps"
 	"ubunatic.com/voxi/internal/devsample"
 	"ubunatic.com/voxi/internal/speechcontext"
@@ -260,6 +261,51 @@ func NewCommand(out io.Writer, home string, builtins []spec.StopWord, maxVocabul
 				return nil
 			},
 		},
+		func() *cobra.Command {
+			saveChunk := func(cmd *cobra.Command, selector, name string) error {
+				force, _ := cmd.Flags().GetBool("force")
+				chunkBuf := chunks.NewBuffer(chunks.StorageDir(d.Getenv("XDG_RUNTIME_DIR"), d.Getenv("HOME")), chunks.DefaultBufferSize)
+				chunk, err := chunkBuf.Get(selector)
+				if err != nil {
+					return fmt.Errorf("retrieve chunk %s: %w", selector, err)
+				}
+				wavPath := chunkBuf.WAVPath(chunk)
+				defaultText := chunk.CleanedTranscript
+				if defaultText == "" {
+					defaultText = chunk.RawTranscript
+				}
+				return devsample.SaveChunkAsSample(cmd.Context(), d, home, name, wavPath, defaultText, force)
+			}
+
+			saveChunkCmd := &cobra.Command{
+				Use:   "save-chunk [INDEX] NAME",
+				Short: "Save a recorded audio chunk from the ring buffer into the sample library",
+				Args:  cobra.RangeArgs(1, 2),
+				RunE: func(cmd *cobra.Command, a []string) error {
+					selector := "last"
+					name := a[0]
+					if len(a) == 2 {
+						selector = a[0]
+						name = a[1]
+					}
+					return saveChunk(cmd, selector, name)
+				},
+			}
+			saveChunkCmd.Flags().Bool("force", false, "overwrite an existing sample without confirmation")
+
+			saveLastCmd := &cobra.Command{
+				Use:   "save-last NAME",
+				Short: "Save the most recent recorded audio chunk into the sample library",
+				Args:  cobra.ExactArgs(1),
+				RunE: func(cmd *cobra.Command, a []string) error {
+					return saveChunk(cmd, "last", a[0])
+				},
+			}
+			saveLastCmd.Flags().Bool("force", false, "overwrite an existing sample without confirmation")
+
+			sample.AddCommand(saveChunkCmd)
+			return saveLastCmd
+		}(),
 	)
 	cmd.AddCommand(sample)
 

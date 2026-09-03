@@ -19,6 +19,7 @@ import (
 
 	"ubunatic.com/voxi/internal/asr"
 	"ubunatic.com/voxi/internal/audio"
+	"ubunatic.com/voxi/internal/chunks"
 	"ubunatic.com/voxi/internal/deps"
 	"ubunatic.com/voxi/internal/feedback"
 	"ubunatic.com/voxi/internal/history"
@@ -64,6 +65,12 @@ func DefaultEagerOptions() EagerOptions {
 		SpeechContext: true,
 	}
 }
+
+// transcribeTimeout bounds a single `voxtype transcribe` subprocess so a
+// stalled model or backend can never linger as a zombie process after
+// recording stops; well above realistic transcription time even for the
+// longest MaxWindowMs utterance on a slow CPU backend.
+const transcribeTimeout = 30 * time.Second
 
 // UtteranceStat records timing, speed, and text for one transcribed phrase.
 type UtteranceStat struct {
@@ -208,9 +215,11 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 	historyPath := history.HistoryPath(d.Getenv("HOME"))
 
 	type TranscribeJob struct {
-		Index    int
-		Audio    []byte
-		Duration float64
+		Index           int
+		Audio           []byte
+		Duration        float64
+		Plausible       bool
+		RejectionReason string
 	}
 
 	modelSpec, err := spec.LoadModels()
@@ -271,6 +280,8 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 	writeVoxtypeState("recording")
 	defer writeVoxtypeState("idle")
 
+	chunkBuf := chunks.NewBuffer(chunks.StorageDir(d.Getenv("XDG_RUNTIME_DIR"), d.Getenv("HOME")), chunks.DefaultBufferSize)
+
 	// Start sequential transcription worker
 	transWg.Add(1)
 	go func() {
@@ -285,20 +296,70 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 				continue
 			}
 
+			if !job.Plausible {
+				// Acoustically unvoiced transient or click: do not waste GPU/CPU on voxtype
+				rejReason := job.RejectionReason
+				if rejReason == "" {
+					rejReason = "low_energy_transient"
+				}
+				chunkMeta := chunks.Chunk{
+					Index:                 job.Index,
+					Timestamp:             transStart,
+					AudioDurationSecs:     job.Duration,
+					TranscribeDurationSec: 0,
+					RTF:                   0,
+					RawTranscript:         "",
+					CleanedTranscript:     "",
+					Accepted:              false,
+					RejectionReason:       rejReason,
+				}
+				_, _ = chunkBuf.AddExistingWAV(chunkMeta, wavPath, true)
+				_ = os.Remove(wavPath)
+				continue
+			}
+
 			writeVoxtypeState("transcribing")
 			cmdArgs := voxtypeTranscribeArgs(modelName, wavPath, initialPrompt)
-			cmd := exec.CommandContext(context.Background(), voxtypePath, cmdArgs...)
+			transcribeCtx, cancelTranscribe := context.WithTimeout(context.Background(), transcribeTimeout)
+			cmd := exec.CommandContext(transcribeCtx, voxtypePath, cmdArgs...)
 			cmd.Env = append(os.Environ(), "NO_COLOR=1", "RUST_LOG=error")
 			var outBuf bytes.Buffer
 			cmd.Stdout = &outBuf
 			cmd.Stderr = io.Discard
 			err := cmd.Run()
-			_ = os.Remove(wavPath)
+			cancelTranscribe()
 			transDuration := time.Since(transStart).Seconds()
 			writeVoxtypeState("recording")
 
-			text := asr.CleanWhisperTranscript(outBuf.String(), stopWords)
-			if acceptTranscript(err, text, stopWords, silenceArtifacts) {
+			rawText := outBuf.String()
+			text := asr.CleanWhisperTranscript(rawText, stopWords)
+			accepted := acceptTranscript(err, text, stopWords, silenceArtifacts)
+			rejReason := ""
+			if !accepted {
+				rejReason = rejectionReason(err, rawText, text, stopWords, silenceArtifacts)
+			}
+
+			rtf := 0.0
+			if job.Duration > 0 {
+				rtf = transDuration / job.Duration
+			}
+
+			// Store chunk audio and metadata into the bounded ring buffer
+			chunkMeta := chunks.Chunk{
+				Index:                 job.Index,
+				Timestamp:             transStart,
+				AudioDurationSecs:     job.Duration,
+				TranscribeDurationSec: transDuration,
+				RTF:                   rtf,
+				RawTranscript:         strings.TrimSpace(rawText),
+				CleanedTranscript:     text,
+				Accepted:              accepted,
+				RejectionReason:       rejReason,
+			}
+			_, _ = chunkBuf.AddExistingWAV(chunkMeta, wavPath, true)
+			_ = os.Remove(wavPath) // Ensure removal if AddExistingWAV didn't move it
+
+			if accepted {
 				transLock.Lock()
 				if fullTranscript.Len() > 0 {
 					fullTranscript.WriteString(" ")
@@ -319,10 +380,6 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 					_, _ = history.AppendHistory(historyPath, text, history.DefaultHistoryLimit, time.Now())
 				}
 
-				rtf := 0.0
-				if job.Duration > 0 {
-					rtf = transDuration / job.Duration
-				}
 				recordEagerStat(UtteranceStat{
 					Index:          job.Index,
 					AudioSecs:      job.Duration,
@@ -385,7 +442,7 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 			continue
 		}
 
-		speechSegment, speechStarted, isSpeaking := segmenter.ProcessFrame(buf)
+		candidate, speechStarted, isSpeaking := segmenter.ProcessFrame(buf)
 
 		frameIndex++
 		if !isDaemon {
@@ -398,25 +455,29 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 			}
 		}
 
-		if len(speechSegment) > 0 {
+		if len(candidate.Audio) > 0 {
 			utteranceCount++
-			audioDur := float64(len(speechSegment)) / float64(bytesPerSec)
+			audioDur := float64(len(candidate.Audio)) / float64(bytesPerSec)
 			jobChan <- TranscribeJob{
-				Index:    utteranceCount,
-				Audio:    speechSegment,
-				Duration: audioDur,
+				Index:           utteranceCount,
+				Audio:           candidate.Audio,
+				Duration:        audioDur,
+				Plausible:       candidate.Plausible,
+				RejectionReason: candidate.RejectionReason,
 			}
 		}
 	}
 
 	// Flush remaining speech upon exit
-	if finalSegment := segmenter.Flush(); len(finalSegment) > 0 {
+	if finalCandidate := segmenter.Flush(); len(finalCandidate.Audio) > 0 {
 		utteranceCount++
-		audioDur := float64(len(finalSegment)) / float64(bytesPerSec)
+		audioDur := float64(len(finalCandidate.Audio)) / float64(bytesPerSec)
 		jobChan <- TranscribeJob{
-			Index:    utteranceCount,
-			Audio:    finalSegment,
-			Duration: audioDur,
+			Index:           utteranceCount,
+			Audio:           finalCandidate.Audio,
+			Duration:        audioDur,
+			Plausible:       finalCandidate.Plausible,
+			RejectionReason: finalCandidate.RejectionReason,
 		}
 	}
 
@@ -449,6 +510,26 @@ func shouldUseSpeechContext(modelName string, enabled bool) bool {
 // the focused application or local history.
 func acceptTranscript(err error, text string, stopWords, silenceArtifacts []string) bool {
 	return err == nil && text != "" && asr.IsSafeToType(text, stopWords) && !feedback.IsSilenceArtifact(text, silenceArtifacts)
+}
+
+// rejectionReason returns the explanation if a chunk was rejected, or empty string if accepted.
+func rejectionReason(err error, rawText, cleanedText string, stopWords, silenceArtifacts []string) string {
+	if err != nil {
+		return fmt.Sprintf("transcribe_error: %v", err)
+	}
+	if strings.TrimSpace(rawText) == "" {
+		return "empty"
+	}
+	if feedback.IsSilenceArtifact(cleanedText, silenceArtifacts) {
+		return "silence_artifact"
+	}
+	if !asr.IsSafeToType(cleanedText, stopWords) {
+		return "stop_word"
+	}
+	if cleanedText == "" {
+		return "empty"
+	}
+	return ""
 }
 
 func runEagerDaemon(ctx context.Context, d deps.Dependencies, opts EagerOptions) error {

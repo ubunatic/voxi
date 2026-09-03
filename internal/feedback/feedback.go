@@ -231,7 +231,10 @@ func normalizeArtifact(phrase string) (string, error) {
 		return "", err
 	}
 	phrase = strings.TrimSpace(phrase)
-	phrase = strings.TrimRight(phrase, ".!?")
+	// Trim sentence punctuation on both ends: Whisper hallucinations and
+	// user-added artifacts don't agree on which side gets the period (e.g.
+	// the transcript "com." must match a stored ".com" artifact).
+	phrase = strings.Trim(phrase, ".!?")
 	phrase = strings.TrimSpace(phrase)
 	if phrase == "" {
 		return "", fmt.Errorf("silence artifact must not be empty")

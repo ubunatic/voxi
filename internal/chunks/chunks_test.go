@@ -1,0 +1,195 @@
+package chunks
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"sync"
+	"testing"
+	"time"
+)
+
+func TestStorageDirFallback(t *testing.T) {
+	d := StorageDir("/custom/runtime", "/home/test")
+	if d != "/custom/runtime/voxi/chunks" {
+		t.Fatalf("StorageDir with xdgRuntimeDir got %q, want %q", d, "/custom/runtime/voxi/chunks")
+	}
+
+	d2 := StorageDir("", "/home/test")
+	// If /run/user/<uid> exists on linux it might pick that, or ~/.cache/voxi/chunks
+	if !filepath.IsAbs(d2) {
+		t.Fatalf("expected absolute path, got %q", d2)
+	}
+}
+
+func TestRingBufferAddAndRotation(t *testing.T) {
+	dir := t.TempDir()
+	buf := NewBuffer(dir, 3)
+
+	dummyPCM := make([]byte, 3200) // 0.1s at 16kHz mono S16_LE
+
+	for i := 1; i <= 5; i++ {
+		c := Chunk{
+			Index:                 i,
+			Timestamp:             time.Now(),
+			AudioDurationSecs:     0.1,
+			TranscribeDurationSec: 0.05,
+			RTF:                   0.5,
+			RawTranscript:         fmt.Sprintf("raw text %d", i),
+			CleanedTranscript:     fmt.Sprintf("clean text %d", i),
+			Accepted:              i%2 == 1,
+			RejectionReason:       map[bool]string{true: "", false: "silence_artifact"}[i%2 == 1],
+		}
+		if _, err := buf.Add(c, dummyPCM, 16000); err != nil {
+			t.Fatalf("Add chunk %d failed: %v", i, err)
+		}
+	}
+
+	chunks, err := buf.List(false)
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	if len(chunks) != 3 {
+		t.Fatalf("expected 3 chunks, got %d", len(chunks))
+	}
+	if chunks[0].Index != 3 || chunks[1].Index != 4 || chunks[2].Index != 5 {
+		t.Fatalf("unexpected chunk indices: %v, %v, %v", chunks[0].Index, chunks[1].Index, chunks[2].Index)
+	}
+
+	// Verify pruned files are deleted
+	for i := 1; i <= 2; i++ {
+		oldWav := filepath.Join(dir, fmt.Sprintf("chunk_%04d.wav", i))
+		if _, err := os.Stat(oldWav); !os.IsNotExist(err) {
+			t.Errorf("expected %s to be deleted, but it exists", oldWav)
+		}
+		oldSidecar := filepath.Join(dir, fmt.Sprintf("chunk_%04d.json", i))
+		if _, err := os.Stat(oldSidecar); !os.IsNotExist(err) {
+			t.Errorf("expected %s to be deleted, but it exists", oldSidecar)
+		}
+	}
+
+	// Verify current files exist
+	for i := 3; i <= 5; i++ {
+		wav := filepath.Join(dir, fmt.Sprintf("chunk_%04d.wav", i))
+		if _, err := os.Stat(wav); err != nil {
+			t.Errorf("expected %s to exist: %v", wav, err)
+		}
+		sidecar := filepath.Join(dir, fmt.Sprintf("chunk_%04d.json", i))
+		if _, err := os.Stat(sidecar); err != nil {
+			t.Errorf("expected %s to exist: %v", sidecar, err)
+		}
+	}
+
+	// Test Get
+	last, err := buf.Get("last")
+	if err != nil {
+		t.Fatalf("Get last failed: %v", err)
+	}
+	if last.Index != 5 {
+		t.Fatalf("expected last index 5, got %d", last.Index)
+	}
+
+	c4, err := buf.Get("4")
+	if err != nil {
+		t.Fatalf("Get 4 failed: %v", err)
+	}
+	if c4.Index != 4 || c4.Accepted {
+		t.Fatalf("unexpected c4: %+v", c4)
+	}
+
+	_, err = buf.Get("1")
+	if err == nil {
+		t.Fatalf("expected error getting pruned chunk 1, got nil")
+	}
+
+	// Test ReadWAV
+	wavBytes, err := buf.ReadWAV(last)
+	if err != nil {
+		t.Fatalf("ReadWAV failed: %v", err)
+	}
+	if len(wavBytes) < 44 { // RIFF header size
+		t.Fatalf("wavBytes too small: %d", len(wavBytes))
+	}
+}
+
+func TestAddExistingWAV(t *testing.T) {
+	dir := t.TempDir()
+	buf := NewBuffer(dir, 2)
+
+	srcDir := t.TempDir()
+	srcWAV := filepath.Join(srcDir, "test.wav")
+	if err := os.WriteFile(srcWAV, []byte("RIFF1234WAVEfmt testdata"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	c := Chunk{
+		Index:             1,
+		RawTranscript:     "hello",
+		CleanedTranscript: "hello",
+		Accepted:          true,
+	}
+	added, err := buf.AddExistingWAV(c, srcWAV, false)
+	if err != nil {
+		t.Fatalf("AddExistingWAV failed: %v", err)
+	}
+	if added.WAVFile != "chunk_0001.wav" {
+		t.Fatalf("unexpected wav file: %s", added.WAVFile)
+	}
+	// Verify source was not removed
+	if _, err := os.Stat(srcWAV); err != nil {
+		t.Fatalf("expected srcWAV to remain: %v", err)
+	}
+
+	// Now move another
+	srcWAV2 := filepath.Join(srcDir, "test2.wav")
+	if err := os.WriteFile(srcWAV2, []byte("RIFF1234WAVEfmt testdata2"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	c2 := Chunk{Index: 2, Accepted: true}
+	_, err = buf.AddExistingWAV(c2, srcWAV2, true)
+	if err != nil {
+		t.Fatalf("AddExistingWAV move failed: %v", err)
+	}
+	if _, err := os.Stat(srcWAV2); !os.IsNotExist(err) {
+		t.Fatalf("expected srcWAV2 to be removed after move")
+	}
+}
+
+func TestRingBufferConcurrency(t *testing.T) {
+	dir := t.TempDir()
+	buf := NewBuffer(dir, 5)
+
+	var wg sync.WaitGroup
+	workers := 10
+	iterations := 5
+
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			for i := 0; i < iterations; i++ {
+				idx := workerID*iterations + i + 1
+				c := Chunk{
+					Index:             idx,
+					Timestamp:         time.Now(),
+					CleanedTranscript: fmt.Sprintf("text from worker %d it %d", workerID, i),
+					Accepted:          true,
+				}
+				dummyPCM := make([]byte, 640)
+				_, _ = buf.Add(c, dummyPCM, 16000)
+				_, _ = buf.List(false)
+				_, _ = buf.Get("last")
+			}
+		}(w)
+	}
+
+	wg.Wait()
+
+	chunks, err := buf.List(false)
+	if err != nil {
+		t.Fatalf("List after concurrency failed: %v", err)
+	}
+	if len(chunks) > 5 {
+		t.Fatalf("expected at most 5 chunks, got %d", len(chunks))
+	}
+}

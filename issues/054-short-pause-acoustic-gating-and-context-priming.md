@@ -1,6 +1,6 @@
 # 054: Short-Pause Hallucination Gating: Acoustic Validation and Context Priming Analysis
 
-**Status**: Open
+**Status**: Implemented
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Performance
@@ -131,3 +131,45 @@ Issue 054 change reviewable and independently verifiable.
 - Run `gofmt`, `git diff --check`, and `go test ./...`.
 - Because this changes the live eager daemon path, finish by running
   `make restart-service` rather than only `make install`.
+
+---
+
+## 6. Implementation & Verification Resolution (2026-09-03)
+
+### 6.1 Context Priming Canary Findings
+Canary tests were conducted against `artifact-keyboard-smash.wav` (1.28s ambient silence with an ~80ms keyboard click spike) with model `small.en`:
+
+1. **Without prompt**:
+   ```bash
+   voxtype --model small.en -q transcribe artifact-keyboard-smash.wav
+   ```
+   **Output**: Completely silent (`""`). Whisper correctly emitted no tokens on unprompted ambient noise.
+
+2. **With standard vocabulary prompt**:
+   ```bash
+   voxtype --model small.en --initial-prompt "Voxi, voxtype, YAML..." -q transcribe artifact-keyboard-smash.wav
+   ```
+   **Output**: `"Thanks for watching!"` (hallucinated outro artifact).
+
+3. **With full speech-context initial prompt**:
+   **Output**: `"urnschemas-microsoft-comms"` (garbled technical context hallucination).
+
+**Conclusion**: The Context Priming Hypothesis is confirmed. Feeding an `--initial-prompt` biases Whisper's autoregressive decoder so heavily that on sub-second, ambiguous, or impulsive audio spikes, it hallucinated phrases instead of emitting silence. However, because speech context is critical for technical dictation accuracy on real words, the solution is **pre-ASR acoustic plausibility gating** so non-speech audio never reaches `voxtype`.
+
+### 6.2 Calibrated Acoustic Gating Implementation
+In `internal/audio/audio.go`:
+- Derived from measurements across real human speech fixtures (sustained speech runs $\ge 15\text{ frames}$, mean RMS $\ge 240$) vs. noise transients (short clicks and breath spikes with mean RMS $\approx 80–110$, voiced runs $< 6\text{ frames}$):
+  - `MinVoicedFrames: 8` (160ms total voiced energy)
+  - `MinVoicedRunFrames: 7` (140ms consecutive harmonic voicing)
+  - `MinMeanRMS: 120` (rejects low-energy ambient noise spikes)
+- `AudioSegmenter.ProcessFrame` and `Flush` return a structured `SegmentCandidate` carrying `Plausible`, `RejectionReason`, and `Stats`.
+- In `internal/eager/eager.go`, candidate audio with `!job.Plausible` completely bypasses `voxtype` (saving GPU/CPU cycles) while immediately recording the chunk in the ring buffer with `rej:low_energy_transient` or `rej:unvoiced_transient`.
+
+### 6.3 Test & Service Verification
+- Added unit tests in `internal/audio/audio_test.go`:
+  - `TestAcousticGatingRejectsIsolatedSpike`: verifies 1-2 frame spikes are rejected as `low_energy_transient` / `unvoiced_transient`.
+  - `TestAcousticGatingAcceptsGenuineShortSpeech`: verifies short 200ms words ("Yes", "No", "Stop") pass cleanly.
+  - `TestAcousticGatingFlushAndMaxWindow`: verifies boundary behavior on buffer flush and max window rollover.
+- Trailing whitespace in `testdata/speech-context/corpus.tsv` cleaned (`git diff --check` passes).
+- All unit tests passing across all packages (`go test ./...`).
+- Service restarted and live daemon updated via `make restart-service`.

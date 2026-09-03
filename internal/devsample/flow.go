@@ -359,3 +359,95 @@ func Play(ctx context.Context, d deps.Dependencies, home, rawName string) error 
 	}
 	return nil
 }
+
+// SaveChunkAsSample promotes a recorded chunk audio and transcription into the feedback sample library.
+func SaveChunkAsSample(ctx context.Context, d deps.Dependencies, home, rawName, wavSrc, defaultTranscript string, force bool) error {
+	name, err := SanitizeName(rawName)
+	if err != nil {
+		return err
+	}
+
+	var in *bufio.Reader
+	if d.Stdin != nil {
+		in = bufio.NewReader(d.Stdin)
+	}
+	stdinFile, _ := d.Stdin.(*os.File)
+
+	samples, err := LoadManifest(home)
+	if err != nil {
+		return err
+	}
+	if _, exists := Find(samples, name); exists && !force {
+		if !confirm(d.Stdout, in, fmt.Sprintf("Sample %q already exists. Overwrite? [y/N] ", name)) {
+			return fmt.Errorf("aborted: sample %q already exists", name)
+		}
+	}
+
+	text, err := promptText(d.Stdout, in, stdinFile, "Enter the corrected transcript (what you actually said): ", defaultTranscript)
+	if err != nil {
+		return err
+	}
+
+	keyterms := ""
+	if modelSpec, specErr := spec.LoadModels(); specErr != nil {
+		if d.Stdout != nil {
+			fmt.Fprintf(d.Stdout, "Note: keyterm suggestions unavailable (%v); leaving keyterms empty.\n", specErr)
+		}
+	} else {
+		suggested := strings.Join(suggestKeyterms(text, candidateVocabulary(home, modelSpec), modelSpec.SpeechContext.MaxTermChars), "|")
+		kt, kerr := promptKeyterms(d.Stdout, in, stdinFile, suggested)
+		if kerr != nil {
+			if errors.Is(kerr, errAborted) {
+				return kerr
+			}
+			if d.Stdout != nil {
+				fmt.Fprintf(d.Stdout, "Note: keyterm prompt failed (%v); leaving keyterms empty.\n", kerr)
+			}
+		} else {
+			keyterms = kt
+		}
+	}
+
+	dir := SamplesDir(home)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("create samples directory: %w", err)
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		return fmt.Errorf("secure samples directory: %w", err)
+	}
+
+	wavPath := WAVPath(home, name)
+	tmpWAVPath := wavPath + ".tmp"
+	defer os.Remove(tmpWAVPath)
+
+	// Copy audio from wavSrc into tmpWAVPath
+	wavBytes, err := os.ReadFile(wavSrc)
+	if err != nil {
+		return fmt.Errorf("read chunk wav %s: %w", wavSrc, err)
+	}
+	if err := os.WriteFile(tmpWAVPath, wavBytes, 0o600); err != nil {
+		return fmt.Errorf("write sample audio: %w", err)
+	}
+	if err := os.Rename(tmpWAVPath, wavPath); err != nil {
+		return fmt.Errorf("finalize sample audio: %w", err)
+	}
+	if err := os.Chmod(wavPath, 0o600); err != nil {
+		return fmt.Errorf("secure sample audio: %w", err)
+	}
+
+	samples = Upsert(samples, Sample{
+		Name:      name,
+		WAVFile:   name + ".wav",
+		Text:      text,
+		Keyterms:  keyterms,
+		Timestamp: time.Now(),
+	})
+	if err := SaveManifest(home, samples); err != nil {
+		return fmt.Errorf("save sample manifest (audio saved at %s): %w", wavPath, err)
+	}
+
+	if d.Stdout != nil {
+		fmt.Fprintf(d.Stdout, "Saved sample %q (%s)\n", name, wavPath)
+	}
+	return nil
+}

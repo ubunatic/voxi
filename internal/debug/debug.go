@@ -309,11 +309,11 @@ func RunVADProbe(ctx context.Context, d deps.Dependencies, opts VADProbeOptions)
 			continue
 		}
 
-		segment, _, _ := segmenter.ProcessFrame(buf)
-		if len(segment) > 0 {
+		cand, _, _ := segmenter.ProcessFrame(buf)
+		if len(cand.Audio) > 0 && cand.Plausible {
 			uttCount++
 			wavPath := filepath.Join(tmpDir, fmt.Sprintf("utt_%03d.wav", uttCount))
-			_ = audio.WriteWAVAudio(wavPath, segment, 16000)
+			_ = audio.WriteWAVAudio(wavPath, cand.Audio, 16000)
 
 			cmd := exec.CommandContext(ctx, voxtypePath, "--model", modelSpec.DefaultModel, "-q", "transcribe", wavPath)
 			out, err := cmd.Output()
