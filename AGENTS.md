@@ -33,7 +33,7 @@ Docs in `./docs/` are managed by harnez. <!-- harnez:bundled -->
 - Make/Makefile @docs/Make.md,
   ⚙️ phony sentinel, self-doc help, build dependency pattern
 - Markdown @docs/Markdown.md,
-  PascalCase for evergreens, kebab-case for ephemeral docs
+  PascalCase for evergreens, kebab-case for ephemeral docs; ASCII art in chat, Mermaid only in docs/
 - Git @docs/Git.md,
   conventional commits, work on the default branch, don't push unless asked
 - Canary-first development @docs/Canary.md,

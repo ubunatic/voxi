@@ -40,6 +40,14 @@ Do not conflate **Priority** with **Severity**:
 
 Every issue file is placed under `issues/NNN-kebab-case-title.md` (e.g. `issues/042-standardized-issue-priority-schema.md`).
 
+### Allocating & Reserving Ticket Numbers
+Computing the next issue number and reserving/creating it are two separate commands, split across
+`find` (read-only query) and `issues` (write-side): never use ad hoc shell commands (`ls | grep |
+sort | tail`) for either.
+- `harnez find issues next` — reports the next free ticket number (e.g., `195`) calculated as `max(allocated) + 1` across `issues/*.md` and `issues/archive/*.md`. Read-only: it never creates or reserves anything.
+- `harnez find issues next --json` — outputs machine-readable JSON (`{"number":"195","reserved":false}`).
+- `harnez issues new "Ticket Title"` (or `harnez issues new` with no title) — atomically allocates the next number and creates a placeholder ticket file (`issues/NNN-<title-slug>.md` or `issues/NNN-reserved.md` with status `Draft`) using `O_CREATE|O_EXCL` to prevent number collisions between concurrent agents. Prints `NNN<TAB>issues/<reserved-filename>.md` — write the real ticket content directly to that printed path rather than re-deriving the slug from the title by hand; a hand-derived slug can diverge from the reserved filename and leave an orphaned placeholder behind (see issue 202). Add `--json` for the same JSON shape as above with `"reserved":true` plus `file`/`path`. `new` never commits.
+
 The top of each ticket MUST contain the standardized metadata block:
 
 ```markdown
@@ -66,11 +74,13 @@ The top of each ticket MUST contain the standardized metadata block:
 ### Allowed Values
 
 - **Status**:
-  - `Open`: Unresolved, ready to be worked on.
-  - `In Progress`: Actively being worked on in current session.
-  - `Blocked — <reason>`: Waiting on upstream dependency or external resolution.
+  - `Open`: Unresolved, ready to be worked on. May carry an optional `— <note>` suffix.
+  - `In Progress`: Actively being worked on in current session. May carry an optional `— <note>`
+    suffix (e.g. `In Progress — implementation complete; tracker closure awaits ...`, as issue 201
+    does in practice).
+  - `Blocked — <reason>`: Waiting on upstream dependency or external resolution. Reason required.
   - `Closed — <resolution>`: Completed and verified with tests (e.g. `Closed — resolved in 58d1fa3`, `Closed — invalid`).
-  - `Draft`: Tentative proposal or placeholder.
+  - `Draft`: Tentative proposal or placeholder. May carry an optional `— <note>` suffix.
 - **Priority**: `P0 (Critical)`, `P1 (High)`, `P2 (Medium)`, `P3 (Low)`
 - **Severity**: `Critical`, `Major`, `Moderate`, `Minor`
 - **Category**: `Bug`, `Feature`, `Architecture`, `Documentation`, `Performance`, `Refactor`, `Agentic Ergonomics`, `Infrastructure`
@@ -81,7 +91,18 @@ The top of each ticket MUST contain the standardized metadata block:
 
 ### 4.1 Index Table (`issues/README.md`)
 
-The tracker index `issues/README.md` maintains a synchronized inventory of all tickets. It must be updated whenever a ticket is added, modified, or closed:
+The tracker index `issues/README.md` maintains a synchronized inventory of all tickets.
+Run `harnez index` (issue 148) to regenerate its table from `issues/*.md` +
+`issues/archive/*.md` metadata instead of hand-editing rows — it is idempotent (a
+second run against unchanged tickets makes no further change) and has a `--check`
+flag that exits 1 on drift without writing, for CI/pre-commit use — and prints a
+unified diff of exactly what would change, so running it directly in an agent
+session surfaces specific drift the agent can act on immediately, without a
+separate diff step. `harnez index`
+also regenerates `docs/README.md`'s `docs/studies/` table from `docs/studies/*.md`;
+see that file's own note on how a study's index topic is derived. Manual edits to
+either table are always safe to make, but will be overwritten by the next
+`harnez index` run — prefer fixing the source ticket/study file instead.
 
 ```markdown
 # Issues
@@ -110,3 +131,11 @@ When an issue is closed and verified, move it to `issues/archive/NNN-kebab-case.
 2. **Atomic Index Synchronization**: Whenever ticket status changes in the file, immediately update `issues/README.md`.
 3. **Immediate Tracker Commit**: After creating or updating issue-tracker files, commit the ticket file and synchronized index immediately in their own small commit. Do not batch tracker metadata with unrelated code or defer it to a later feature-work checkpoint.
 4. **Traceability**: Link relevant study notes (`docs/studies/`), retrospectives (`docs/feedback/`), ADRs, and commits in the `**Related**:` header.
+5. **Closing Is Part Of Done**: Progress-noting a ticket to `In Progress` is disciplined for
+   free — closing it is not, because nothing forces the last step. The `smarthome` project
+   shipped 112 commits in three days with excellent open/progress hygiene, yet four tickets
+   still read `In Progress` for work that was demonstrably shipped and live-verified (see
+   `docs/studies/2026-09-04-three-days-to-a-public-release.md` §4.2). A session that ends on a
+   green build and a commit is not done until every ticket it touched has its `Status` flipped
+   and `harnez index` has been run. Treat "did I close what I finished?" as an explicit
+   end-of-session check, not an assumption that closing happens naturally alongside the code.

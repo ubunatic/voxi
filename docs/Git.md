@@ -6,20 +6,16 @@ weight: 63
 <!-- harnez:bundled -->
 # Git conventions
 
-Applies unless overridden by a project's own AGENTS.md.
+Applies unless overridden by project-local instructions for coding agents,
+commonly stored in an `AGENTS.md` file at the repository root.
 
 ## Workflow
 - Work local, work on the repo's default branch (usually `main`, sometimes `master`) —
   no local feature branches unless the project's Repo Setup says otherwise.
 - Commit proactively:
-  - after intermediate steps once tests are clean
-  - after finished features (with review pass)
-  - between iteration attempts on a stuck bug — each attempted fix is a checkpoint you may
-    need to roll back to; don't let several "should be fixed now" rounds pile up uncommitted
-  - immediately after filing issue-tracker entries (`issues/NNN-*.md` plus
-    `issues/README.md`), in their own small commit; tracker entries are
-    durable metadata, not behavior changes, and should not be batched with
-    unrelated code work
+  - Default preference: commit autonomously after intermediate steps once tests are clean, after finished features (with review pass), between iteration attempts on a stuck bug, and immediately after filing issue-tracker entries.
+  - Ask-first harness interaction: If running in a harness that mandates explicit user confirmation for `git commit`, ask the user **upfront before starting work / during session kickoff** for authorization to commit local checkpoints proactively. This enables the user to step away without returning to uncommitted progress.
+  - Orchestrator delegation: When an orchestrating agent operates under an ask-first rule, it must clarify commit authority with the user at kickoff and specify whether spawned subagents commit directly or return diffs for the orchestrator to commit on their behalf.
 - Review before commit:
   - small fixes: commit directly if all tests pass and existing test assertions remain intact
   - non-trivial changes / features: perform a dedicated review pass (host orchestration or a fresh reviewer subagent) before committing to verify test rigor, doc/ticket accuracy, and codebase clarity

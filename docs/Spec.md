@@ -143,6 +143,11 @@ Integrity tests ensure that code and specifications remain in lockstep.
 - **No unused spec entries**: Assert that every defined item is referenced in the active configuration or layout.
 - **Loader fidelity**: Verify that loaders read directly from the embedded spec without falling back to hidden default maps.
 
+### Spec Modifications & Agent Test Alignment
+- **Spec is Intent**: If a spec file in `spec/*.yaml` has been modified (check `git log` and file modification time), agents must assume the spec reflects deliberate user intent.
+- **Update Tests to Match Spec**: When a test fails because it asserted against a former spec default or value, update the test to match the new spec. Do **not** reflexively revert or weaken spec changes.
+- **Confirm Before Reverting**: If genuinely ambiguous or uncertain whether a spec edit was intentional, ask the user before reverting any spec modification.
+
 ---
 
 ## 7. Change Checklist
