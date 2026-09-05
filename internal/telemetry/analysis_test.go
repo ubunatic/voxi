@@ -130,6 +130,9 @@ func TestQueryJSONFiltersAndPreservesAbsentStages(t *testing.T) {
 	if got.MalformedRows != 1 || len(got.Chunks) != 1 || got.Chunks[0]["chunk_id"] != "c2" {
 		t.Fatalf("query JSON = %s", out.String())
 	}
+	if got.Chunks[0]["post_deactivation"] != true {
+		t.Fatalf("chunk filter lost session lifecycle context: %s", out.String())
+	}
 	if _, exists := got.Chunks[0]["typing_started"]; exists {
 		t.Fatalf("absent typing stage should be omitted: %s", out.String())
 	}

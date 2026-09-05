@@ -131,13 +131,17 @@ func runQuery(out io.Writer, defaultPath string, o queryOptions) error {
 	}
 	eventType := ""
 	eventSuccess := (*bool)(nil)
+	eventChunk := ""
 	if o.view == "events" {
-		eventType, eventSuccess = o.eventType, success
+		eventType, eventSuccess, eventChunk = o.eventType, success, o.chunkID
 	}
-	events := filterEvents(scan.Events, o.sessionID, o.chunkID, eventType, eventSuccess)
+	events := filterEvents(scan.Events, o.sessionID, eventChunk, eventType, eventSuccess)
 	sessions, chunks := Correlate(events)
 	filteredChunks := chunks[:0]
 	for _, c := range chunks {
+		if o.chunkID != "" && c.ChunkID != o.chunkID {
+			continue
+		}
 		if silence != nil && (c.Audio == nil || c.Audio.ProbableSilence != *silence) {
 			continue
 		}
@@ -150,6 +154,19 @@ func runQuery(out io.Writer, defaultPath string, o queryOptions) error {
 		filteredChunks = append(filteredChunks, c)
 	}
 	chunks = filteredChunks
+	if o.chunkID != "" && o.view == "sessions" {
+		matchingSessions := make(map[string]bool)
+		for _, c := range chunks {
+			matchingSessions[c.SessionID] = true
+		}
+		filteredSessions := sessions[:0]
+		for _, s := range sessions {
+			if matchingSessions[s.SessionID] {
+				filteredSessions = append(filteredSessions, s)
+			}
+		}
+		sessions = filteredSessions
+	}
 	if o.limit < 0 {
 		return fmt.Errorf("--limit must not be negative")
 	}
