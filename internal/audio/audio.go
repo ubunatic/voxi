@@ -321,6 +321,7 @@ type AudioStats struct {
 	VoicedFrames int
 	MaxVoicedRun int
 	MeanRMS      int
+	PeakRMS      int
 	VoicedRatio  float64
 }
 
@@ -336,10 +337,14 @@ func AnalyzePCM(pcmData []byte, thresholdRMS int) AudioStats {
 	maxVoicedRun := 0
 	currVoicedRun := 0
 	var sumRMS int64
+	peakRMS := 0
 
 	for i := 0; i+frameBytes <= len(pcmData); i += frameBytes {
 		rms := ComputeAudioRMS(pcmData[i : i+frameBytes])
 		sumRMS += int64(rms)
+		if rms > peakRMS {
+			peakRMS = rms
+		}
 		if rms >= thresholdRMS {
 			voicedFrames++
 			currVoicedRun++
@@ -359,7 +364,7 @@ func AnalyzePCM(pcmData []byte, thresholdRMS int) AudioStats {
 		VoicedFrames: voicedFrames,
 		MaxVoicedRun: maxVoicedRun,
 		MeanRMS:      meanRMS,
+		PeakRMS:      peakRMS,
 		VoicedRatio:  ratio,
 	}
 }
-

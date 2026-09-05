@@ -24,6 +24,7 @@ import (
 	"ubunatic.com/voxi/internal/feedback"
 	"ubunatic.com/voxi/internal/history"
 	"ubunatic.com/voxi/internal/speechcontext"
+	"ubunatic.com/voxi/internal/telemetry"
 	"ubunatic.com/voxi/internal/typing"
 	spec "ubunatic.com/voxi/spec"
 )
@@ -200,7 +201,14 @@ func RunEagerDictation(ctx context.Context, d deps.Dependencies, opts EagerOptio
 	fmt.Fprintln(d.Stdout, "  Press Ctrl-C (or cancel context) to stop dictation.")
 	fmt.Fprintln(d.Stdout, "")
 
-	return runEagerCaptureSession(ctx, d, opts, tmpDir, voxtypePath, recCmdName, recArgs, false, nil)
+	recorder := telemetry.NewRecorder(telemetry.Path(d.Getenv("XDG_DATA_HOME"), d.Getenv("HOME")))
+	activatedAt := time.Now()
+	sessionID := recorder.NewSessionID(activatedAt)
+	_ = recorder.Record(telemetry.Event{Event: telemetry.MicActivated, Timestamp: activatedAt, SessionID: sessionID})
+	defer func() {
+		_ = recorder.Record(telemetry.Event{Event: telemetry.MicDeactivated, Timestamp: time.Now(), SessionID: sessionID})
+	}()
+	return runEagerCaptureSession(ctx, d, opts, tmpDir, voxtypePath, recCmdName, recArgs, false, sessionID, recorder, nil)
 }
 
 // runEagerCaptureSession runs one audio-capture + sequential-transcription
@@ -212,7 +220,7 @@ func RunEagerDictation(ctx context.Context, d deps.Dependencies, opts EagerOptio
 // know "is it safe to start a new session" without waiting for a stale
 // transcription to finish should wait on onCaptureStopped rather than on this
 // function's return (see issue 057 and eagerSessionManager below).
-func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts EagerOptions, tmpDir string, voxtypePath string, recCmdName string, recArgs []string, isDaemon bool, onCaptureStopped func()) error {
+func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts EagerOptions, tmpDir string, voxtypePath string, recCmdName string, recArgs []string, isDaemon bool, sessionID string, recorder *telemetry.Recorder, onCaptureStopped func()) error {
 	// Guarantee onCaptureStopped fires exactly once no matter which of this
 	// function's many return paths is taken -- including the early
 	// `return fmt.Errorf(...)` guards below (model spec load failure, audio
@@ -253,6 +261,8 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 		Index           int
 		Audio           []byte
 		Duration        float64
+		FinalizedAt     time.Time
+		Stats           audio.AudioStats
 		Plausible       bool
 		RejectionReason string
 	}
@@ -322,7 +332,7 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 	go func() {
 		defer transWg.Done()
 		for job := range jobChan {
-			transStart := time.Now()
+			chunkID := fmt.Sprintf("%s/%d", sessionID, job.Index)
 			wavPath := filepath.Join(tmpDir, fmt.Sprintf("utt_%03d.wav", job.Index))
 			if err := audio.WriteWAVAudio(wavPath, job.Audio, sampleRate); err != nil {
 				if !isDaemon {
@@ -339,8 +349,16 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 				}
 				chunkMeta := chunks.Chunk{
 					Index:                 job.Index,
-					Timestamp:             transStart,
+					Timestamp:             job.FinalizedAt,
+					SessionID:             sessionID,
+					ChunkID:               chunkID,
+					FinalizedAt:           job.FinalizedAt,
 					AudioDurationSecs:     job.Duration,
+					PCMBytes:              len(job.Audio),
+					MeanRMS:               job.Stats.MeanRMS,
+					PeakRMS:               job.Stats.PeakRMS,
+					VoicedRatio:           job.Stats.VoicedRatio,
+					ProbableSilence:       probableSilence(job.Stats),
 					TranscribeDurationSec: 0,
 					RTF:                   0,
 					RawTranscript:         "",
@@ -361,14 +379,24 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 			var outBuf bytes.Buffer
 			cmd.Stdout = &outBuf
 			cmd.Stderr = io.Discard
+			transStart := time.Now()
+			_ = recorder.Record(telemetry.Event{Event: telemetry.TranscriptionStarted, Timestamp: transStart, SessionID: sessionID, ChunkID: chunkID, ChunkIndex: job.Index})
 			err := cmd.Run()
 			cancelTranscribe()
-			transDuration := time.Since(transStart).Seconds()
+			transEnd := time.Now()
+			transDuration := transEnd.Sub(transStart).Seconds()
 			writeVoxtypeState("recording")
 
 			rawText := outBuf.String()
 			text := asr.CleanWhisperTranscript(rawText, stopWords)
 			accepted := acceptTranscript(err, text, stopWords, silenceArtifacts)
+			wordCount := len(strings.Fields(text))
+			transSuccess := err == nil
+			transError := ""
+			if err != nil {
+				transError = err.Error()
+			}
+			_ = recorder.Record(telemetry.Event{Event: telemetry.TranscriptionComplete, Timestamp: transEnd, SessionID: sessionID, ChunkID: chunkID, ChunkIndex: job.Index, TranscriptWordCount: &wordCount, Success: &transSuccess, Error: transError})
 			rejReason := ""
 			if !accepted {
 				rejReason = rejectionReason(err, rawText, text, stopWords, silenceArtifacts)
@@ -381,15 +409,26 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 
 			// Store chunk audio and metadata into the bounded ring buffer
 			chunkMeta := chunks.Chunk{
-				Index:                 job.Index,
-				Timestamp:             transStart,
-				AudioDurationSecs:     job.Duration,
-				TranscribeDurationSec: transDuration,
-				RTF:                   rtf,
-				RawTranscript:         strings.TrimSpace(rawText),
-				CleanedTranscript:     text,
-				Accepted:              accepted,
-				RejectionReason:       rejReason,
+				Index:                  job.Index,
+				Timestamp:              job.FinalizedAt,
+				SessionID:              sessionID,
+				ChunkID:                chunkID,
+				FinalizedAt:            job.FinalizedAt,
+				TranscriptionStartedAt: transStart,
+				TranscriptionEndedAt:   transEnd,
+				AudioDurationSecs:      job.Duration,
+				PCMBytes:               len(job.Audio),
+				MeanRMS:                job.Stats.MeanRMS,
+				PeakRMS:                job.Stats.PeakRMS,
+				VoicedRatio:            job.Stats.VoicedRatio,
+				ProbableSilence:        probableSilence(job.Stats),
+				TranscribeDurationSec:  transDuration,
+				TranscriptWordCount:    wordCount,
+				RTF:                    rtf,
+				RawTranscript:          strings.TrimSpace(rawText),
+				CleanedTranscript:      text,
+				Accepted:               accepted,
+				RejectionReason:        rejReason,
 			}
 			_, _ = chunkBuf.AddExistingWAV(chunkMeta, wavPath, true)
 			_ = os.Remove(wavPath) // Ensure removal if AddExistingWAV didn't move it
@@ -408,7 +447,19 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 				}
 
 				if opts.TypeOutput {
-					_ = typing.TypeText(context.Background(), d, text+" ")
+					typeStart := time.Now()
+					_ = recorder.Record(telemetry.Event{Event: telemetry.TypingStarted, Timestamp: typeStart, SessionID: sessionID, ChunkID: chunkID, ChunkIndex: job.Index})
+					typeErr := typing.TypeText(context.Background(), d, text+" ")
+					typeEnd := time.Now()
+					typeSuccess := typeErr == nil
+					typeError := ""
+					if typeErr != nil {
+						typeError = typeErr.Error()
+					}
+					_ = recorder.Record(telemetry.Event{Event: telemetry.TypingComplete, Timestamp: typeEnd, SessionID: sessionID, ChunkID: chunkID, ChunkIndex: job.Index, Success: &typeSuccess, Error: typeError})
+					chunkMeta.TypingStartedAt = typeStart
+					chunkMeta.TypingEndedAt = typeEnd
+					_, _ = chunkBuf.Update(chunkMeta)
 				}
 
 				if historyPath != "" {
@@ -437,6 +488,7 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 	if err := recCmd.Start(); err != nil {
 		return fmt.Errorf("start audio capture: %w", err)
 	}
+	_ = recorder.Record(telemetry.Event{Event: telemetry.CaptureStarted, Timestamp: time.Now(), SessionID: sessionID})
 
 	killDone := make(chan struct{})
 	go func() {
@@ -484,11 +536,17 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 
 		if len(candidate.Audio) > 0 {
 			utteranceCount++
+			finalizedAt := time.Now()
 			audioDur := float64(len(candidate.Audio)) / float64(bytesPerSec)
+			chunkID := fmt.Sprintf("%s/%d", sessionID, utteranceCount)
+			metrics := telemetry.AudioMetrics{DurationSecs: audioDur, PCMBytes: len(candidate.Audio), MeanRMS: candidate.Stats.MeanRMS, PeakRMS: candidate.Stats.PeakRMS, VoicedRatio: candidate.Stats.VoicedRatio, ProbableSilence: probableSilence(candidate.Stats)}
+			_ = recorder.Record(telemetry.Event{Event: telemetry.ChunkFinalized, Timestamp: finalizedAt, SessionID: sessionID, ChunkID: chunkID, ChunkIndex: utteranceCount, Audio: &metrics})
 			jobChan <- TranscribeJob{
 				Index:           utteranceCount,
 				Audio:           candidate.Audio,
 				Duration:        audioDur,
+				FinalizedAt:     finalizedAt,
+				Stats:           candidate.Stats,
 				Plausible:       candidate.Plausible,
 				RejectionReason: candidate.RejectionReason,
 			}
@@ -509,16 +567,23 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 		_ = recCmd.Process.Kill()
 		_ = recCmd.Wait()
 	}
+	_ = recorder.Record(telemetry.Event{Event: telemetry.CaptureStopped, Timestamp: time.Now(), SessionID: sessionID})
 	signalCaptureStopped()
 
 	// Flush remaining speech upon exit
 	if finalCandidate := segmenter.Flush(); len(finalCandidate.Audio) > 0 {
 		utteranceCount++
+		finalizedAt := time.Now()
 		audioDur := float64(len(finalCandidate.Audio)) / float64(bytesPerSec)
+		chunkID := fmt.Sprintf("%s/%d", sessionID, utteranceCount)
+		metrics := telemetry.AudioMetrics{DurationSecs: audioDur, PCMBytes: len(finalCandidate.Audio), MeanRMS: finalCandidate.Stats.MeanRMS, PeakRMS: finalCandidate.Stats.PeakRMS, VoicedRatio: finalCandidate.Stats.VoicedRatio, ProbableSilence: probableSilence(finalCandidate.Stats)}
+		_ = recorder.Record(telemetry.Event{Event: telemetry.ChunkFinalized, Timestamp: finalizedAt, SessionID: sessionID, ChunkID: chunkID, ChunkIndex: utteranceCount, Audio: &metrics})
 		jobChan <- TranscribeJob{
 			Index:           utteranceCount,
 			Audio:           finalCandidate.Audio,
 			Duration:        audioDur,
+			FinalizedAt:     finalizedAt,
+			Stats:           finalCandidate.Stats,
 			Plausible:       finalCandidate.Plausible,
 			RejectionReason: finalCandidate.RejectionReason,
 		}
@@ -575,6 +640,14 @@ func rejectionReason(err error, rawText, cleanedText string, stopWords, silenceA
 	return ""
 }
 
+// probableSilence is deliberately conservative: fewer than 5% of 20ms
+// frames crossing the configured VAD threshold is strong evidence that a
+// chunk contains silence rather than sustained speech. The underlying RMS
+// and voiced ratio are persisted alongside the decision for inspection.
+func probableSilence(stats audio.AudioStats) bool {
+	return stats.TotalFrames > 0 && stats.VoicedRatio < 0.05
+}
+
 // eagerSessionManager serializes start/stop/toggle requests against a single
 // active recording session for the eager daemon.
 //
@@ -602,17 +675,23 @@ type eagerSessionManager struct {
 	// onCaptureStopped as soon as audio capture ends and its recording
 	// subprocess is reaped, then may continue running (draining
 	// transcription) until it returns.
-	run func(sessCtx context.Context, onCaptureStopped func())
+	run      func(sessCtx context.Context, sessionID string, onCaptureStopped func())
+	recorder *telemetry.Recorder
+	now      func() time.Time
 
-	mu            sync.Mutex
-	activeCancel  context.CancelFunc
-	activeStopped chan struct{}
-	isRecording   bool
-	sessWg        sync.WaitGroup
+	mu              sync.Mutex
+	activeCancel    context.CancelFunc
+	activeStopped   chan struct{}
+	activeSessionID string
+	isRecording     bool
+	sessWg          sync.WaitGroup
 }
 
-func newEagerSessionManager(ctx context.Context, run func(context.Context, func())) *eagerSessionManager {
-	return &eagerSessionManager{ctx: ctx, run: run}
+func newEagerSessionManager(ctx context.Context, recorder *telemetry.Recorder, run func(context.Context, string, func())) *eagerSessionManager {
+	if recorder == nil {
+		recorder = telemetry.NewRecorder("")
+	}
+	return &eagerSessionManager{ctx: ctx, recorder: recorder, now: time.Now, run: run}
 }
 
 // Stop cancels the active session, if any, and waits only until its audio
@@ -622,12 +701,19 @@ func (m *eagerSessionManager) Stop() {
 	m.mu.Lock()
 	cancel := m.activeCancel
 	stopped := m.activeStopped
+	sessionID := m.activeSessionID
+	deactivatedAt := time.Time{}
+	if cancel != nil {
+		deactivatedAt = m.now()
+	}
 	m.activeCancel = nil
 	m.activeStopped = nil
+	m.activeSessionID = ""
 	m.isRecording = false
 	m.mu.Unlock()
 
 	if cancel != nil {
+		_ = m.recorder.Record(telemetry.Event{Event: telemetry.MicDeactivated, Timestamp: deactivatedAt, SessionID: sessionID})
 		cancel()
 	}
 	if stopped != nil {
@@ -640,17 +726,21 @@ func (m *eagerSessionManager) Start() {
 	m.Stop()
 
 	m.mu.Lock()
+	activatedAt := m.now()
+	sessionID := m.recorder.NewSessionID(activatedAt)
 	sessCtx, cancel := context.WithCancel(m.ctx)
 	stopped := make(chan struct{})
 	m.activeCancel = cancel
 	m.activeStopped = stopped
+	m.activeSessionID = sessionID
 	m.isRecording = true
 	m.sessWg.Add(1)
 	m.mu.Unlock()
+	_ = m.recorder.Record(telemetry.Event{Event: telemetry.MicActivated, Timestamp: activatedAt, SessionID: sessionID})
 
 	go func() {
 		defer m.sessWg.Done()
-		m.run(sessCtx, func() {
+		m.run(sessCtx, sessionID, func() {
 			close(stopped)
 		})
 		m.mu.Lock()
@@ -659,6 +749,7 @@ func (m *eagerSessionManager) Start() {
 		if m.activeStopped == stopped {
 			m.activeCancel = nil
 			m.activeStopped = nil
+			m.activeSessionID = ""
 			m.isRecording = false
 		}
 		m.mu.Unlock()
@@ -736,7 +827,8 @@ func runEagerDaemon(ctx context.Context, d deps.Dependencies, opts EagerOptions)
 	writeVoxtypeState("idle")
 	defer writeVoxtypeState("inactive")
 
-	sessions := newEagerSessionManager(ctx, func(sessCtx context.Context, onCaptureStopped func()) {
+	recorder := telemetry.NewRecorder(telemetry.Path(d.Getenv("XDG_DATA_HOME"), d.Getenv("HOME")))
+	sessions := newEagerSessionManager(ctx, recorder, func(sessCtx context.Context, sessionID string, onCaptureStopped func()) {
 		// Each session gets its own subdirectory under the daemon's base
 		// tmpDir rather than sharing one across sessions: since Stop/Start
 		// no longer wait for the previous session's transcription drain to
@@ -757,7 +849,7 @@ func runEagerDaemon(ctx context.Context, d deps.Dependencies, opts EagerOptions)
 		// returns -- otherwise external state readers (voxi monitor, the
 		// GNOME extension) would keep reporting "recording" for up to
 		// transcribeTimeout after the user told the daemon to stop.
-		_ = runEagerCaptureSession(sessCtx, d, opts, sessTmpDir, voxtypePath, recCmdName, recArgs, true, func() {
+		_ = runEagerCaptureSession(sessCtx, d, opts, sessTmpDir, voxtypePath, recCmdName, recArgs, true, sessionID, recorder, func() {
 			writeVoxtypeState("idle")
 			onCaptureStopped()
 		})

@@ -2,15 +2,20 @@ package eager
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"ubunatic.com/voxi/internal/audio"
 	"ubunatic.com/voxi/internal/deps"
+	"ubunatic.com/voxi/internal/telemetry"
 )
 
 func TestAcceptTranscriptRejectsIsolatedSilenceArtifactBeforeTypingAndHistory(t *testing.T) {
@@ -98,6 +103,106 @@ func TestRejectionReason(t *testing.T) {
 	}
 }
 
+func TestProbableSilenceUsesInspectableVoicedRatio(t *testing.T) {
+	if !probableSilence(audioStats(100, 4)) {
+		t.Fatal("4% voiced chunk was not marked probable silence")
+	}
+	if probableSilence(audioStats(100, 5)) {
+		t.Fatal("5% voiced chunk was marked probable silence")
+	}
+}
+
+func audioStats(total, voiced int) audio.AudioStats {
+	return audio.AudioStats{TotalFrames: total, VoicedFrames: voiced, VoicedRatio: float64(voiced) / float64(total)}
+}
+
+func TestCaptureTelemetryCorrelatesChunkThroughTyping(t *testing.T) {
+	tmp := t.TempDir()
+	rawPath := filepath.Join(tmp, "audio.raw")
+	var pcm []byte
+	appendFrame := func(amplitude int16) {
+		frame := make([]byte, 640)
+		for i := 0; i < len(frame); i += 2 {
+			binary.LittleEndian.PutUint16(frame[i:i+2], uint16(amplitude))
+		}
+		pcm = append(pcm, frame...)
+	}
+	for range 2 {
+		appendFrame(0)
+	}
+	for range 10 {
+		appendFrame(1000)
+	}
+	for range 3 {
+		appendFrame(0)
+	}
+	if err := os.WriteFile(rawPath, pcm, 0600); err != nil {
+		t.Fatal(err)
+	}
+	voxtypePath := filepath.Join(tmp, "fake-voxtype")
+	if err := os.WriteFile(voxtypePath, []byte("#!/bin/sh\nprintf 'hello telemetry world\\n'\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+
+	telemetryPath := filepath.Join(tmp, "telemetry.jsonl")
+	recorder := telemetry.NewRecorder(telemetryPath)
+	d := deps.Dependencies{
+		Getenv: func(key string) string {
+			if key == "HOME" || key == "XDG_RUNTIME_DIR" {
+				return tmp
+			}
+			return ""
+		},
+		LookPath: func(name string) (string, error) { return name, nil },
+		RunStdin: func(context.Context, string, string, ...string) error { return nil },
+		Stdout:   io.Discard,
+	}
+	opts := EagerOptions{ThresholdRMS: 500, SilenceMs: 60, PreRollMs: 40, MinSpeechMs: 40, MaxWindowMs: 1000, TypeOutput: true, Model: "small.en", SpeechContext: false}
+	if err := runEagerCaptureSession(context.Background(), d, opts, tmp, voxtypePath, "cat", []string{rawPath}, true, "session-correlation", recorder, nil); err != nil {
+		t.Fatalf("runEagerCaptureSession: %v", err)
+	}
+
+	events, err := telemetry.ReadAll(telemetryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantStages := []string{telemetry.ChunkFinalized, telemetry.TranscriptionStarted, telemetry.TranscriptionComplete, telemetry.TypingStarted, telemetry.TypingComplete}
+	var stages []telemetry.Event
+	for _, event := range events {
+		if slices.Contains(wantStages, event.Event) {
+			stages = append(stages, event)
+		}
+	}
+	if len(stages) != len(wantStages) {
+		t.Fatalf("chunk lifecycle events = %v, want %v (all events: %+v)", eventNames(stages), wantStages, events)
+	}
+	for i, event := range stages {
+		if event.Event != wantStages[i] {
+			t.Fatalf("stage %d = %q, want %q", i, event.Event, wantStages[i])
+		}
+		if event.SessionID != "session-correlation" || event.ChunkID != "session-correlation/1" || event.ChunkIndex != 1 {
+			t.Fatalf("stage %s lost correlation: %+v", event.Event, event)
+		}
+		if i > 0 && event.Timestamp.Before(stages[i-1].Timestamp) {
+			t.Fatalf("stage %s timestamp precedes %s", event.Event, stages[i-1].Event)
+		}
+	}
+	if stages[0].Audio == nil || stages[0].Audio.MeanRMS <= 0 || stages[0].Audio.PeakRMS != 1000 || stages[0].Audio.ProbableSilence {
+		t.Fatalf("unexpected independent audio metrics: %+v", stages[0].Audio)
+	}
+	if stages[2].TranscriptWordCount == nil || *stages[2].TranscriptWordCount != 3 {
+		t.Fatalf("transcript word count = %+v, want 3", stages[2].TranscriptWordCount)
+	}
+}
+
+func eventNames(events []telemetry.Event) []string {
+	names := make([]string, len(events))
+	for i, event := range events {
+		names[i] = event.Event
+	}
+	return names
+}
+
 // fakeCaptureRun returns an eagerSessionManager run function that stands in
 // for runEagerCaptureSession: it blocks until the session context is
 // canceled (like real audio capture blocked on io.ReadFull), then calls
@@ -106,8 +211,8 @@ func TestRejectionReason(t *testing.T) {
 // subprocess draining in the background before the session fully returns.
 // startedCount, if non-nil, is incremented once per invocation so a test can
 // assert exactly how many sessions actually ran.
-func fakeCaptureRun(drain time.Duration, startedCount *atomic.Int32) func(context.Context, func()) {
-	return func(sessCtx context.Context, onCaptureStopped func()) {
+func fakeCaptureRun(drain time.Duration, startedCount *atomic.Int32) func(context.Context, string, func()) {
+	return func(sessCtx context.Context, _ string, onCaptureStopped func()) {
 		if startedCount != nil {
 			startedCount.Add(1)
 		}
@@ -126,7 +231,7 @@ func fakeCaptureRun(drain time.Duration, startedCount *atomic.Int32) func(contex
 // mutex in internal/agent/agent.go) for up to transcribeTimeout.
 func TestEagerSessionManagerStopDoesNotBlockOnTranscriptionDrain(t *testing.T) {
 	const drain = 300 * time.Millisecond
-	mgr := newEagerSessionManager(context.Background(), fakeCaptureRun(drain, nil))
+	mgr := newEagerSessionManager(context.Background(), nil, fakeCaptureRun(drain, nil))
 
 	mgr.Start()
 	// Give the session goroutine a moment to actually start capturing before
@@ -157,6 +262,43 @@ func TestEagerSessionManagerStopDoesNotBlockOnTranscriptionDrain(t *testing.T) {
 	}
 }
 
+func TestEagerSessionManagerRecordsExactMicControlBoundaries(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "events.jsonl")
+	recorder := telemetry.NewRecorder(path)
+	base := time.Date(2026, 9, 5, 10, 0, 0, 123, time.UTC)
+	call := 0
+	seenSession := make(chan string, 1)
+	mgr := newEagerSessionManager(context.Background(), recorder, func(ctx context.Context, sessionID string, stopped func()) {
+		seenSession <- sessionID
+		<-ctx.Done()
+		stopped()
+	})
+	mgr.now = func() time.Time {
+		at := base.Add(time.Duration(call) * time.Nanosecond)
+		call++
+		return at
+	}
+
+	mgr.Start()
+	sessionID := <-seenSession
+	mgr.Stop()
+	mgr.Wait()
+
+	events, err := telemetry.ReadAll(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 2 || events[0].Event != telemetry.MicActivated || events[1].Event != telemetry.MicDeactivated {
+		t.Fatalf("mic events = %+v, want activated then deactivated", events)
+	}
+	if events[0].SessionID != sessionID || events[1].SessionID != sessionID {
+		t.Fatalf("mic event correlation mismatch: %+v", events)
+	}
+	if !events[0].Timestamp.Equal(base) || !events[1].Timestamp.Equal(base.Add(time.Nanosecond)) {
+		t.Fatalf("control timestamps changed: %s, %s", events[0].Timestamp, events[1].Timestamp)
+	}
+}
+
 // TestEagerSessionManagerRapidToggleDuringDrainStartsFreshSession
 // reproduces the ticket's rapid-fire toggle/stop/start-during-transcription
 // scenario end to end: while a previous session's capture has stopped but
@@ -168,7 +310,7 @@ func TestEagerSessionManagerStopDoesNotBlockOnTranscriptionDrain(t *testing.T) {
 func TestEagerSessionManagerRapidToggleDuringDrainStartsFreshSession(t *testing.T) {
 	const drain = 300 * time.Millisecond
 	var started atomic.Int32
-	mgr := newEagerSessionManager(context.Background(), fakeCaptureRun(drain, &started))
+	mgr := newEagerSessionManager(context.Background(), nil, fakeCaptureRun(drain, &started))
 
 	done := make(chan struct{})
 	go func() {
@@ -232,7 +374,7 @@ func TestRunEagerCaptureSessionSignalsCaptureStoppedOnEarlyReturn(t *testing.T) 
 	var stoppedCount atomic.Int32
 	done := make(chan error, 1)
 	go func() {
-		done <- runEagerCaptureSession(ctx, d, opts, t.TempDir(), "voxtype", "sleep", []string{"5"}, true, func() {
+		done <- runEagerCaptureSession(ctx, d, opts, t.TempDir(), "voxtype", "sleep", []string{"5"}, true, "test-session", nil, func() {
 			stoppedCount.Add(1)
 		})
 	}()

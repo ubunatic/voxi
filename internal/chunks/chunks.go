@@ -24,16 +24,29 @@ const (
 
 // Chunk represents one recorded audio slice and its transcription diagnostics.
 type Chunk struct {
-	Index                 int       `json:"index"`
-	Timestamp             time.Time `json:"timestamp"`
-	AudioDurationSecs     float64   `json:"audio_duration_secs"`
-	TranscribeDurationSec float64   `json:"transcribe_duration_secs"`
-	RTF                   float64   `json:"rtf"`
-	RawTranscript         string    `json:"raw_transcript"`
-	CleanedTranscript     string    `json:"cleaned_transcript"`
-	Accepted              bool      `json:"accepted"`
-	RejectionReason       string    `json:"rejection_reason,omitempty"`
-	WAVFile               string    `json:"wav_file"` // relative filename in chunks dir, e.g. "chunk_0001.wav"
+	Index                  int       `json:"index"`
+	Timestamp              time.Time `json:"timestamp"`
+	SessionID              string    `json:"session_id,omitempty"`
+	ChunkID                string    `json:"chunk_id,omitempty"`
+	FinalizedAt            time.Time `json:"finalized_at,omitempty"`
+	TranscriptionStartedAt time.Time `json:"transcription_started_at,omitempty"`
+	TranscriptionEndedAt   time.Time `json:"transcription_ended_at,omitempty"`
+	TypingStartedAt        time.Time `json:"typing_started_at,omitempty"`
+	TypingEndedAt          time.Time `json:"typing_ended_at,omitempty"`
+	AudioDurationSecs      float64   `json:"audio_duration_secs"`
+	PCMBytes               int       `json:"pcm_bytes,omitempty"`
+	MeanRMS                int       `json:"mean_rms,omitempty"`
+	PeakRMS                int       `json:"peak_rms,omitempty"`
+	VoicedRatio            float64   `json:"voiced_ratio,omitempty"`
+	ProbableSilence        bool      `json:"probable_silence"`
+	TranscribeDurationSec  float64   `json:"transcribe_duration_secs"`
+	TranscriptWordCount    int       `json:"transcript_word_count,omitempty"`
+	RTF                    float64   `json:"rtf"`
+	RawTranscript          string    `json:"raw_transcript"`
+	CleanedTranscript      string    `json:"cleaned_transcript"`
+	Accepted               bool      `json:"accepted"`
+	RejectionReason        string    `json:"rejection_reason,omitempty"`
+	WAVFile                string    `json:"wav_file"` // relative filename in chunks dir, e.g. "chunk_0001.wav"
 }
 
 // Manifest is the serialized list of chunks currently in the ring buffer.
@@ -304,6 +317,39 @@ func (b *Buffer) AddExistingWAV(c Chunk, srcWAVPath string, move bool) (Chunk, e
 	}
 
 	return c, nil
+}
+
+// Update replaces metadata for an existing chunk selected by its stable
+// correlation ID while preserving its ring-buffer index and WAV filename.
+func (b *Buffer) Update(c Chunk) (Chunk, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	m, err := b.loadManifestLocked()
+	if err != nil {
+		return Chunk{}, err
+	}
+	for i, existing := range m.Chunks {
+		if c.ChunkID == "" || existing.ChunkID != c.ChunkID {
+			continue
+		}
+		c.Index = existing.Index
+		c.WAVFile = existing.WAVFile
+		m.Chunks[i] = c
+		sidecarPath := filepath.Join(b.dir, fmt.Sprintf("chunk_%04d.json", c.Index))
+		data, marshalErr := json.MarshalIndent(c, "", "  ")
+		if marshalErr != nil {
+			return Chunk{}, fmt.Errorf("marshal chunk metadata: %w", marshalErr)
+		}
+		if err := os.WriteFile(sidecarPath, data, 0600); err != nil {
+			return Chunk{}, fmt.Errorf("write chunk metadata: %w", err)
+		}
+		if err := b.saveManifestLocked(m); err != nil {
+			return Chunk{}, err
+		}
+		return c, nil
+	}
+	return Chunk{}, fmt.Errorf("chunk correlation ID %q not found", c.ChunkID)
 }
 
 // List returns all chunks in the buffer, ordered from oldest to newest (or newest first if reverse is true).

@@ -155,6 +155,31 @@ func TestAddExistingWAV(t *testing.T) {
 	}
 }
 
+func TestUpdateUsesStableChunkCorrelation(t *testing.T) {
+	dir := t.TempDir()
+	buf := NewBuffer(dir, 2)
+	added, err := buf.Add(Chunk{ChunkID: "session/1", CleanedTranscript: "hello", Accepted: true}, make([]byte, 640), 16000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	added.TypingStartedAt = time.Unix(10, 0)
+	added.TypingEndedAt = time.Unix(11, 0)
+	updated, err := buf.Update(added)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Index != added.Index || updated.WAVFile != added.WAVFile {
+		t.Fatalf("Update changed storage identity: before=%+v after=%+v", added, updated)
+	}
+	got, err := buf.Get("last")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.TypingStartedAt.Equal(time.Unix(10, 0)) || !got.TypingEndedAt.Equal(time.Unix(11, 0)) {
+		t.Fatalf("typing timestamps not persisted: %+v", got)
+	}
+}
+
 func TestRingBufferConcurrency(t *testing.T) {
 	dir := t.TempDir()
 	buf := NewBuffer(dir, 5)

@@ -115,9 +115,18 @@ func NewCommand(d deps.Dependencies, buf *Buffer) *cobra.Command {
 // FormatChunkDetails outputs human-readable chunk diagnostic fields.
 func FormatChunkDetails(w io.Writer, c Chunk) {
 	fmt.Fprintf(w, "Index:                  %d\n", c.Index)
+	if c.SessionID != "" {
+		fmt.Fprintf(w, "Session ID:             %s\n", c.SessionID)
+		fmt.Fprintf(w, "Chunk ID:               %s\n", c.ChunkID)
+	}
 	fmt.Fprintf(w, "Timestamp:              %s\n", c.Timestamp.Local().Format("2006-01-02 15:04:05"))
 	fmt.Fprintf(w, "Audio Duration:         %.2fs\n", c.AudioDurationSecs)
+	fmt.Fprintf(w, "PCM Bytes:              %d\n", c.PCMBytes)
+	fmt.Fprintf(w, "Mean / Peak RMS:        %d / %d\n", c.MeanRMS, c.PeakRMS)
+	fmt.Fprintf(w, "Voiced Ratio:           %.3f\n", c.VoicedRatio)
+	fmt.Fprintf(w, "Probable Silence:       %t\n", c.ProbableSilence)
 	fmt.Fprintf(w, "Transcribe Duration:    %.2fs\n", c.TranscribeDurationSec)
+	fmt.Fprintf(w, "Transcript Word Count:  %d\n", c.TranscriptWordCount)
 	fmt.Fprintf(w, "RTF:                    %.2f\n", c.RTF)
 	fmt.Fprintf(w, "Accepted:               %t\n", c.Accepted)
 	if c.RejectionReason != "" {

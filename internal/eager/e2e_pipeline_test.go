@@ -366,7 +366,7 @@ func TestEagerCaptureSessionEndToEndSingleFixture(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	if err := runEagerCaptureSession(ctx, d, opts, t.TempDir(), voxtypePath, audioCmd, audioArgs, true, nil); err != nil {
+	if err := runEagerCaptureSession(ctx, d, opts, t.TempDir(), voxtypePath, audioCmd, audioArgs, true, "test-session", nil, nil); err != nil {
 		t.Fatalf("runEagerCaptureSession: %v", err)
 	}
 
@@ -475,7 +475,7 @@ func TestEagerCaptureSessionEndToEndSplicedNoiseSession(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
-	if err := runEagerCaptureSession(ctx, d, opts, t.TempDir(), voxtypePath, audioCmd, audioArgs, true, nil); err != nil {
+	if err := runEagerCaptureSession(ctx, d, opts, t.TempDir(), voxtypePath, audioCmd, audioArgs, true, "test-session", nil, nil); err != nil {
 		t.Fatalf("runEagerCaptureSession: %v", err)
 	}
 

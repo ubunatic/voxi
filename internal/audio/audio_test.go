@@ -29,6 +29,20 @@ func TestComputeAudioRMS(t *testing.T) {
 	}
 }
 
+func TestAnalyzePCMRecordsMeanPeakAndVoicedRatio(t *testing.T) {
+	pcm := append(generateSineFrame(320, 0, 200), generateSineFrame(320, 0, 800)...)
+	stats := AnalyzePCM(pcm, 500)
+	if stats.TotalFrames != 2 || stats.VoicedFrames != 1 {
+		t.Fatalf("frame counts = %+v, want total=2 voiced=1", stats)
+	}
+	if stats.MeanRMS != 500 || stats.PeakRMS != 800 {
+		t.Fatalf("RMS metrics = mean %d peak %d, want 500/800", stats.MeanRMS, stats.PeakRMS)
+	}
+	if stats.VoicedRatio != 0.5 {
+		t.Fatalf("voiced ratio = %v, want 0.5", stats.VoicedRatio)
+	}
+}
+
 func TestAudioSegmenter(t *testing.T) {
 	opts := SegmenterOptions{
 		ThresholdRMS:       500,
