@@ -1,6 +1,6 @@
 # 060 — Correlated Eager Pipeline Telemetry for Mic-to-Type Latency
 
-**Status**: Open
+**Status**: Closed — implemented in 323ab5e
 **Priority**: P2 (Medium)
 **Severity**: Major
 **Category**: Observability
@@ -71,3 +71,20 @@ and typing starts and finishes.
   where practical and assert session/chunk IDs and stage ordering.
 - Run `go test ./...`, repository checks, and inspect the installed service after
   restart.
+
+## Resolution
+
+Implemented in `323ab5e`. Eager now writes versioned events to the private,
+append-only `eager-telemetry.jsonl` database under the user's Voxi XDG data
+directory. Session IDs remain stable across every lifecycle event, including
+old transcription drains that overlap a newly activated session; chunk IDs add
+the session-local utterance number.
+
+The `typing_started` and `typing_completed` timestamps bound Voxi's call into
+the typing injector. With the synchronous `dotool` fallback, completion means
+the process returned; with `dotoolc`, it means the command stream was accepted
+by the pipe (the external daemon offers no per-keystroke acknowledgement).
+
+Verified with `go test ./...`, focused race tests for telemetry/chunks/Eager,
+`make check`, and `make restart-service`. The installed binary timestamp and
+the active/running `voxi-agent.service` process were inspected after restart.
