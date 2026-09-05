@@ -54,6 +54,8 @@ voxi record stop                  # stop active voice recording
 voxi eager [--type] [--history] [--daemon] [--model <name>]  # run eager dictation directly
 voxi monitor                  # print daemon health, memory, GPU Vulkan accel, and processes
 voxi monitor --watch          # live updating resource monitor (aliases: top, resources, stats)
+voxi telemetry query          # correlated Eager chunk lifecycles (text; add --format json)
+voxi telemetry stats          # aggregate latency, backlog, audio, and outcome statistics
 voxi bench [--models list] [--backends cpu,gpu] [--record] [--file wav] [--json path]
                                # CPU vs GPU RTF/speedup per model, see BenchBaseline.md
 voxi history list                 # list recent dictations (most recent first, sensitive)
@@ -74,6 +76,30 @@ systemd user services:
 
 `voxi record toggle` acts as a universal toggle for all 3 modes, allowing a single global
 shortcut (`Super+X`) to control whichever mode is currently active.
+
+### Eager telemetry queries
+
+Eager mode appends private, transcript-free events to
+`${XDG_DATA_HOME:-~/.local/share}/voxi/eager-telemetry.jsonl`. Inspect correlated chunks
+with `voxi telemetry query`, raw rows with `--view events`, or microphone/capture
+lifecycles with `--view sessions`. `--session`, `--chunk`, `--event`, `--success`,
+`--silence`, and `--post-deactivation` provide exact filters; `--since` and `--until`
+accept RFC3339 timestamps with an explicit timezone and are inclusive. Use `--path` for
+offline fixtures and `--format json` for stable machine-readable output. The default
+`--max-events 100000` is a hard memory bound; narrow the time range or raise it
+explicitly when necessary.
+
+`voxi telemetry stats` reports robust latency percentiles, post-deactivation backlog,
+audio duration/bytes, probable-silence chunks, transcript word counts, stage outcomes,
+and transcription real-time factor where both audio and timing data exist. Missing
+stages remain absent in JSON and count as partial lifecycles. Malformed and unsupported
+newer-schema rows are skipped but reported in every result. Timestamps retain their
+recorded offsets; derived durations compare absolute instants. Neither command modifies
+the database or exposes transcript text.
+
+Typing completion has one important boundary: the synchronous `dotool` fallback has
+returned, but `dotoolc` completion only means its command stream was accepted by the
+pipe. The external daemon provides no per-keystroke acknowledgement.
 
 ### Single-agent migration (issue 029)
 
