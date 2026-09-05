@@ -59,6 +59,7 @@ models:
       - { id: in-video, pattern: "in the video" }
       - { id: in-this-video, pattern: "in this video" }
       - { id: in-todays-video, pattern: "in today's video" }
+      - { id: if-you-enjoyed-this-video, pattern: "if you enjoyed this video" }
       - { id: free-to-use-tip, pattern: "free-to-use tip" }
       - { id: www-domain, pattern: "www\\.[a-z0-9-]+\\.[a-z]+" }
 
