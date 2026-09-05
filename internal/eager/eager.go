@@ -72,6 +72,13 @@ func DefaultEagerOptions() EagerOptions {
 // longest MaxWindowMs utterance on a slow CPU backend.
 const transcribeTimeout = 30 * time.Second
 
+// eagerSocketTimeout bounds a client's round trip to the eager daemon's
+// control socket (start/stop/toggle/status). See issue 057: this is a
+// safety net, not the primary fix -- the primary fix (eagerSessionManager)
+// keeps the daemon side from ever blocking a request behind a stale
+// transcription drain, so this deadline should not normally be reached.
+const eagerSocketTimeout = 8 * time.Second
+
 // UtteranceStat records timing, speed, and text for one transcribed phrase.
 type UtteranceStat struct {
 	Index          int       `json:"index"`
@@ -193,10 +200,38 @@ func RunEagerDictation(ctx context.Context, d deps.Dependencies, opts EagerOptio
 	fmt.Fprintln(d.Stdout, "  Press Ctrl-C (or cancel context) to stop dictation.")
 	fmt.Fprintln(d.Stdout, "")
 
-	return runEagerCaptureSession(ctx, d, opts, tmpDir, voxtypePath, recCmdName, recArgs, false)
+	return runEagerCaptureSession(ctx, d, opts, tmpDir, voxtypePath, recCmdName, recArgs, false, nil)
 }
 
-func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts EagerOptions, tmpDir string, voxtypePath string, recCmdName string, recArgs []string, isDaemon bool) error {
+// runEagerCaptureSession runs one audio-capture + sequential-transcription
+// session. onCaptureStopped, if non-nil, is invoked as soon as audio capture
+// has ended and the recording subprocess has been reaped -- i.e. well before
+// this function returns, since the return is additionally gated on draining
+// any transcription jobs still queued or in flight (bounded by
+// transcribeTimeout per job, not by capture stopping). Callers that need to
+// know "is it safe to start a new session" without waiting for a stale
+// transcription to finish should wait on onCaptureStopped rather than on this
+// function's return (see issue 057 and eagerSessionManager below).
+func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts EagerOptions, tmpDir string, voxtypePath string, recCmdName string, recArgs []string, isDaemon bool, onCaptureStopped func()) error {
+	// Guarantee onCaptureStopped fires exactly once no matter which of this
+	// function's many return paths is taken -- including the early
+	// `return fmt.Errorf(...)` guards below (model spec load failure, audio
+	// pipe setup failure, and notably recCmd.Start() itself: exec.Command's
+	// Start() returns ctx.Err() immediately without spawning a process at
+	// all when ctx is already canceled, which happens routinely here since a
+	// session can be asked to stop before its capture goroutine has even
+	// gotten past setup). A version of this fix that only signaled from the
+	// single "happy path" reap step left eagerSessionManager.Stop() blocked
+	// forever on that exact race (confirmed live via a goroutine dump during
+	// issue 057 verification), since nothing else ever closed its channel.
+	var signalOnce sync.Once
+	signalCaptureStopped := func() {
+		if onCaptureStopped != nil {
+			signalOnce.Do(onCaptureStopped)
+		}
+	}
+	defer signalCaptureStopped()
+
 	const (
 		sampleRate  = 16000
 		bytesPerSec = sampleRate * 2
@@ -404,7 +439,6 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 	}
 
 	killDone := make(chan struct{})
-	defer close(killDone)
 	go func() {
 		select {
 		case <-ctx.Done():
@@ -412,13 +446,6 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 				_ = recCmd.Process.Kill()
 			}
 		case <-killDone:
-		}
-	}()
-
-	defer func() {
-		if recCmd.Process != nil {
-			_ = recCmd.Process.Kill()
-			_ = recCmd.Wait()
 		}
 	}()
 
@@ -467,6 +494,22 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 			}
 		}
 	}
+
+	// Recording has stopped (context canceled, or the capture process exited
+	// on its own). Reap the subprocess right now, immediately: previously this
+	// was deferred to function return, which is additionally gated below on
+	// draining the transcription queue -- a drain that can take up to
+	// transcribeTimeout per queued utterance. That gap left the just-killed
+	// recording process as an unreaped <defunct> zombie for the whole drain
+	// (see issue 057). Signal onCaptureStopped only after the reap so a
+	// caller waiting on it (eagerSessionManager.Stop) never observes a
+	// still-defunct child process.
+	close(killDone)
+	if recCmd.Process != nil {
+		_ = recCmd.Process.Kill()
+		_ = recCmd.Wait()
+	}
+	signalCaptureStopped()
 
 	// Flush remaining speech upon exit
 	if finalCandidate := segmenter.Flush(); len(finalCandidate.Audio) > 0 {
@@ -532,6 +575,122 @@ func rejectionReason(err error, rawText, cleanedText string, stopWords, silenceA
 	return ""
 }
 
+// eagerSessionManager serializes start/stop/toggle requests against a single
+// active recording session for the eager daemon.
+//
+// Issue 057 root cause: the daemon previously blocked a stop/start/toggle
+// request on the *entire* session's lifetime (audio capture, plus draining
+// any transcription job still queued or in flight, bounded only by
+// transcribeTimeout, up to 30s). Since the agent control-plane
+// (internal/agent/agent.go Agent.Record) holds a single mutex across the
+// whole backend call, one stalled toggle stalled every other status/mode/
+// record request behind it -- observed as a client-side socket read timeout
+// (the CLI's 5s deadline firing while the daemon was still stuck) followed
+// by a burst of queued requests all resolving back-to-back once the stale
+// transcription finally finished, producing exactly the rapid-fire
+// started/stopped/started/stopped log sequence from the ticket.
+//
+// The fix: decouple "capture has stopped" (bounded only by killing and
+// reaping the recording subprocess -- fast) from "the session's full
+// lifetime, including transcription drain, has finished" (potentially slow).
+// Stop/Start/Toggle wait only for the former via captureStopped; a session's
+// leftover transcription drain continues in the background and is only
+// waited on by Wait, which the daemon calls once at shutdown.
+type eagerSessionManager struct {
+	ctx context.Context
+	// run launches one recording session against sessCtx and must call
+	// onCaptureStopped as soon as audio capture ends and its recording
+	// subprocess is reaped, then may continue running (draining
+	// transcription) until it returns.
+	run func(sessCtx context.Context, onCaptureStopped func())
+
+	mu            sync.Mutex
+	activeCancel  context.CancelFunc
+	activeStopped chan struct{}
+	isRecording   bool
+	sessWg        sync.WaitGroup
+}
+
+func newEagerSessionManager(ctx context.Context, run func(context.Context, func())) *eagerSessionManager {
+	return &eagerSessionManager{ctx: ctx, run: run}
+}
+
+// Stop cancels the active session, if any, and waits only until its audio
+// capture has stopped (recording subprocess killed and reaped) -- not until
+// its transcription drain (if any is still in flight) has finished.
+func (m *eagerSessionManager) Stop() {
+	m.mu.Lock()
+	cancel := m.activeCancel
+	stopped := m.activeStopped
+	m.activeCancel = nil
+	m.activeStopped = nil
+	m.isRecording = false
+	m.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+	if stopped != nil {
+		<-stopped
+	}
+}
+
+// Start stops any active session (see Stop) and begins a new one.
+func (m *eagerSessionManager) Start() {
+	m.Stop()
+
+	m.mu.Lock()
+	sessCtx, cancel := context.WithCancel(m.ctx)
+	stopped := make(chan struct{})
+	m.activeCancel = cancel
+	m.activeStopped = stopped
+	m.isRecording = true
+	m.sessWg.Add(1)
+	m.mu.Unlock()
+
+	go func() {
+		defer m.sessWg.Done()
+		m.run(sessCtx, func() {
+			close(stopped)
+		})
+		m.mu.Lock()
+		// Only clear state if nothing newer has replaced this session (a
+		// concurrent Stop/Start already would have done so).
+		if m.activeStopped == stopped {
+			m.activeCancel = nil
+			m.activeStopped = nil
+			m.isRecording = false
+		}
+		m.mu.Unlock()
+	}()
+}
+
+// Toggle stops the active session if one is running, otherwise starts one.
+func (m *eagerSessionManager) Toggle() string {
+	m.mu.Lock()
+	rec := m.isRecording
+	m.mu.Unlock()
+	if rec {
+		m.Stop()
+		return "Recording stopped"
+	}
+	m.Start()
+	return "Recording started"
+}
+
+// Recording reports whether a session is currently active.
+func (m *eagerSessionManager) Recording() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.isRecording
+}
+
+// Wait blocks until every session's full lifetime (capture + transcription
+// drain) has completed. Intended for daemon shutdown only.
+func (m *eagerSessionManager) Wait() {
+	m.sessWg.Wait()
+}
+
 func runEagerDaemon(ctx context.Context, d deps.Dependencies, opts EagerOptions) error {
 	runtimeDir := d.Getenv("XDG_RUNTIME_DIR")
 	if runtimeDir == "" {
@@ -577,66 +736,41 @@ func runEagerDaemon(ctx context.Context, d deps.Dependencies, opts EagerOptions)
 	writeVoxtypeState("idle")
 	defer writeVoxtypeState("inactive")
 
-	var mu sync.Mutex
-	var activeCancel context.CancelFunc
-	var sessWg sync.WaitGroup
-	isRecording := false
-
-	stopCurrent := func() {
-		mu.Lock()
-		if activeCancel != nil {
-			activeCancel()
-			activeCancel = nil
+	sessions := newEagerSessionManager(ctx, func(sessCtx context.Context, onCaptureStopped func()) {
+		// Each session gets its own subdirectory under the daemon's base
+		// tmpDir rather than sharing one across sessions: since Stop/Start
+		// no longer wait for the previous session's transcription drain to
+		// finish (issue 057 fix), a new session's capture can now begin
+		// while the previous one is still draining in the background, and
+		// both name their per-utterance WAV files starting at utt_001 --
+		// sharing a directory would let a fresh session's audio collide
+		// with (or be clobbered by) a stale drain still reading/writing
+		// under the same names.
+		sessTmpDir, err := os.MkdirTemp(tmpDir, "sess-*")
+		if err != nil {
+			sessTmpDir = tmpDir
+		} else {
+			defer os.RemoveAll(sessTmpDir)
 		}
-		isRecording = false
-		mu.Unlock()
-		sessWg.Wait()
-		writeVoxtypeState("idle")
-	}
-
-	startRecording := func() {
-		stopCurrent()
-
-		mu.Lock()
-		sessCtx, cancel := context.WithCancel(ctx)
-		activeCancel = cancel
-		isRecording = true
-		sessWg.Add(1)
-		mu.Unlock()
-
-		go func() {
-			defer sessWg.Done()
-			_ = runEagerCaptureSession(sessCtx, d, opts, tmpDir, voxtypePath, recCmdName, recArgs, true)
-			mu.Lock()
-			if activeCancel != nil {
-				activeCancel = nil
-			}
-			isRecording = false
-			mu.Unlock()
+		// Write "idle" the moment capture actually stops, not only once this
+		// whole session (including any still-draining transcription) fully
+		// returns -- otherwise external state readers (voxi monitor, the
+		// GNOME extension) would keep reporting "recording" for up to
+		// transcribeTimeout after the user told the daemon to stop.
+		_ = runEagerCaptureSession(sessCtx, d, opts, sessTmpDir, voxtypePath, recCmdName, recArgs, true, func() {
 			writeVoxtypeState("idle")
-		}()
-	}
-
-	toggleRecording := func() string {
-		mu.Lock()
-		rec := isRecording
-		mu.Unlock()
-		if rec {
-			stopCurrent()
-			return "Recording stopped"
-		}
-		startRecording()
-		return "Recording started"
-	}
+			onCaptureStopped()
+		})
+	})
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGUSR1, syscall.SIGUSR2)
 	go func() {
 		for sig := range sigChan {
 			if sig == syscall.SIGUSR1 {
-				toggleRecording()
+				sessions.Toggle()
 			} else if sig == syscall.SIGUSR2 {
-				stopCurrent()
+				sessions.Stop()
 			}
 		}
 	}()
@@ -644,7 +778,7 @@ func runEagerDaemon(ctx context.Context, d deps.Dependencies, opts EagerOptions)
 	go func() {
 		<-ctx.Done()
 		_ = listener.Close()
-		stopCurrent()
+		sessions.Stop()
 	}()
 
 	for {
@@ -662,19 +796,16 @@ func runEagerDaemon(ctx context.Context, d deps.Dependencies, opts EagerOptions)
 				cmd := strings.TrimSpace(scanner.Text())
 				switch cmd {
 				case "toggle":
-					msg := toggleRecording()
+					msg := sessions.Toggle()
 					_, _ = fmt.Fprintln(c, msg)
 				case "start":
-					startRecording()
+					sessions.Start()
 					_, _ = fmt.Fprintln(c, "Recording started")
 				case "stop":
-					stopCurrent()
+					sessions.Stop()
 					_, _ = fmt.Fprintln(c, "Recording stopped")
 				case "status":
-					mu.Lock()
-					rec := isRecording
-					mu.Unlock()
-					if rec {
+					if sessions.Recording() {
 						_, _ = fmt.Fprintln(c, "recording")
 					} else {
 						_, _ = fmt.Fprintln(c, "idle")
@@ -685,6 +816,13 @@ func runEagerDaemon(ctx context.Context, d deps.Dependencies, opts EagerOptions)
 			}
 		}(conn)
 	}
+
+	// Wait for every session's full lifetime (capture + transcription drain)
+	// to finish before returning, so the deferred os.RemoveAll(tmpDir) above
+	// never yanks the directory out from under a still-draining background
+	// transcription, and so a final queued utterance still gets typed before
+	// the daemon process exits.
+	sessions.Wait()
 
 	return nil
 }
@@ -709,6 +847,15 @@ func ControlEagerDaemon(ctx context.Context, d deps.Dependencies, action string)
 		return fmt.Errorf("eager daemon not reachable at %s (is voxi-eager.service active?): %w", sockPath, err)
 	}
 	defer conn.Close()
+	// Defense-in-depth bound on the eager-daemon socket round trip, mirroring
+	// the transcribeTimeout precedent: with the issue 057 fix, start/stop/
+	// toggle now return as soon as capture stops rather than blocking on a
+	// stale transcription drain, so this should virtually never fire. It
+	// exists so any future daemon-side stall degrades to a clear error
+	// instead of silently wedging the caller (internal/agent/agent.go's
+	// Agent.Record holds a single mutex across the whole backend call, so an
+	// indefinite block here previously stalled every other agent request).
+	_ = conn.SetDeadline(time.Now().Add(eagerSocketTimeout))
 
 	_, err = fmt.Fprintf(conn, "%s\n", action)
 	if err != nil {
@@ -741,6 +888,7 @@ func GetEagerRecordingStatus(ctx context.Context, d deps.Dependencies) (string, 
 		return "inactive", nil
 	}
 	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(eagerSocketTimeout))
 
 	_, _ = fmt.Fprintln(conn, "status")
 	res, _ := bufio.NewReader(conn).ReadString('\n')
