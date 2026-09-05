@@ -1,6 +1,6 @@
 # 061 — Telemetry Analytics Statistics and Query Commands
 
-**Status**: Open
+**Status**: Closed — implemented in 3c60c6f and 662d316
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Feature
@@ -78,3 +78,20 @@ safe, usable query implementation.
   them.
 - Exercise the installed command against a temporary fixture database and confirm both
   human-readable and machine-readable output.
+
+## Resolution
+
+Implemented in `3c60c6f` with the chunk-filter correlation correction in `662d316`.
+`voxi telemetry query` now exposes deterministic raw-event, correlated-session, and
+correlated-chunk views with time, identity, outcome, silence, and post-deactivation
+filters. `voxi telemetry stats` reports capture and pipeline latency distributions,
+post-close backlog, audio/silence and word throughput, transcription RTF, and stage
+outcomes. Both commands support stable JSON, explicit offline paths, malformed/newer
+schema reporting, and a configurable hard event bound without modifying the source.
+
+Focused fixtures cover exact correlation and durations, partial and failed lifecycles,
+ordering, percentiles, filters, invalid times, malformed rows, newer schemas, and absent
+JSON stages. Verified with `go test ./...`, `make check`, `make install`, and text/JSON
+installed-command canaries against a temporary telemetry database. No daemon restart was
+needed because the new CLI commands are invoked on demand and collection code was not
+changed.
