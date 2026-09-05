@@ -258,3 +258,20 @@ transcription no longer produces text-after-stop-becomes-unresponsive
 behavior or a zombie process, the test suite and `make check` pass, and a
 regression test suite covers the rapid toggle-during-transcription sequence
 (plus the narrower early-return deadlock found only via live testing).
+
+## 7. Live Verification (2026-09-05, User Re-Test)
+
+Immediately after this fix was committed, the user ran a manual, real-world
+re-test of the exact scenario this ticket describes: press Super+X, speak,
+press Super+X again to stop, across three separate recording sessions (the
+third specifically as a dedicated "closing test" to probe for late/delayed
+recording after stop). User's own words: *"closing test look actually good,
+no late recordings for now."* No delayed/hallucinated typing after stop and
+no inability to restart recording were observed across any of the three
+sessions. This independently confirms the fix in real daily-driver use, not
+just under the scripted/live-socket verification in §6 above.
+
+(This same test surfaced two unrelated transcript-quality problems —
+a leading dash-fragment artifact and a VAD micro-pause chunk-split — with
+no connection to the start/stop race this ticket covers; tracked separately
+in [059](059-live-test-follow-up-leading-dash-fragment-artifacts-and-vad-micro-pause-chunk-splitting-degrade-transcript-quality.md).)
