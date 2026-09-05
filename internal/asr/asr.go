@@ -10,6 +10,23 @@ var (
 	rfc3339TimeRe  = regexp.MustCompile(`\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}`)
 	quoteExtractRe = regexp.MustCompile(`Transcription completed in [^:]+:\s*"([^"]*)"`)
 	urlPatternRe   = regexp.MustCompile(`(?i)\b(https?://|www\.)[a-z0-9-]+\.[a-z]+`)
+
+	// leadingDashFragmentRe matches a spurious short dash-prefixed fragment that
+	// Whisper sometimes prepends to a genuine sentence, e.g. "-Transcribe. I will…"
+	// or "-H. Also file…".
+	//
+	// The pattern is intentionally tight:
+	//   ^-\s*        – literal leading dash, optional space after it
+	//   \S+          – one non-whitespace token (the garbled fragment word)
+	//   [.,!?]*\s+   – optional punctuation, then mandatory whitespace
+	//   (?:[A-Z])    – the remainder MUST start with a capital letter (not consumed)
+	//
+	// This prevents stripping:
+	//   • a transcript that is entirely or mostly a dash-prefixed item (no capital
+	//     remainder follows, so the assertion fails)
+	//   • legitimate hyphen-led dictated text where the continuation is not a
+	//     capital-sentence start (e.g. "- first item in list")
+	leadingDashFragmentRe = regexp.MustCompile(`^-\s*\S+[.,!?]*\s+(?:[A-Z])`)
 )
 
 // hallucinationRegexp builds a whole-line matcher from a model's stop-word
@@ -84,6 +101,34 @@ func StripLeadingHallucinations(text string, stopWords []string) string {
 	return strings.TrimSpace(clean)
 }
 
+// StripLeadingDashFragment removes a spurious short dash-prefixed fragment that
+// Whisper sometimes prepends to an otherwise genuine transcript, e.g.:
+//
+//	"-Transcribe. I will now check…" → "I will now check…"
+//	"-H. Also file a follow-up…"    → "Also file a follow-up…"
+//
+// The heuristic is tight by design: it only strips when ALL of these hold:
+//  1. The text begins with a literal '-' (with optional space after it).
+//  2. The fragment is a single short token (≤1 word), optionally followed by
+//     punctuation and whitespace.
+//  3. The remainder immediately starts with an upper-case letter (i.e. it looks
+//     like the beginning of a new sentence).
+//
+// Legitimate hyphen-led text is NOT stripped:
+//   - "- first item in list" → unchanged (no capital-sentence continuation)
+//   - A transcript that is entirely the fragment (no remainder) → unchanged;
+//     callers should let IsSafeToType decide whether to type it.
+func StripLeadingDashFragment(text string) string {
+	loc := leadingDashFragmentRe.FindStringIndex(text)
+	if loc == nil {
+		return text
+	}
+	// loc[1] points just past the capital letter that started the remainder;
+	// step back one rune so the capital letter is kept.
+	remainder := text[loc[1]-1:]
+	return strings.TrimSpace(remainder)
+}
+
 // CleanWhisperTranscript extracts only valid human speech from Voxtype transcribe output,
 // discarding ANSI escape codes, diagnostic logs, timestamps, model metadata, and hallucinations.
 // stopWords are the active model's hallucination patterns (see spec/models.yaml).
@@ -99,6 +144,7 @@ func CleanWhisperTranscript(output string, stopWords []string) string {
 		// caught, but stripping the leading prefix first keeps the
 		// remaining text's start clean for readability if a caller
 		// inspects the intermediate candidate.
+		candidate = StripLeadingDashFragment(candidate)
 		candidate = StripLeadingHallucinations(candidate, stopWords)
 		candidate = StripTrailingHallucinations(candidate, stopWords)
 		if IsSafeToType(candidate, stopWords) {
@@ -131,6 +177,7 @@ func CleanWhisperTranscript(output string, stopWords []string) string {
 			rfc3339TimeRe.MatchString(trimmed) {
 			continue
 		}
+		trimmed = StripLeadingDashFragment(trimmed)
 		trimmed = StripLeadingHallucinations(trimmed, stopWords)
 		trimmed = StripTrailingHallucinations(trimmed, stopWords)
 		if IsSafeToType(trimmed, stopWords) {

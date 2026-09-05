@@ -107,3 +107,47 @@ func TestUserStopWordLiteralBoundaries(t *testing.T) {
 		t.Fatal("regex-shaped phrase was interpreted as regex")
 	}
 }
+
+func TestStripLeadingDashFragment(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			// Observed live: "-Transcribe." fused onto the real sentence.
+			name:  "Transcribe artifact",
+			input: "-Transcribe. I will now check if the transcribe immediately starts after I close the session.",
+			want:  "I will now check if the transcribe immediately starts after I close the session.",
+		},
+		{
+			// Observed in ring buffer chunk #186.
+			name:  "H artifact",
+			input: "-H. Also file a follow-up ticket that we need to handle this.",
+			want:  "Also file a follow-up ticket that we need to handle this.",
+		},
+		{
+			// Whole transcript is just the dash-fragment; no capitalized
+			// continuation → no strip (IsSafeToType / caller decides fate).
+			name:  "whole-transcript fragment not stripped",
+			input: "-Trap.",
+			want:  "-Trap.",
+		},
+		{
+			// Legitimate hyphen-led list item: no capital-sentence continuation.
+			name:  "legitimate hyphen-led list item not stripped",
+			input: "- first item in list",
+			want:  "- first item in list",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			got := StripLeadingDashFragment(tc.input)
+			if got != tc.want {
+				t.Errorf("StripLeadingDashFragment(%q) = %q, want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}
