@@ -257,8 +257,12 @@ func TestRenderAudioLevelMeter(t *testing.T) {
 
 func TestRenderVolumeSparkline(t *testing.T) {
 	// Loud first half (RMS 10000, at/above sparklineCeilingRMS of 8192),
-	// quiet second half (RMS 20, below sparklineFloorRMS) — 10 buckets over
-	// 1000 samples means each bucket is exactly one half or the other.
+	// quiet second half (RMS 20, below sparklineFloorRMS) — with 20
+	// sub-buckets over 1000 samples, each sub-bucket is exactly one half or
+	// the other, so every output glyph is a "fully loud" or "fully quiet"
+	// symmetric pair (⣿ or ⣀) — this test locks in the coarse loud/quiet
+	// shape; TestRenderVolumeSparklinePackedPair below locks in an
+	// asymmetric (mixed-level) glyph.
 	loudThenQuiet := append(generateSineFrame(500, 0, 10000), generateSineFrame(500, 0, 20)...)
 	quietOnly := generateSineFrame(1000, 0, 20)
 	// A realistic *accepted* chunk's RMS (comparable to what voxi chunks list
@@ -274,10 +278,11 @@ func TestRenderVolumeSparkline(t *testing.T) {
 	gotQuietOnly := RenderVolumeSparkline(quietOnly, 10)
 	gotModerateSpeech := RenderVolumeSparkline(moderateSpeech, 10)
 
-	// level(10000) saturates at sparklineLevels (>= ceiling 8192) -> glyph
-	// 0x28FF ("⣿"); level(20) is below the floor (80) -> the minimum
-	// *audible* glyph 0x28C0 ("⣀"), never blank/space — a quiet-but-measured
-	// bucket must stay visually distinct from "no data was measured here".
+	// level(10000) saturates at sparklineLevels (>= ceiling 8192) -> both
+	// dot-columns fully filled ("⣿"); level(20) is below the floor (80) ->
+	// the minimum *audible* glyph on both sides ("⣀"), never blank/space —
+	// a quiet-but-measured bucket must stay visually distinct from "no data
+	// was measured here".
 	wantLoudThenQuiet := strings.Repeat("⣿", 5) + strings.Repeat("⣀", 5)
 	wantQuietOnly := strings.Repeat("⣀", 10)
 
@@ -302,6 +307,84 @@ func TestRenderVolumeSparkline(t *testing.T) {
 	}
 	if got := len([]rune(gotLoudThenQuiet)); got != 10 {
 		t.Fatalf("expected fixed-width 10-glyph sparkline, got %d glyphs", got)
+	}
+}
+
+// TestRenderVolumeSparklinePackedPair locks in issue 072's core mechanism:
+// a single output glyph packs two independently-leveled sub-buckets, one
+// per dot-column. A buffer whose first half is loud (level 4, saturates the
+// left sub-bucket of glyph 0) and whose second half is quiet-but-measured
+// (level 1, fills the right sub-bucket of glyph 9) should produce a mixed
+// first glyph "⣇" (dots 1+2+3+7: left column fully filled from level 4,
+// right column empty because the loud region ends exactly at the pair
+// boundary) — asserted here via the exact expected rune, not just
+// "non-space".
+func TestRenderVolumeSparklinePackedPair(t *testing.T) {
+	// 20 sub-buckets over 200 samples -> 10 samples/sub-bucket. Sub-bucket 0
+	// (glyph 0's left half) loud, sub-bucket 1 (glyph 0's right half) quiet.
+	pcm := append(generateSineFrame(10, 0, 10000), generateSineFrame(10, 0, 20)...)
+	pcm = append(pcm, make([]byte, 180*2)...) // pad remaining 18 sub-buckets with silence (level 1)
+
+	got := RenderVolumeSparkline(pcm, 10)
+	gotRunes := []rune(got)
+	if len(gotRunes) != 10 {
+		t.Fatalf("expected 10 glyphs, got %d (%q)", len(gotRunes), got)
+	}
+
+	// leftColumnDots(4) | rightColumnDots(1) = 0x47 | 0x80 = 0xC7
+	wantFirst := rune(0x2800 + 0xC7)
+	if gotRunes[0] != wantFirst {
+		t.Fatalf("first glyph = %q (U+%04X), want %q (U+%04X) [left=level4, right=level1 packed]",
+			string(gotRunes[0]), gotRunes[0], string(wantFirst), wantFirst)
+	}
+	// Remaining glyphs are silence-only (level 1 both sides) -> "⣀".
+	for i := 1; i < len(gotRunes); i++ {
+		if gotRunes[i] != '⣀' {
+			t.Fatalf("glyph %d = %q, want minimum-level glyph ⣀", i, string(gotRunes[i]))
+		}
+	}
+}
+
+// TestRenderVolumeSparklinePartialNoData covers issue 072 Open Question 2:
+// a buffer that ends partway through a pair's two sub-buckets. Per this
+// implementation's chosen semantics, the present side renders its real
+// measured level and the missing side renders as 0 dots (blank) in its
+// column -- never a whole blank/space glyph, since that would hide the
+// real half's measurement, and never a fabricated "half-missing" glyph.
+func TestRenderVolumeSparklinePartialNoData(t *testing.T) {
+	// 20 sub-buckets requested but the buffer only contains 5 samples (5
+	// sub-buckets' worth, at 1 sample/sub-bucket since samplesPerBucket
+	// clamps to 1 here) of loud audio. Sub-buckets 0-4 have real data,
+	// sub-buckets 5-19 don't. That lands the buffer's end in the *middle*
+	// of the third output glyph's pair (sub-buckets 4 and 5): sub-bucket 4
+	// is real (loud), sub-bucket 5 has no data.
+	pcm := generateSineFrame(5, 0, 10000)
+	got := RenderVolumeSparkline(pcm, 10)
+	gotRunes := []rune(got)
+	if len(gotRunes) != 10 {
+		t.Fatalf("expected 10 glyphs, got %d (%q)", len(gotRunes), got)
+	}
+
+	// Glyphs 0 and 1 cover sub-buckets 0-3, all real and loud -> full glyph.
+	for i := 0; i < 2; i++ {
+		if gotRunes[i] != '⣿' {
+			t.Fatalf("glyph %d = %q, want full-loudness glyph ⣿", i, string(gotRunes[i]))
+		}
+	}
+	// Glyph 2 covers sub-bucket 4 (real, level 4) and sub-bucket 5 (no
+	// data): per this implementation's Open Question 2 semantics, the
+	// missing side renders as 0 dots while the present side keeps its real
+	// level -- leftColumnDots(4) = 0x47, rightColumnDots(0) = 0x00.
+	wantPartial := rune(0x2800 + 0x47)
+	if gotRunes[2] != wantPartial {
+		t.Fatalf("glyph 2 (partial pair) = %q (U+%04X), want %q (U+%04X)",
+			string(gotRunes[2]), gotRunes[2], string(wantPartial), wantPartial)
+	}
+	// Glyphs 3-9 cover fully-missing pairs -> literal space.
+	for i := 3; i < len(gotRunes); i++ {
+		if gotRunes[i] != ' ' {
+			t.Fatalf("glyph %d = %q, want no-data space (both sub-buckets missing)", i, string(gotRunes[i]))
+		}
 	}
 }
 

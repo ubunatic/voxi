@@ -74,23 +74,69 @@ func shouldUseColor(mode string, noColorEnv string, isTerminal bool) bool {
 	}
 }
 
-// sparklineGlyphANSI maps the four Braille height glyphs
-// audio.RenderVolumeSparkline can emit (via its unexported sparklineGlyph,
-// internal/audio/audio.go) to an ANSI color code, quietest to loudest --
-// a dim-to-hot ramp mirroring what the glyph height already represents, so
-// color reinforces rather than duplicates a new meaning. The rune values
-// are the closed 4-glyph set that function's dot-pattern bytes (0xC0, 0xE4,
-// 0xF6, 0xFF) produce; deliberately duplicated here as rune literals rather
-// than importing audio's unexported bits, since this is presentation-only
-// and audio.go is on the live daemon's capture path (touching it would
-// require a service restart to test, for a decision that has nothing to do
-// with capture behavior). If audio.sparklineGlyph's dot patterns ever
-// change, this map needs updating too.
-var sparklineGlyphANSI = map[rune]string{
-	'⣀': "90",   // dots 7+8 only: quietest audible level -- dim gray
-	'⣤': "36",   // + dots 3+6: cyan
-	'⣶': "33",   // + dots 2+5: yellow
-	'⣿': "31;1", // all 8 dots: loudest -- bright red
+// sparklineLevelANSI maps a single 1..4 loudness level (see
+// internal/audio's sparklineMinLevel..sparklineLevels) to an ANSI color
+// code, quietest to loudest -- a dim-to-hot ramp mirroring what glyph
+// height already represents, so color reinforces rather than duplicates a
+// new meaning. This used to be a map keyed on the exact rune each of the 4
+// possible *symmetric* glyphs produced (internal/audio.sparklineGlyph). As
+// of issue 072, RenderVolumeSparkline packs two independent levels (left
+// dot-column, right dot-column) into each glyph, so up to ~16 distinct
+// runes are possible -- far too many to enumerate as a closed rune table.
+// Colorizing now decodes each glyph's dot pattern back into its two
+// sub-levels (decodeSparklineGlyph) and colors the whole cell by
+// whichever side is louder (max(left, right)): a terminal color escape
+// applies to the whole cell, not a sub-glyph dot region, so *some*
+// precision is unavoidably lost either way (see issue 072 Open Question
+// 1); coloring by the max keeps the ramp's meaning intuitive ("this glyph
+// contains at least this much loudness") and matches what a viewer's eye
+// keys on first -- the brighter/taller-looking half of a mixed glyph --
+// rather than a blended average that could land on a color matching
+// neither actual sub-value, or an outcome-based scheme that would throw
+// away the height-to-color correspondence issue 071 established.
+var sparklineLevelANSI = map[int]string{
+	1: "90",   // quietest audible level -- dim gray
+	2: "36",   // cyan
+	3: "33",   // yellow
+	4: "31;1", // loudest -- bright red
+}
+
+// sparklineLeftDotMask and sparklineRightDotMask identify a Braille cell's
+// left dot-column (dots 1/2/3/7) and right dot-column (dots 4/5/6/8)
+// bits, mirroring internal/audio's leftColumnDots/rightColumnDots byte
+// layout. Duplicated here as bit masks rather than importing audio's
+// unexported helpers, since this is presentation-only and audio.go is on
+// the live daemon's capture path (touching it would require a service
+// restart to test, for a decision that has nothing to do with capture
+// behavior). If audio's dot-column layout ever changes, this needs
+// updating too.
+const (
+	sparklineLeftDotMask  = 0x47 // dots 1(0x01)+2(0x02)+3(0x04)+7(0x40)
+	sparklineRightDotMask = 0xB8 // dots 4(0x08)+5(0x10)+6(0x20)+8(0x80)
+)
+
+// sparklineDotsToLevel reverse-maps one column's dot bits (already masked
+// to just that column) back to the 1..4 level that produced them, or 0 if
+// the bits are 0 (no data on that side) or don't match any level this
+// package's glyphs actually produce.
+var sparklineLeftDotsToLevel = map[byte]int{0x40: 1, 0x44: 2, 0x46: 3, 0x47: 4}
+var sparklineRightDotsToLevel = map[byte]int{0x80: 1, 0xA0: 2, 0xB0: 3, 0xB8: 4}
+
+// decodeSparklineGlyph reverse-maps a Braille Pattern rune (as produced by
+// audio.RenderVolumeSparkline) back into its independent left/right
+// sub-levels. ok is false for anything outside the Braille Patterns block
+// (U+2800-U+28FF) -- including the "no data" space glyph and the
+// surrounding brackets -- so colorizeSparkline leaves those untouched, the
+// same fail-safe behavior the old closed rune map had for anything it
+// didn't recognize.
+func decodeSparklineGlyph(r rune) (left, right int, ok bool) {
+	if r < 0x2800 || r > 0x28FF {
+		return 0, 0, false
+	}
+	dots := byte(r - 0x2800)
+	left = sparklineLeftDotsToLevel[dots&sparklineLeftDotMask]
+	right = sparklineRightDotsToLevel[dots&sparklineRightDotMask]
+	return left, right, true
 }
 
 // colorizeSparkline wraps each recognized loudness glyph in s with its ANSI
@@ -110,8 +156,22 @@ var sparklineGlyphANSI = map[rune]string{
 func colorizeSparkline(s string) string {
 	var sb strings.Builder
 	for _, r := range s {
-		code, ok := sparklineGlyphANSI[r]
+		left, right, ok := decodeSparklineGlyph(r)
 		if !ok {
+			sb.WriteRune(r)
+			continue
+		}
+		level := left
+		if right > level {
+			level = right
+		}
+		code, ok := sparklineLevelANSI[level]
+		if !ok {
+			// Neither side decoded to a known level (e.g. a half-missing
+			// pair where the only present side is 0, which shouldn't
+			// happen since RenderVolumeSparkline substitutes a literal
+			// space when both sides are 0, but stay safe/uncolored rather
+			// than panicking on an unexpected dot pattern).
 			sb.WriteRune(r)
 			continue
 		}

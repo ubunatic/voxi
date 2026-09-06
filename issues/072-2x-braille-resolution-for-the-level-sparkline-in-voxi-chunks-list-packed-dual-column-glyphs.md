@@ -1,6 +1,6 @@
 # 072 — 2x Braille Resolution for the LEVEL Sparkline in voxi chunks list (Packed Dual-Column Glyphs)
 
-**Status**: In Progress — fresh-sprint: implementing 2x braille resolution, dev agent to decide open design questions
+**Status**: Implemented — 20-bucket packed dual-column glyphs, both open questions resolved by the implementing agent (see Implementation Notes)
 **Priority**: P3 (Low)
 **Severity**: Enhancement
 **Category**: Feature
@@ -141,7 +141,127 @@ implementation ticket should:
 - Not widening the `LEVEL` column's on-screen width — the whole point is
   doubling data resolution within the existing fixed 10-character width.
 
-## 6. Background
+## 6. Implementation Notes
+
+Implemented 2026-09-06. `RenderVolumeSparkline` (`internal/audio/audio.go`)
+now splits its `buckets` argument (still 10 at every call site) into
+`buckets*2` = 20 "sub-buckets" internally, computes a level per sub-bucket
+via the unchanged `sparklineLevel`, and packs each consecutive pair
+`(2i, 2i+1)` into one output glyph via the new `packedSparklineGlyph(left,
+right int) rune`. `sparklineGlyph` (the old symmetric-fill function) was
+removed and replaced by two small per-column helpers, `leftColumnDots(level
+int) byte` and `rightColumnDots(level int) byte`.
+
+**Exact dot-bit-splitting scheme.** Braille dot numbering: dots 1/2/3/7
+(bits 0x01/0x02/0x04/0x40) form the left column top-to-bottom; dots
+4/5/6/8 (bits 0x08/0x10/0x20/0x80) form the right column top-to-bottom.
+Masking the four whole-glyph symmetric bytes the old code used against the
+left mask (`0x47` = 0x01|0x02|0x04|0x40) and right mask (`0xB8` =
+0x08|0x10|0x20|0x80) gives each column's byte for level 1-4:
+
+| level | whole-glyph byte | & 0x47 (left) | & 0xB8 (right) |
+|---|---|---|---|
+| 1 | 0xC0 | 0x40 (dot 7) | 0x80 (dot 8) |
+| 2 | 0xE4 | 0x44 (dots 3,7) | 0xA0 (dots 6,8) |
+| 3 | 0xF6 | 0x46 (dots 2,3,7) | 0xB0 (dots 5,6,8) |
+| 4 | 0xFF | 0x47 (dots 1,2,3,7) | 0xB8 (dots 4,5,6,8) |
+
+`packedSparklineGlyph(left, right)` returns
+`rune(0x2800 + leftColumnDots(left) | rightColumnDots(right))`. Level 0
+(only reachable via Open Question 2's partial-no-data path) maps to `0x00`
+on that column's byte, i.e. no dots on that side.
+
+**Open Question 1 (color, `internal/chunks/color.go`) — decision: color the
+whole packed glyph by whichever sub-level is louder (`max(left, right)`),
+computed by decoding the glyph's actual dot pattern rather than a closed
+rune table.** The old `sparklineGlyphANSI` was a 4-entry `map[rune]string`
+keyed on the exact 4 runes the old symmetric encoder could produce; with
+independent columns there are up to ~16 distinct glyphs, so a closed table
+would silently leave most real output uncolored (a visible regression).
+Replaced it with `decodeSparklineGlyph(r rune) (left, right int, ok bool)`
+— a reverse mapping from a rune's dot bits back to the two `1..4` levels
+(`ok=false` for anything outside U+2800-U+28FF, e.g. brackets and the
+no-data space, so those stay uncolored exactly as before) — plus
+`sparklineLevelANSI map[int]string` (the same dim-gray/cyan/yellow/
+bright-red ramp as before, now keyed by level instead of rune).
+`colorizeSparkline` colors each glyph by `max(left, right)`. Rationale:
+max-of-two keeps the "height/color = loudness" mental model from issue
+071 fully intact — a glyph is exactly as bright/hot as its loudest visible
+peak, which is also what a viewer's eye keys on first in a two-toned
+character. A blended average was rejected because it can land on a color
+matching neither actual sub-value (e.g. average of level 1 and level 4 is
+"2.5", an arbitrary rounding decision either way); dropping per-glyph
+coloring for a coarser scheme was rejected because it throws away
+information users of `--color` already rely on for zero benefit — the
+"whole cell, one color" terminal constraint is unavoidable either way, so
+there's no reason to make coloring coarser than "one color per cell"
+already forces.
+
+**Open Question 2 (partial no-data within a pair) — decision: the missing
+side renders as 0 dots (blank) in its column; the present side keeps its
+real measured level; only a pair with *both* sides missing renders as a
+literal space.** `RenderVolumeSparkline`'s inner `subLevel(b)` closure
+returns `0` for a sub-bucket beyond the buffer's end, and the pair-packing
+loop only emits a literal space when *both* `left == 0 && right == 0`;
+otherwise it calls `packedSparklineGlyph(left, right)`, and 0 as an input
+level naturally produces 0 dots on that column via `leftColumnDots`/
+`rightColumnDots`'s `default: 0x00` case. Rationale: this was the
+prompt's own suggested default, and it's the only option that doesn't
+lose information — a whole-pair blank would hide the present side's real
+measurement, and no single Braille glyph can represent a distinct
+"half-missing, definitely not silence" state without overloading the
+existing "0 dots on real audio" meaning (`sparklineMinLevel` never emits
+0 dots — its floor is `leftColumnDots(1)`/`rightColumnDots(1)`, always at
+least 1 dot — so a 0-dot column is otherwise unreachable from real
+measured audio and unambiguously means "no data here," matching the
+existing whole-glyph-space convention one level down). This only arises
+for buffers whose sample count doesn't split evenly across 20 sub-buckets,
+which in practice means very short (sub-hundred-millisecond) chunks.
+
+**Column width**: confirmed unchanged. Output is still exactly 10
+characters (`buckets` unchanged at every call site; only the internal
+sub-bucket count doubled), so `internal/chunks/command.go`'s
+`"[" + sparkline + "]"` bracket handling and `%-12s` padding needed no
+changes.
+
+**Test results.** `go build ./...`, `go vet ./...`, and `make check`
+(full `go test ./...` + `go test ./spec/...`) all pass. Added
+`TestRenderVolumeSparklinePackedPair` (exact-rune assertion for a glyph
+packing two different sub-levels), `TestRenderVolumeSparklinePartialNoData`
+(exact-rune assertions for the Open Question 2 half-missing case and the
+fully-missing case), `TestDecodeSparklineGlyph`,
+`TestColorizeSparklineAsymmetricGlyph`, and
+`TestColorizeSparklinePartialNoData` (both new color tests round-trip
+through `asr.StripANSI` per the existing pattern). Existing
+`TestRenderVolumeSparkline`, `TestSparklineLevelRealWorldCalibration`,
+`TestRenderVolumeSparklineNoData`, and `TestColorizeSparkline` were
+updated/reverified against the new 20-sub-bucket behavior (their original
+assertions still hold because their fixture RMS values happen to split
+evenly across the doubled sub-bucket count, producing left==right on every
+pair — so pre-existing whole-glyph expectations like `⣿`/`⣀` are unchanged
+outputs, now produced by the pack function instead of the old symmetric
+one).
+
+Verified on real recorded audio: since `VolumeSparkline` is precomputed at
+finalize time and stored in each chunk's JSON, pre-existing chunks in the
+ring buffer still show their old (10-sub-bucket, symmetric) strings — only
+newly-finalized chunks after the service restart get the new encoding.
+Re-rendering real PCM from existing `.wav` files in the ring buffer
+(`/run/user/1000/voxi/chunks/chunk_0322.wav`, an 8s accepted recording)
+through the new `RenderVolumeSparkline` produced `⣄⣤⣆⣤⣤⣤⣠⣤⣴⣤` — visibly
+finer shape detail (e.g. `⣄`/`⣆`/`⣠`/`⣴` are asymmetric glyphs the old
+symmetric encoder could never produce) versus the originally-stored
+10-point `⣤⣶⣶⣶⣤⣤⣶⣶⣶⣶`. Feeding that same re-rendered string through the
+real `voxi chunks list --color=always` command path (via a throwaway
+in-repo demo program using `chunks.NewBuffer`/`chunks.NewCommand`,
+deleted after use) confirmed per-glyph ANSI coloring by the louder
+sub-level works end to end, with brackets and padding staying uncolored.
+
+Ran `make restart-service` (not plain `make install`) since
+`internal/audio.RenderVolumeSparkline` is on `voxi-agent.service`'s live
+capture path via `internal/eager`.
+
+## 7. Background
 
 Raised 2026-09-06, while the user was looking at real `voxi chunks list`
 output from issues 070 (RMS/LEVEL columns) and 071 (`--color` flag), both

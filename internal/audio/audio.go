@@ -330,15 +330,34 @@ const (
 // sparkline showing how RMS energy varies across the duration of a PCM
 // buffer (16-bit signed, mono, any sample rate). Unlike RenderAudioLevelMeter
 // (a single instantaneous live-level bar with no time axis), this splits the
-// buffer into `buckets` equal time slices, computes the RMS of each slice,
-// and maps each to a Braille cell height, giving an at-a-glance "loud
-// throughout" vs "trails off to silence" vs "uniformly quiet" shape.
+// buffer into 2*buckets equal time slices ("sub-buckets"), computes the RMS
+// of each slice, and packs each consecutive PAIR of sub-buckets into a
+// single Braille cell — the left dot-column (dots 1/2/3/7) independently
+// encodes the earlier sub-bucket's level, the right dot-column (dots
+// 4/5/6/8) the later one — giving 2x the time resolution (2*buckets
+// independent measurements) within the same fixed `buckets`-character
+// width (see issue 072; the original one-glyph-per-bucket, symmetric-fill
+// version is issue 070/071's design).
 //
-// A plain ASCII space means "no data for this bucket" (the buffer was too
-// short to fill every requested bucket) — distinct from the quietest
-// measured glyph ("⣀"), which means a bucket *was* measured and found
-// silent. Conflating the two would make a genuinely-recorded silent moment
+// A plain ASCII space means "no data for this pair" (the buffer was too
+// short to reach either sub-bucket) — distinct from the quietest measured
+// glyph ("⣀"), which means a sub-bucket *was* measured and found silent.
+// Conflating the two would make a genuinely-recorded silent moment
 // indistinguishable from a gap where nothing was ever measured.
+//
+// Partial no-data within a pair (issue 072 Open Question 2): a buffer can
+// end between a pair's two sub-buckets, so one side has real data and the
+// other doesn't. A whole blank glyph would hide the real half's
+// measurement; inventing a dedicated "half-missing" glyph would need a 5th
+// dot-state per column with no natural Braille encoding. Instead, the
+// missing side renders as 0 dots (blank) in its column while the present
+// side renders its real measured level — the same convention
+// RenderAudioLevelMeter-adjacent code already uses for "absence of
+// evidence": a fully blank column reads as "nothing measured here" whether
+// that's a whole pair or just one side of it, while the other side still
+// carries its real signal. This only arises for chunks short enough that
+// samplesPerBucket*2*20 doesn't evenly divide the buffer, which in practice
+// means very short (sub-hundred-millisecond) recordings.
 func RenderVolumeSparkline(pcmData []byte, buckets int) string {
 	if buckets <= 0 {
 		buckets = 10
@@ -347,28 +366,36 @@ func RenderVolumeSparkline(pcmData []byte, buckets int) string {
 		return strings.Repeat(" ", buckets)
 	}
 
+	subBuckets := buckets * 2
 	totalSamples := len(pcmData) / 2
-	samplesPerBucket := totalSamples / buckets
+	samplesPerBucket := totalSamples / subBuckets
 	if samplesPerBucket < 1 {
 		samplesPerBucket = 1
 	}
 
-	var sb strings.Builder
-	for b := 0; b < buckets; b++ {
+	// subLevel returns the quantized level (sparklineMinLevel..sparklineLevels)
+	// for sub-bucket b, or 0 if the buffer has no data at that sub-bucket.
+	subLevel := func(b int) int {
 		start := b * samplesPerBucket * 2
+		if start >= len(pcmData) {
+			return 0
+		}
 		end := start + samplesPerBucket*2
-		if b == buckets-1 {
+		if b == subBuckets-1 || end > len(pcmData) {
 			end = len(pcmData)
 		}
-		if start >= len(pcmData) {
+		return sparklineLevel(ComputeAudioRMS(pcmData[start:end]))
+	}
+
+	var sb strings.Builder
+	for i := 0; i < buckets; i++ {
+		left := subLevel(2 * i)
+		right := subLevel(2*i + 1)
+		if left == 0 && right == 0 {
 			sb.WriteRune(' ')
 			continue
 		}
-		if end > len(pcmData) {
-			end = len(pcmData)
-		}
-		rms := ComputeAudioRMS(pcmData[start:end])
-		sb.WriteRune(sparklineGlyph(sparklineLevel(rms)))
+		sb.WriteRune(packedSparklineGlyph(left, right))
 	}
 	return sb.String()
 }
@@ -400,24 +427,61 @@ func sparklineLevel(rms int) int {
 	return level
 }
 
-// sparklineGlyph maps a 0..sparklineLevels height step to a Braille Pattern
-// codepoint (U+2800-U+28FF) by filling the cell's four dot-rows bottom-up,
-// symmetrically across both dot-columns (dots 7+8, then 3+6, then 2+5, then
-// 1+4 per the standard Braille Patterns dot numbering).
-func sparklineGlyph(level int) rune {
-	var dots byte
+// leftColumnDots and rightColumnDots fill one dot-column of a Braille cell
+// bottom-up for a given height level (0..sparklineLevels; 0 means "no data
+// on this side", i.e. no dots at all). These are the left-half and
+// right-half bits of the four whole-glyph bytes the old symmetric
+// sparklineGlyph used (0xC0, 0xE4, 0xF6, 0xFF), split by dot-column:
+// dots 1(0x01)/2(0x02)/3(0x04)/7(0x40) are the left column top-to-bottom;
+// dots 4(0x08)/5(0x10)/6(0x20)/8(0x80) are the right column top-to-bottom.
+// Masking each symmetric byte against the left mask (0x47) or right mask
+// (0xB8) gives exactly these per-level, per-column values.
+func leftColumnDots(level int) byte {
 	switch {
 	case level >= 4:
-		dots = 0xFF // all 8 dots
+		return 0x47 // dots 1+3+7 (0xFF & 0x47)
 	case level == 3:
-		dots = 0xF6 // + dots 2,5 (row1)
+		return 0x46 // dots 3+7   (0xF6 & 0x47)
 	case level == 2:
-		dots = 0xE4 // + dots 3,6 (row2)
+		return 0x44 // dots 3+7 (0xE4 & 0x47)
+	case level == 1:
+		return 0x40 // dot 7 only (0xC0 & 0x47)
 	default:
-		dots = 0xC0 // dots 7,8 (row3, bottom) — the quietest audible glyph;
-		// sparklineLevel never emits below sparklineMinLevel (1), so this
-		// also serves as the safe floor for any out-of-range input.
+		return 0x00 // no data on this side: no dots
 	}
+}
+
+func rightColumnDots(level int) byte {
+	switch {
+	case level >= 4:
+		return 0xB8 // dots 4+5+6+8 (0xFF & 0xB8)
+	case level == 3:
+		return 0xB0 // dots 5+6+8   (0xF6 & 0xB8)
+	case level == 2:
+		return 0xA0 // dots 6+8     (0xE4 & 0xB8)
+	case level == 1:
+		return 0x80 // dot 8 only   (0xC0 & 0xB8)
+	default:
+		return 0x00 // no data on this side: no dots
+	}
+}
+
+// packedSparklineGlyph builds one Braille Pattern codepoint (U+2800-U+28FF)
+// whose left dot-column independently encodes leftLevel and whose right
+// dot-column independently encodes rightLevel (each 0..sparklineLevels, 0
+// meaning "no data on this side" — see RenderVolumeSparkline's Open
+// Question 2 discussion for when a 0 level reaches here alongside a
+// non-zero one). This replaces the old sparklineGlyph, which filled both
+// columns symmetrically from a single level and so could only ever produce
+// 4 distinct glyphs; this can produce up to 5x5 = 25 (including the
+// all-zero/blank combination, which RenderVolumeSparkline never actually
+// emits as a rune — it substitutes a literal space instead so "no data at
+// all" stays a plain ASCII space rather than a valid-looking Braille glyph
+// with 0 dots, which some terminal fonts render identically to a space
+// anyway but which is not guaranteed and would defeat the no-data/silence
+// distinction).
+func packedSparklineGlyph(leftLevel, rightLevel int) rune {
+	dots := leftColumnDots(leftLevel) | rightColumnDots(rightLevel)
 	return rune(0x2800 + int(dots))
 }
 
