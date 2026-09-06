@@ -288,41 +288,54 @@ func RenderAudioLevelMeter(rms int, threshold int) string {
 
 // sparklineFloorRMS and sparklineCeilingRMS bound the RMS range
 // RenderVolumeSparkline maps onto its Braille height steps. RMS at or below
-// the floor renders as the blank (silent) glyph; RMS at or above the ceiling
-// saturates at the loudest glyph. The floor sits just below the acoustic
-// gate's MinMeanRMS (default 120, see SegmenterOptions) so a chunk the gate
-// rejected as low_energy_transient reads as visibly flat-and-low. The
-// mapping between them is logarithmic, not linear (see sparklineLevel) —
-// human speech RMS commonly spans tens to low-thousands, and a linear scale
-// against any single ceiling crushes ordinary accepted speech (RMS
-// ~150-2000) down into the blank glyph, making the sparkline useless for
-// exactly the chunks it's meant to help diagnose.
+// the floor still renders as the quietest *audible* glyph (sparklineMinLevel,
+// "⣀") — not blank — since it represents a real, measured (if silent)
+// bucket; RMS at or above the ceiling saturates at the loudest glyph. The
+// floor sits just below the acoustic gate's MinMeanRMS (default 120, see
+// SegmenterOptions) so a chunk the gate rejected as low_energy_transient
+// still reads as visibly flat-and-low, just never as literally blank — a
+// blank/space glyph is reserved exclusively for buckets with no data at all
+// (see RenderVolumeSparkline). The floor-to-ceiling mapping is logarithmic,
+// not linear (see sparklineLevel) — human speech RMS commonly spans tens to
+// low-thousands, and a linear scale against any single ceiling crushes
+// ordinary accepted speech (RMS ~150-2000) down to the minimum glyph on
+// every bucket, making the sparkline useless for exactly the chunks it's
+// meant to help diagnose.
 const (
 	sparklineFloorRMS   = 80
 	sparklineCeilingRMS = 2048
 )
 
-// sparklineLevels is the number of discrete height steps the sparkline maps
-// RMS values onto (0 = silent glyph, sparklineLevels = loudest glyph). Five
-// steps map cleanly onto filling a Braille cell's four dot-rows bottom-up.
-const sparklineLevels = 4
+// sparklineMinLevel and sparklineLevels bound the discrete height steps the
+// sparkline maps *measured* RMS values onto — sparklineMinLevel (dots 7+8,
+// glyph "⣀") is the quietest audible reading, sparklineLevels is the
+// loudest. There is no "0 = blank" step in this range: blank/space is a
+// separate "no data for this bucket" signal, produced by
+// RenderVolumeSparkline directly, never by sparklineGlyph.
+const (
+	sparklineMinLevel = 1
+	sparklineLevels   = 4
+)
 
 // RenderVolumeSparkline renders a fixed-width (buckets-character) Braille
 // sparkline showing how RMS energy varies across the duration of a PCM
 // buffer (16-bit signed, mono, any sample rate). Unlike RenderAudioLevelMeter
 // (a single instantaneous live-level bar with no time axis), this splits the
 // buffer into `buckets` equal time slices, computes the RMS of each slice,
-// and maps each to one of sparklineLevels+1 Braille cell heights, giving an
-// at-a-glance "loud throughout" vs "trails off to silence" vs "uniformly
-// quiet" shape.
+// and maps each to a Braille cell height, giving an at-a-glance "loud
+// throughout" vs "trails off to silence" vs "uniformly quiet" shape.
+//
+// A plain ASCII space means "no data for this bucket" (the buffer was too
+// short to fill every requested bucket) — distinct from the quietest
+// measured glyph ("⣀"), which means a bucket *was* measured and found
+// silent. Conflating the two would make a genuinely-recorded silent moment
+// indistinguishable from a gap where nothing was ever measured.
 func RenderVolumeSparkline(pcmData []byte, buckets int) string {
 	if buckets <= 0 {
 		buckets = 10
 	}
-	// Braille U+2800 (blank) is the natural "silent" glyph and a safe
-	// placeholder for buffers too short to bucket meaningfully.
 	if len(pcmData) < 2 {
-		return strings.Repeat(string(rune(0x2800)), buckets)
+		return strings.Repeat(" ", buckets)
 	}
 
 	totalSamples := len(pcmData) / 2
@@ -339,7 +352,7 @@ func RenderVolumeSparkline(pcmData []byte, buckets int) string {
 			end = len(pcmData)
 		}
 		if start >= len(pcmData) {
-			sb.WriteRune(sparklineGlyph(0))
+			sb.WriteRune(' ')
 			continue
 		}
 		if end > len(pcmData) {
@@ -351,27 +364,29 @@ func RenderVolumeSparkline(pcmData []byte, buckets int) string {
 	return sb.String()
 }
 
-// sparklineLevel quantizes a raw RMS value into 0..sparklineLevels using a
-// logarithmic scale between sparklineFloorRMS and sparklineCeilingRMS. A
-// linear scale was tried first and rejected: against a ceiling high enough
-// to leave headroom for genuinely loud audio, ordinary accepted speech (RMS
-// in the low hundreds to low thousands) rounded down to 0 on every bucket,
-// rendering as an all-blank sparkline indistinguishable from a rejected
-// low_energy_transient chunk.
+// sparklineLevel quantizes a measured raw RMS value into
+// sparklineMinLevel..sparklineLevels using a logarithmic scale between
+// sparklineFloorRMS and sparklineCeilingRMS — never 0/blank, since reaching
+// this function at all means a real bucket was measured (see
+// RenderVolumeSparkline for the separate "no data" path). A linear scale was
+// tried first and rejected: against a ceiling high enough to leave headroom
+// for genuinely loud audio, ordinary accepted speech (RMS in the low
+// hundreds to low thousands) rounded down to the minimum glyph on every
+// bucket, making quiet-but-accepted and rejected chunks look identical.
 func sparklineLevel(rms int) int {
 	if rms <= sparklineFloorRMS {
-		return 0
+		return sparklineMinLevel
 	}
 	if rms >= sparklineCeilingRMS {
 		return sparklineLevels
 	}
 	ratio := math.Log2(float64(rms)/sparklineFloorRMS) / math.Log2(float64(sparklineCeilingRMS)/sparklineFloorRMS)
-	level := int(ratio * float64(sparklineLevels))
+	level := sparklineMinLevel + int(ratio*float64(sparklineLevels-sparklineMinLevel))
 	if level > sparklineLevels {
 		level = sparklineLevels
 	}
-	if level < 0 {
-		level = 0
+	if level < sparklineMinLevel {
+		level = sparklineMinLevel
 	}
 	return level
 }
@@ -389,10 +404,10 @@ func sparklineGlyph(level int) rune {
 		dots = 0xF6 // + dots 2,5 (row1)
 	case level == 2:
 		dots = 0xE4 // + dots 3,6 (row2)
-	case level == 1:
-		dots = 0xC0 // dots 7,8 (row3, bottom)
 	default:
-		dots = 0x00 // blank
+		dots = 0xC0 // dots 7,8 (row3, bottom) — the quietest audible glyph;
+		// sparklineLevel never emits below sparklineMinLevel (1), so this
+		// also serves as the safe floor for any out-of-range input.
 	}
 	return rune(0x2800 + int(dots))
 }

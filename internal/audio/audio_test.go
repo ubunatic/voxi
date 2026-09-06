@@ -263,8 +263,11 @@ func TestRenderVolumeSparkline(t *testing.T) {
 	quietOnly := generateSineFrame(1000, 0, 20)
 	// A realistic *accepted* chunk's RMS (comparable to what voxi chunks list
 	// actually sees day to day, well below the old linear ceiling of 4000)
-	// must NOT render as all-blank — that was the bug this test now guards
-	// against: a linear scale rounded every ordinary speech RMS down to 0.
+	// must render as real, measured audio — never as a run of "no data"
+	// spaces. That was the original bug this test guards against: a linear
+	// scale rounded every ordinary speech RMS down to the same glyph as
+	// silence, and (separately) silence itself must not render identically
+	// to a bucket with no data at all.
 	moderateSpeech := generateSineFrame(1000, 0, 184)
 
 	gotLoudThenQuiet := RenderVolumeSparkline(loudThenQuiet, 10)
@@ -272,9 +275,11 @@ func TestRenderVolumeSparkline(t *testing.T) {
 	gotModerateSpeech := RenderVolumeSparkline(moderateSpeech, 10)
 
 	// level(3000) saturates at sparklineLevels (>= ceiling 2048) -> glyph
-	// 0x28FF; level(20) is below the floor (80) -> blank 0x2800.
-	wantLoudThenQuiet := strings.Repeat("⣿", 5) + strings.Repeat("⠀", 5)
-	wantQuietOnly := strings.Repeat("⠀", 10)
+	// 0x28FF ("⣿"); level(20) is below the floor (80) -> the minimum
+	// *audible* glyph 0x28C0 ("⣀"), never blank/space — a quiet-but-measured
+	// bucket must stay visually distinct from "no data was measured here".
+	wantLoudThenQuiet := strings.Repeat("⣿", 5) + strings.Repeat("⣀", 5)
+	wantQuietOnly := strings.Repeat("⣀", 10)
 
 	if gotLoudThenQuiet != wantLoudThenQuiet {
 		t.Fatalf("loud-then-quiet sparkline = %q, want %q", gotLoudThenQuiet, wantLoudThenQuiet)
@@ -285,10 +290,31 @@ func TestRenderVolumeSparkline(t *testing.T) {
 	if gotLoudThenQuiet == gotQuietOnly {
 		t.Fatalf("expected loud-then-quiet and uniformly-quiet sparklines to be visibly different, both = %q", gotLoudThenQuiet)
 	}
-	if strings.Trim(gotModerateSpeech, "⠀") == "" {
-		t.Fatalf("moderate-speech (RMS 184) sparkline rendered all-blank: %q — real accepted-chunk volumes must be visible", gotModerateSpeech)
+	if strings.Contains(gotQuietOnly, " ") || strings.Contains(gotLoudThenQuiet, " ") || strings.Contains(gotModerateSpeech, " ") {
+		t.Fatalf("measured audio must never render the no-data space glyph: loud=%q quiet=%q moderate=%q", gotLoudThenQuiet, gotQuietOnly, gotModerateSpeech)
+	}
+	// RMS 184 lands just above the floor -> minimum audible glyph on every
+	// bucket, same as the quiet-only case, but critically it's "⣀" and not
+	// a run of no-data spaces.
+	wantModerateSpeech := strings.Repeat("⣀", 10)
+	if gotModerateSpeech != wantModerateSpeech {
+		t.Fatalf("moderate-speech (RMS 184) sparkline = %q, want %q", gotModerateSpeech, wantModerateSpeech)
 	}
 	if got := len([]rune(gotLoudThenQuiet)); got != 10 {
 		t.Fatalf("expected fixed-width 10-glyph sparkline, got %d glyphs", got)
+	}
+}
+
+func TestRenderVolumeSparklineNoData(t *testing.T) {
+	// A buffer too short to contain even one sample renders as literal
+	// spaces ("no data"), never as the quietest-audible glyph ("⣀") — the
+	// two must stay visually distinguishable.
+	got := RenderVolumeSparkline(nil, 10)
+	want := strings.Repeat(" ", 10)
+	if got != want {
+		t.Fatalf("empty-buffer sparkline = %q, want %q (all spaces)", got, want)
+	}
+	if strings.ContainsAny(got, "⣀⣤⣶⣦⣿") {
+		t.Fatalf("empty-buffer sparkline must contain no Braille glyphs, got %q", got)
 	}
 }

@@ -24,7 +24,7 @@ func TestChunksCommandListAndShow(t *testing.T) {
 		RTF:                   0.2,
 		MeanRMS:               842,
 		PeakRMS:               1200,
-		VolumeSparkline:       "⣶⣶⣶⣶⣶⠀⠀⠀⠀⠀",
+		VolumeSparkline:       "⣶⣶⣶⣶⣶⣀⣀⣀⣀⣀",
 		RawTranscript:         "hello world",
 		CleanedTranscript:     "hello world",
 		Accepted:              true,
@@ -37,7 +37,7 @@ func TestChunksCommandListAndShow(t *testing.T) {
 		RTF:                   0.25,
 		MeanRMS:               95,
 		PeakRMS:               140,
-		VolumeSparkline:       "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀",
+		VolumeSparkline:       "⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀",
 		RawTranscript:         "bye.",
 		CleanedTranscript:     "bye",
 		Accepted:              false,
@@ -72,11 +72,11 @@ func TestChunksCommandListAndShow(t *testing.T) {
 	}
 	// Accepted chunk (c1): mean RMS 842 and its loud-then-quiet sparkline,
 	// bracketed so the LEVEL column reads as a bounded meter.
-	if !strings.Contains(outStr, "842") || !strings.Contains(outStr, "[⣶⣶⣶⣶⣶⠀⠀⠀⠀⠀]") {
+	if !strings.Contains(outStr, "842") || !strings.Contains(outStr, "[⣶⣶⣶⣶⣶⣀⣀⣀⣀⣀]") {
 		t.Fatalf("expected accepted chunk's RMS/bracketed sparkline in list output, got:\n%s", outStr)
 	}
 	// Rejected (low_energy_transient) chunk (c2): mean RMS 95 and its flat-low sparkline.
-	if !strings.Contains(outStr, "95") || !strings.Contains(outStr, "[⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀]") {
+	if !strings.Contains(outStr, "95") || !strings.Contains(outStr, "[⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀]") {
 		t.Fatalf("expected rejected chunk's RMS/bracketed sparkline in list output, got:\n%s", outStr)
 	}
 
