@@ -42,7 +42,7 @@ func NewCommand(d deps.Dependencies, buf *Buffer) *cobra.Command {
 				return enc.Encode(chunks)
 			}
 
-			fmt.Fprintf(d.Stdout, "%-6s  %-19s  %-7s  %-5s  %5s  %-10s  %-10s  %s\n",
+			fmt.Fprintf(d.Stdout, "%-6s  %-19s  %-7s  %-5s  %5s  %-12s  %-10s  %s\n",
 				"INDEX", "TIMESTAMP", "AUDIO", "RTF", "RMS", "LEVEL", "STATUS", "TRANSCRIPT")
 			for _, c := range chunks {
 				status := "accepted"
@@ -61,8 +61,13 @@ func NewCommand(d deps.Dependencies, buf *Buffer) *cobra.Command {
 					text = text[:37] + "..."
 				}
 				ts := c.Timestamp.Local().Format("2006-01-02 15:04:05")
-				fmt.Fprintf(d.Stdout, "#%-5d  %-19s  %5.1fs  %5.2f  %5d  %-10s  %-10s  %s\n",
-					c.Index, ts, c.AudioDurationSecs, c.RTF, c.MeanRMS, c.VolumeSparkline, status, text)
+				// Bracket the sparkline so it reads as a bounded meter rather
+				// than a stray glyph string floating in whitespace, and so a
+				// missing/empty sparkline (chunks recorded before this field
+				// existed) still shows a visible "[]" rather than nothing.
+				level := "[" + c.VolumeSparkline + "]"
+				fmt.Fprintf(d.Stdout, "#%-5d  %-19s  %5.1fs  %5.2f  %5d  %-12s  %-10s  %s\n",
+					c.Index, ts, c.AudioDurationSecs, c.RTF, c.MeanRMS, level, status, text)
 			}
 			return nil
 		},

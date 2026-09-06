@@ -70,13 +70,14 @@ func TestChunksCommandListAndShow(t *testing.T) {
 	if !strings.Contains(outStr, "RMS") || !strings.Contains(outStr, "LEVEL") {
 		t.Fatalf("expected RMS and LEVEL column headers in list output, got:\n%s", outStr)
 	}
-	// Accepted chunk (c1): mean RMS 842 and its loud-then-quiet sparkline.
-	if !strings.Contains(outStr, "842") || !strings.Contains(outStr, "⣶⣶⣶⣶⣶⠀⠀⠀⠀⠀") {
-		t.Fatalf("expected accepted chunk's RMS/sparkline in list output, got:\n%s", outStr)
+	// Accepted chunk (c1): mean RMS 842 and its loud-then-quiet sparkline,
+	// bracketed so the LEVEL column reads as a bounded meter.
+	if !strings.Contains(outStr, "842") || !strings.Contains(outStr, "[⣶⣶⣶⣶⣶⠀⠀⠀⠀⠀]") {
+		t.Fatalf("expected accepted chunk's RMS/bracketed sparkline in list output, got:\n%s", outStr)
 	}
 	// Rejected (low_energy_transient) chunk (c2): mean RMS 95 and its flat-low sparkline.
-	if !strings.Contains(outStr, "95") || !strings.Contains(outStr, "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀") {
-		t.Fatalf("expected rejected chunk's RMS/sparkline in list output, got:\n%s", outStr)
+	if !strings.Contains(outStr, "95") || !strings.Contains(outStr, "[⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀]") {
+		t.Fatalf("expected rejected chunk's RMS/bracketed sparkline in list output, got:\n%s", outStr)
 	}
 
 	// Test show last command
