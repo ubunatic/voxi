@@ -1,6 +1,6 @@
 # 071 — Colorize the LEVEL Sparkline in `voxi chunks list` (`--color` flag, design proposal)
 
-**Status**: Proposed
+**Status**: In Progress — fresh-sprint: implementing --color flag, dev agent to decide open design questions
 **Priority**: P3 (Low)
 **Severity**: Enhancement
 **Category**: Feature
