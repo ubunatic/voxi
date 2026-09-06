@@ -1,6 +1,6 @@
 # 065: FluidVoice Silence Detection, Chunking, and Bad-Chunk Rejection (Research)
 
-**Status**: In Progress — starting research per user request
+**Status**: Research Complete — Reject (Voxi's existing `internal/audio` segmenter already exceeds FluidVoice's rejection gate; the one more-sophisticated piece, the learned EOU endpointing model, is opaque and Apple-Silicon-locked)
 **Priority**: P3 (Low)
 **Severity**: Informational
 **Category**: Research
@@ -94,7 +94,102 @@ worth adopting into Voxi given how much prior work already exists here.
   post-processing (063), or STT model licensing/portability (064) — those
   are covered by their own tickets.
 
-## 5. Background
+## 5. Research Findings
+
+**1. Chunk-boundary triggers.** `ParakeetRealtimeProvider.swift` does not implement
+endpointing itself — it delegates entirely to an external Swift package,
+`altic-dev/FluidAudio` (`StreamingEouAsrManager`, pulled in via
+`Package.swift` as a separate git dependency, not vendored into this repo).
+FluidVoice's own code just feeds PCM in (`appendAudio`/`processBufferedAudio`)
+and reads back `getPartialTranscript()`/`finish()`. **Confirmed**: the
+`nvidia/parakeet_realtime_eou_120m-v1` EOU model is genuinely wired into the
+realtime path (not just listed as an available model), but its actual
+endpointing algorithm is opaque from FluidVoice's source — it lives inside
+FluidAudio/the CoreML model itself, and FluidVoice never re-implements or
+overrides it with an app-level VAD/timeout for the realtime path.
+
+**2. Bad-chunk rejection.** `ASRService.swift` has one explicit, deterministic
+rejection gate: `assessShortAudioSilence(_:sampleRate:)` (line ~104). It is
+**not** an EOU/ML gate — it's a plain three-condition energy check computed
+over 20ms frames: `peak < 0.01 && rms < 0.002 && maximumFrameRMS < 0.0045`
+(all three must hold to skip). Critically, it's gated to only run when
+`shouldAssessShortAudioSilence` is true: `isEligible` requires the captured
+buffer be non-empty and **≤ 4 seconds** (`sampleRate * 4` samples), and the
+caller additionally requires `!hasRecognizedStreamingPreview` (skip only
+applies to buffers that never produced a streaming partial) and
+`!useDictionaryTrainingPath`. In other words: this is a *last-chance,
+whole-recording* reject applied only to short push-to-talk-style captures
+that had no live partial — not a continuous VAD. Comment in source: "keeps
+quiet speech and short words on the ASR path," i.e. deliberately conservative
+to avoid false-rejecting real short utterances.
+
+Structurally this maps closely to Voxi's own short-pause acoustic gating
+(issue 054) in spirit (avoid dispatching non-speech to the STT/typing path)
+but is a strictly simpler mechanism: single whole-buffer RMS/peak check with
+no silence-duration state machine, versus Voxi's `internal/audio.AudioSegmenter`
+which already does a full VAD-style state machine (`ThresholdRMS=150`,
+`SilenceMs=800` debounce, `MinVoicedFrames=8`, `MinMeanRMS=120`,
+consecutive-silence-frame counting, post-roll trimming). **Voxi's existing
+segmenter is more sophisticated than FluidVoice's rejection gate**, not the
+other way around — FluidVoice's gate is a narrow post-hoc safety net for a
+capture mode (push-to-talk, no streaming preview) that doesn't fully apply to
+Voxi's already-streaming architecture.
+
+**3. Capture/buffer lifecycle and race-safety.** `ThreadSafeAudioBuffer` is a
+simple `NSLock`-guarded `[Float]` append/read wrapper — no novel pattern,
+directly equivalent to a Go `sync.Mutex`-guarded slice. `AudioEngineRetirementDrain`
+and `AudioCaptureReadinessGate`/`AudioStartupGate` solve macOS-specific
+problems that don't exist in Voxi's stack: `AVAudioEngine` deallocation
+blocking on a hidden `AVAudioIOUnit` queue (drain exists purely to serialize
+that dealloc off the main actor), and CoreAudio initialization racing SwiftUI's
+AttributeGraph during app launch (startup gate exists purely to delay
+CoreAudio setup by two run-loop turns + a fixed safety delay after launch).
+Voxi's Go audio stack talks to ALSA/PipeWire directly with no SwiftUI-style
+launch-race or engine-dealloc-blocking equivalent, so none of these three
+patterns transfer. The one moderately interesting idea — a dedicated
+retirement queue serializing "old engine teardown" so it can't overlap "new
+engine construction" — has a spiritual echo in issue 057 (the recording
+start/stop race that caused delayed hallucinated typing after stop), but
+057's actual fix and this repo's current `internal/record`/`internal/audio`
+code should be checked directly if this pattern is ever suspected to recur;
+nothing here suggests it currently does.
+
+**4. EOU model value and portability.** Value: plausible but unverifiable
+from FluidVoice's source alone, since the endpointing logic is entirely
+inside the external FluidAudio package and/or the CoreML model weights, not
+inspectable here. Portability: **poor** — `ParakeetRealtimeProvider` is
+compiled only `#if arch(arm64)` and depends on `CoreML` + `FluidAudio`
+(macOS/Apple Silicon-only Swift packages). No ONNX or other portable export
+of the EOU-specific realtime pipeline was found; this is consistent with
+issue 064's finding that Parakeet Flash is "portable but nontrivial" (only
+unofficial ONNX ports exist) and orthogonal to the RTF/accuracy question
+064 already covers — 064 is about the *transcription* model, this ticket is
+about the *endpointing* model, and no separate portable EOU artifact was
+found beyond what's bundled in FluidAudio's Apple-only pipeline.
+
+### Verdict: Reject (with one narrow reduced-form note)
+
+FluidVoice's actual bad-chunk-rejection code (the only fully-inspectable
+piece) is *simpler* than what Voxi already has in `internal/audio`, so there
+is nothing to adopt there — Voxi's existing `AudioSegmenter` already
+subsumes it. The one genuinely more-sophisticated piece (the learned EOU
+endpointing model) is opaque, macOS/Apple-Silicon-locked, and not available
+in a portable form, so it cannot be adopted either. The buffer-lifecycle and
+gate/drain patterns solve macOS-only problems (SwiftUI launch races,
+`AVAudioEngine` dealloc blocking) that have no counterpart in Voxi's
+ALSA/PipeWire-based Go stack.
+
+**Reduced-form note**: the one transferable idea, if ever wanted, is
+FluidVoice's explicit "only run the extra safety check on short,
+no-live-partial captures" gating condition (`shouldAssessShortAudioSilence`)
+as a design pattern — i.e., reserving a stricter/cheaper deterministic
+reject specifically for the capture mode that skipped streaming validation,
+rather than applying it uniformly. This is a scoping idea, not a mechanism,
+and only worth considering if Voxi ever adds a non-streaming/push-to-talk
+capture mode alongside its current eager streaming path (021) — it does not
+apply today.
+
+## 6. Background
 
 Raised 2026-09-06 after the user asked to evaluate FluidVoice
 (`https://github.com/altic-dev/FluidVoice`) as a source of adoptable ideas
