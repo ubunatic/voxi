@@ -256,10 +256,10 @@ func TestRenderAudioLevelMeter(t *testing.T) {
 }
 
 func TestRenderVolumeSparkline(t *testing.T) {
-	// Loud first half (RMS 3000, at/above sparklineCeilingRMS), quiet second
-	// half (RMS 20, below sparklineFloorRMS) — 10 buckets over 1000 samples
-	// means each bucket is exactly one half or the other.
-	loudThenQuiet := append(generateSineFrame(500, 0, 3000), generateSineFrame(500, 0, 20)...)
+	// Loud first half (RMS 10000, at/above sparklineCeilingRMS of 8192),
+	// quiet second half (RMS 20, below sparklineFloorRMS) — 10 buckets over
+	// 1000 samples means each bucket is exactly one half or the other.
+	loudThenQuiet := append(generateSineFrame(500, 0, 10000), generateSineFrame(500, 0, 20)...)
 	quietOnly := generateSineFrame(1000, 0, 20)
 	// A realistic *accepted* chunk's RMS (comparable to what voxi chunks list
 	// actually sees day to day, well below the old linear ceiling of 4000)
@@ -274,7 +274,7 @@ func TestRenderVolumeSparkline(t *testing.T) {
 	gotQuietOnly := RenderVolumeSparkline(quietOnly, 10)
 	gotModerateSpeech := RenderVolumeSparkline(moderateSpeech, 10)
 
-	// level(3000) saturates at sparklineLevels (>= ceiling 2048) -> glyph
+	// level(10000) saturates at sparklineLevels (>= ceiling 8192) -> glyph
 	// 0x28FF ("⣿"); level(20) is below the floor (80) -> the minimum
 	// *audible* glyph 0x28C0 ("⣀"), never blank/space — a quiet-but-measured
 	// bucket must stay visually distinct from "no data was measured here".
@@ -302,6 +302,27 @@ func TestRenderVolumeSparkline(t *testing.T) {
 	}
 	if got := len([]rune(gotLoudThenQuiet)); got != 10 {
 		t.Fatalf("expected fixed-width 10-glyph sparkline, got %d glyphs", got)
+	}
+}
+
+// TestSparklineLevelRealWorldCalibration locks in the ceiling chosen after
+// inspecting real per-bucket RMS values from actual recordings (2026-09-06):
+// a ceiling of 2048 made ordinary conversational speech (buckets commonly
+// spiking to 600-1500) read as 2-3 out of 4 dots on every recording,
+// regardless of how quiet the speaker actually was — everything looked
+// "loud". These are real bucket RMS values pulled from an actual accepted
+// chunk; none of them should reach the top glyph, since none represent
+// audio anywhere near clipping (int16 full-scale is 32767).
+func TestSparklineLevelRealWorldCalibration(t *testing.T) {
+	realBucketRMS := []int{594, 709, 1324, 933, 648, 464, 867, 832, 1464, 925}
+	for _, rms := range realBucketRMS {
+		if level := sparklineLevel(rms); level >= sparklineLevels {
+			t.Fatalf("RMS %d (typical conversational speech) hit the max level %d — ceiling too low", rms, level)
+		}
+	}
+	// And genuinely loud/near-clipping audio must still reach the top.
+	if level := sparklineLevel(sparklineCeilingRMS); level != sparklineLevels {
+		t.Fatalf("RMS at the ceiling (%d) should saturate at max level %d, got %d", sparklineCeilingRMS, sparklineLevels, level)
 	}
 }
 

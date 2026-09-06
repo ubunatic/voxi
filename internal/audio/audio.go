@@ -301,9 +301,18 @@ func RenderAudioLevelMeter(rms int, threshold int) string {
 // ordinary accepted speech (RMS ~150-2000) down to the minimum glyph on
 // every bucket, making the sparkline useless for exactly the chunks it's
 // meant to help diagnose.
+//
+// The ceiling was originally 2048, tuned only against synthetic test tones.
+// Inspecting real per-bucket RMS from actual recordings showed ordinary
+// conversational speech commonly spiking to 600-1500 per bucket (well below
+// what a listener would call "loud"), which the 2048 ceiling already read as
+// 2-3 out of 4 dots — everything looked "loud". 8192 (25% of int16
+// full-scale headroom, 32767) leaves real speech room to breathe: typical
+// buckets land around level 1-2, level 3 needs genuinely elevated volume,
+// and level 4 is reserved for audio close to clipping.
 const (
 	sparklineFloorRMS   = 80
-	sparklineCeilingRMS = 2048
+	sparklineCeilingRMS = 8192
 )
 
 // sparklineMinLevel and sparklineLevels bound the discrete height steps the
