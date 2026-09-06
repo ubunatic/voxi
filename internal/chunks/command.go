@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"ubunatic.com/voxi/internal/deps"
@@ -22,11 +23,15 @@ func NewCommand(d deps.Dependencies, buf *Buffer) *cobra.Command {
 
 	var reverse bool
 	var listFormat string
+	var colorMode string
 	listCmd := &cobra.Command{
 		Use:   "list",
 		Short: "List recent recorded chunks and their transcription outcomes",
 		Args:  cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
+			if !isValidColorMode(colorMode) {
+				return fmt.Errorf("invalid --color value %q: must be one of %s", colorMode, strings.Join(validColorModes, ", "))
+			}
 			chunks, err := buf.List(reverse)
 			if err != nil {
 				return err
@@ -41,6 +46,12 @@ func NewCommand(d deps.Dependencies, buf *Buffer) *cobra.Command {
 				enc.SetIndent("", "  ")
 				return enc.Encode(chunks)
 			}
+
+			var noColorEnv string
+			if d.Getenv != nil {
+				noColorEnv = d.Getenv("NO_COLOR")
+			}
+			useColor := shouldUseColor(colorMode, noColorEnv, stdoutIsTerminal(d.Stdout))
 
 			fmt.Fprintf(d.Stdout, "%-6s  %-19s  %-7s  %-5s  %5s  %-12s  %-10s  %s\n",
 				"INDEX", "TIMESTAMP", "AUDIO", "RTF", "RMS", "LEVEL", "STATUS", "TRANSCRIPT")
@@ -65,8 +76,15 @@ func NewCommand(d deps.Dependencies, buf *Buffer) *cobra.Command {
 				// than a stray glyph string floating in whitespace, and so a
 				// missing/empty sparkline (chunks recorded before this field
 				// existed) still shows a visible "[]" rather than nothing.
-				level := "[" + c.VolumeSparkline + "]"
-				fmt.Fprintf(d.Stdout, "#%-5d  %-19s  %5.1fs  %5.2f  %5d  %-12s  %-10s  %s\n",
+				// Pad to the column's fixed width *before* colorizing --
+				// colorizeSparkline only ever adds invisible ANSI bytes
+				// after this point, so it can never disturb alignment with
+				// the columns that follow (see color.go).
+				level := fmt.Sprintf("%-12s", "["+c.VolumeSparkline+"]")
+				if useColor {
+					level = colorizeSparkline(level)
+				}
+				fmt.Fprintf(d.Stdout, "#%-5d  %-19s  %5.1fs  %5.2f  %5d  %s  %-10s  %s\n",
 					c.Index, ts, c.AudioDurationSecs, c.RTF, c.MeanRMS, level, status, text)
 			}
 			return nil
@@ -74,6 +92,7 @@ func NewCommand(d deps.Dependencies, buf *Buffer) *cobra.Command {
 	}
 	listCmd.Flags().BoolVarP(&reverse, "reverse", "r", false, "list newest chunks first")
 	listCmd.Flags().StringVar(&listFormat, "format", "text", "output format (text or json)")
+	listCmd.Flags().StringVar(&colorMode, "color", colorAuto, "colorize the LEVEL sparkline by loudness: auto, always, or never")
 
 	var showFormat string
 	showCmd := &cobra.Command{

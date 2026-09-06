@@ -1,6 +1,6 @@
 # 071 — Colorize the LEVEL Sparkline in `voxi chunks list` (`--color` flag, design proposal)
 
-**Status**: In Progress — fresh-sprint: implementing --color flag, dev agent to decide open design questions
+**Status**: Implemented
 **Priority**: P3 (Low)
 **Severity**: Enhancement
 **Category**: Feature
@@ -196,3 +196,97 @@ real-usage calibration rounds in the same session. The user's own
 framing — "think of how" — signals this is meant as an open design
 exploration to seed a future ticket, not a request to ship a specific
 color scheme now.
+
+## Implementation Notes
+
+Implemented 2026-09-06 as a fresh-sprint follow-up, with the dev agent
+authorized to make the open-question calls below rather than stopping to ask.
+
+1. **Flag shape: `--color=auto|always|never` (tri-state string, default
+   `auto`).** Chosen over a bool+auto-default per the ticket's own framing —
+   the user described exactly this on/auto/off semantics and named it
+   "auto," and it matches the git/ls/grep convention every user of a color
+   flag already expects. Scoped to `chunks list` only (see #3).
+
+2. **Color scheme: per-glyph loudness ramp, `LEVEL` column only.** Each of
+   the 4 possible Braille height glyphs (`⣀⣤⣶⣿`) gets its own ANSI code —
+   dim gray (90) → cyan (36) → yellow (33) → bright red (31;1), quietest to
+   loudest — reusing exactly the height quantization
+   `audio.sparklineLevel`/`sparklineGlyph` already computes, so color
+   reinforces the existing meaning instead of introducing a second one.
+   Outcome-based (accept/reject) coloring of the sparkline or of `STATUS`
+   was left out of scope, as the ticket's Non-Goals explicitly flagged it as
+   a separate open question rather than a foregone expansion — worth a
+   follow-up ticket if wanted (e.g. coloring `STATUS`'s `rej:...`/`accepted`
+   text), but combining it with loudness coloring on the same column would
+   have competed for the same terminal attribute (color) for two different
+   meanings, which is more confusing, not more informative.
+
+3. **Flag scope: `chunks list` only, not persistent on `chunks`.**
+   Confirmed `voxi chunks show`'s text formatter
+   (`FormatChunkDetails`, `internal/chunks/command.go`) still does not
+   render `VolumeSparkline` at all (issue 070 left that undone, and this
+   ticket didn't add it — out of scope per the task brief), and `show`'s
+   JSON output is raw data with no ANSI concerns. `list`'s row-printing loop
+   is the only call site that needed the flag, so a `list`-local
+   `cobra.Flags()` StringVar was simplest and avoids advertising a flag on
+   `show`/`play` that would silently do nothing.
+
+4. **`NO_COLOR` is honored and overrides even `--color=always`.** Any
+   non-empty `NO_COLOR` value forces color off unconditionally, per the
+   well-known convention and this repo's own existing precedent of
+   respecting it (`internal/eager/eager.go`, `internal/devsample/transcribe.go`
+   set it for subprocesses). This intentionally overrides an explicit
+   `--color=always`, on the reasoning that `NO_COLOR` is normally an
+   environment-wide opt-out (terminal/CI/accessibility setting) that
+   shouldn't be silently defeated by a leftover flag in a script or shell
+   alias.
+
+5. **Mechanism: pad first, colorize second.** `internal/chunks/color.go`
+   adds `stdoutIsTerminal` (mirrors `internal/devsample/lineedit.go`'s
+   `stdinIsTerminal`, type-asserting `io.Writer` to `*os.File` before
+   calling `term.IsTerminal` — a `*bytes.Buffer` or any non-`*os.File`
+   writer is correctly treated as non-interactive), `shouldUseColor`
+   (pure resolver taking the flag value, `NO_COLOR` env value, and a bool
+   `isTerminal` — fully unit-testable without a real TTY), and
+   `colorizeSparkline`. The `LEVEL` string is first built and padded to
+   its final fixed width via `fmt.Sprintf("%-12s", ...)` exactly as before,
+   *then* `colorizeSparkline` wraps each recognized glyph rune in ANSI
+   codes — since padding already happened, the added invisible bytes can
+   never be miscounted as visible columns by a later width format. This
+   was chosen over an ANSI-aware padder (like
+   `internal/monitor/render.go`'s `TruncateLineANSI`) because only one
+   already-fixed-width column ever needs coloring here, making the
+   pad-then-colorize order simpler and equally correct.
+   `sparklineGlyphANSI`'s rune-to-color map duplicates `audio.go`'s 4-glyph
+   dot-pattern set as literal rune constants rather than importing
+   `internal/audio`'s unexported bits — deliberately, since `audio.go` is
+   on the live daemon's (`voxi-agent.service`) capture path and this
+   feature has nothing to do with capture; keeping the change confined to
+   `internal/chunks` meant `make install` (not `make restart-service`)
+   was sufficient to test it.
+
+**Test results**: `go build ./...`, `go vet ./...`, and `make check`
+(`go test ./...` across all packages, plus `spec` tests) all pass.
+`internal/chunks/color_test.go` adds `TestShouldUseColor` (auto+tty,
+auto+non-tty, always, never, and NO_COLOR overriding always/auto — all as
+pure logic, no real TTY needed), `TestIsValidColorMode`,
+`TestStdoutIsTerminal` (asserts a `*bytes.Buffer` is never a terminal),
+`TestColorizeSparkline` (asserts ANSI-stripped output equals the original
+plain string), and `TestChunksListColorFlag` (end-to-end through
+`NewCommand`, asserting: default/auto against a non-tty `*bytes.Buffer`
+stdout produces no ANSI; `--color=always` produces ANSI whose
+ANSI-stripped content exactly matches the plain rendering, i.e. column
+alignment is provably unaffected; `--color=never` produces no ANSI;
+`NO_COLOR=1` overrides `--color=always`; an invalid `--color` value
+errors).
+
+Manual verification (`make install`, real binary):
+- `voxi chunks list` (no real TTY in this shell either) → plain, uncolored.
+- `voxi chunks list --color=always | cat` → each `LEVEL` glyph individually
+  wrapped in its loudness-ramp ANSI code (e.g. `\x1b[33m⣶\x1b[0m`), other
+  columns (`STATUS`, `TRANSCRIPT`) unaffected and correctly aligned.
+- `voxi chunks list --color=never` → plain, uncolored.
+- `NO_COLOR=1 voxi chunks list --color=always` → plain, uncolored (override
+  confirmed).
+- `voxi chunks list --color=bogus` → rejected with a usage error, exit 1.
