@@ -286,12 +286,21 @@ func RenderAudioLevelMeter(rms int, threshold int) string {
 	return sb.String()
 }
 
-// sparklineMaxRMS is the reference RMS ceiling mapped to the loudest Braille
-// glyph step in RenderVolumeSparkline. It sits well above the acoustic gate's
-// ~150-2000 raw-RMS thresholds (SegmenterOptions.ThresholdRMS/MinMeanRMS) so
-// that both quiet-but-accepted and clearly loud speech are visually
-// distinguishable, while still saturating on genuinely loud/clipping audio.
-const sparklineMaxRMS = 4000
+// sparklineFloorRMS and sparklineCeilingRMS bound the RMS range
+// RenderVolumeSparkline maps onto its Braille height steps. RMS at or below
+// the floor renders as the blank (silent) glyph; RMS at or above the ceiling
+// saturates at the loudest glyph. The floor sits just below the acoustic
+// gate's MinMeanRMS (default 120, see SegmenterOptions) so a chunk the gate
+// rejected as low_energy_transient reads as visibly flat-and-low. The
+// mapping between them is logarithmic, not linear (see sparklineLevel) —
+// human speech RMS commonly spans tens to low-thousands, and a linear scale
+// against any single ceiling crushes ordinary accepted speech (RMS
+// ~150-2000) down into the blank glyph, making the sparkline useless for
+// exactly the chunks it's meant to help diagnose.
+const (
+	sparklineFloorRMS   = 80
+	sparklineCeilingRMS = 2048
+)
 
 // sparklineLevels is the number of discrete height steps the sparkline maps
 // RMS values onto (0 = silent glyph, sparklineLevels = loudest glyph). Five
@@ -342,14 +351,27 @@ func RenderVolumeSparkline(pcmData []byte, buckets int) string {
 	return sb.String()
 }
 
-// sparklineLevel quantizes a raw RMS value into 0..sparklineLevels.
+// sparklineLevel quantizes a raw RMS value into 0..sparklineLevels using a
+// logarithmic scale between sparklineFloorRMS and sparklineCeilingRMS. A
+// linear scale was tried first and rejected: against a ceiling high enough
+// to leave headroom for genuinely loud audio, ordinary accepted speech (RMS
+// in the low hundreds to low thousands) rounded down to 0 on every bucket,
+// rendering as an all-blank sparkline indistinguishable from a rejected
+// low_energy_transient chunk.
 func sparklineLevel(rms int) int {
-	if rms <= 0 {
+	if rms <= sparklineFloorRMS {
 		return 0
 	}
-	level := rms * sparklineLevels / sparklineMaxRMS
+	if rms >= sparklineCeilingRMS {
+		return sparklineLevels
+	}
+	ratio := math.Log2(float64(rms)/sparklineFloorRMS) / math.Log2(float64(sparklineCeilingRMS)/sparklineFloorRMS)
+	level := int(ratio * float64(sparklineLevels))
 	if level > sparklineLevels {
 		level = sparklineLevels
+	}
+	if level < 0 {
+		level = 0
 	}
 	return level
 }

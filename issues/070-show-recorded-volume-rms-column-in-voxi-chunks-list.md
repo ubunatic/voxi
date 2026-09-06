@@ -216,3 +216,31 @@ change. Existing ring-buffer chunks recorded before this change (their
 `MeanRMS`/`PeakRMS` were already populated, but `VolumeSparkline` didn't
 exist as a field yet) show a populated `RMS` column but a blank `LEVEL`
 column, as expected — new chunks recorded going forward get both.
+
+### Post-implementation fix (2026-09-06): calibration bug — real chunks rendered all-blank
+
+The user's first real recording under the new code (`#310`, mean RMS 184,
+"This is a test.", accepted) rendered `LEVEL` as `⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀` — completely
+blank, indistinguishable from a `low_energy_transient` rejection. Root
+cause: the initial linear mapping (`rms * 4 / 4000`) needed an RMS around
+1000 just to reach level 1, but the acoustic gate's own thresholds
+(`MinMeanRMS`=120, `ThresholdRMS`=150) mean *most ordinary accepted
+speech* sits in the low hundreds — the exact range the chosen ceiling
+crushed to 0. The synthetic test cases (RMS 20 vs. 3000) never exercised
+this middle range, so `go test`/`make check` passed while the feature was
+non-functional for real audio.
+
+Fix: replaced the linear scale with a logarithmic one between a floor of
+80 (just below the gate's 120 `MinMeanRMS`) and a ceiling of 2048, in
+`internal/audio/audio.go`'s `sparklineLevel`. RMS 184 now maps to level 1
+(a visible bottom-row glyph) instead of 0; RMS at/below the floor (e.g.
+the 95 used in the `rej:low_energy_transient` test fixture) still maps to
+blank. `internal/audio/audio_test.go`'s `TestRenderVolumeSparkline` gained
+a third case — a synthetic RMS-184 buffer — asserting it does *not*
+render all-blank, specifically to guard against this regression recurring;
+the loud-case expected glyph changed from `⣶` (old level 3) to `⣿` (now
+saturates at level 4, since 3000 exceeds the new ceiling of 2048).
+`internal/chunks/command_test.go`'s fixture strings were untouched (they
+assign `VolumeSparkline` directly as test data, independent of the
+renderer). `go build`/`make check` re-verified passing; binary reinstalled
+and service restarted again.

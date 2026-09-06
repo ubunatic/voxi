@@ -256,17 +256,24 @@ func TestRenderAudioLevelMeter(t *testing.T) {
 }
 
 func TestRenderVolumeSparkline(t *testing.T) {
-	// Loud first half (RMS 3000, well above sparklineMaxRMS/2), quiet second
-	// half (RMS 20, near-silent) — 10 buckets over 1000 samples means each
-	// bucket is exactly one half or the other.
+	// Loud first half (RMS 3000, at/above sparklineCeilingRMS), quiet second
+	// half (RMS 20, below sparklineFloorRMS) — 10 buckets over 1000 samples
+	// means each bucket is exactly one half or the other.
 	loudThenQuiet := append(generateSineFrame(500, 0, 3000), generateSineFrame(500, 0, 20)...)
 	quietOnly := generateSineFrame(1000, 0, 20)
+	// A realistic *accepted* chunk's RMS (comparable to what voxi chunks list
+	// actually sees day to day, well below the old linear ceiling of 4000)
+	// must NOT render as all-blank — that was the bug this test now guards
+	// against: a linear scale rounded every ordinary speech RMS down to 0.
+	moderateSpeech := generateSineFrame(1000, 0, 184)
 
 	gotLoudThenQuiet := RenderVolumeSparkline(loudThenQuiet, 10)
 	gotQuietOnly := RenderVolumeSparkline(quietOnly, 10)
+	gotModerateSpeech := RenderVolumeSparkline(moderateSpeech, 10)
 
-	// level(3000) = 3000*4/4000 = 3 -> glyph 0x28F6; level(20) = 0 -> blank 0x2800.
-	wantLoudThenQuiet := strings.Repeat("⣶", 5) + strings.Repeat("⠀", 5)
+	// level(3000) saturates at sparklineLevels (>= ceiling 2048) -> glyph
+	// 0x28FF; level(20) is below the floor (80) -> blank 0x2800.
+	wantLoudThenQuiet := strings.Repeat("⣿", 5) + strings.Repeat("⠀", 5)
 	wantQuietOnly := strings.Repeat("⠀", 10)
 
 	if gotLoudThenQuiet != wantLoudThenQuiet {
@@ -277,6 +284,9 @@ func TestRenderVolumeSparkline(t *testing.T) {
 	}
 	if gotLoudThenQuiet == gotQuietOnly {
 		t.Fatalf("expected loud-then-quiet and uniformly-quiet sparklines to be visibly different, both = %q", gotLoudThenQuiet)
+	}
+	if strings.Trim(gotModerateSpeech, "⠀") == "" {
+		t.Fatalf("moderate-speech (RMS 184) sparkline rendered all-blank: %q — real accepted-chunk volumes must be visible", gotModerateSpeech)
 	}
 	if got := len([]rune(gotLoudThenQuiet)); got != 10 {
 		t.Fatalf("expected fixed-width 10-glyph sparkline, got %d glyphs", got)
