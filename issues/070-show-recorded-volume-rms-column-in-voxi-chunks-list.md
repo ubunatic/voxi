@@ -1,6 +1,6 @@
 # 070: Show Recorded Volume (RMS) and a Speech-Level Sparkline in `voxi chunks list`
 
-**Status**: In Progress — fresh-sprint: implementing RMS column + speech-level sparkline
+**Status**: Implemented
 **Priority**: P3 (Low)
 **Severity**: Enhancement
 **Category**: Enhancement
@@ -165,3 +165,54 @@ computation (per-time-bucket RMS + Braille-glyph mapping), since no
 existing code renders a level-over-time strip — the existing
 `audio.RenderAudioLevelMeter` is a single-value live bar, not a
 sparkline. See Section 3 for the two implementation options considered.
+
+## Implementation Notes
+
+**Column layout** (`internal/chunks/command.go`): `voxi chunks list`'s
+text-format header/row is now `INDEX  TIMESTAMP  AUDIO  RTF  RMS  LEVEL
+STATUS  TRANSCRIPT`, with `RMS` (mean RMS, `%5d`) and `LEVEL` (the
+sparkline, `%-10s`) inserted between `RTF` and `STATUS` as scoped.
+`--format json` is unchanged apart from the new `volume_sparkline` field
+described below (already a normal serialized `Chunk` field, same as every
+other one).
+
+**Sparkline design** (`internal/audio/audio.go`, `RenderVolumeSparkline`):
+new renderer, independent of `RenderAudioLevelMeter` (left untouched). It
+splits the chunk's raw PCM into 10 equal-sample-count time buckets,
+computes each bucket's RMS via the existing `ComputeAudioRMS`, and
+quantizes each bucket into one of 5 height steps (0-4) against a fixed
+reference ceiling of RMS 4000 (chosen to sit well above the acoustic
+gate's ~150-2000 raw-RMS thresholds so both quiet-but-accepted and loud
+speech are visually distinguishable, while still saturating on
+genuinely loud audio — an *absolute*, not per-chunk-normalized, scale,
+so a `low_energy_transient` chunk reads as flat-and-low rather than
+being rescaled to look artificially varied). Each step maps to a Braille
+Pattern glyph (U+2800 range) by filling the cell's 4 dot-rows bottom-up
+symmetrically across both dot-columns, giving a 10-character fixed-width
+string.
+
+**Storage decision**: implemented option (a) from Section 3 as
+recommended — the sparkline is computed once at chunk-finalize time in
+`internal/eager/eager.go` (both the `!job.Plausible` early-reject path and
+the normal transcription path, alongside the existing `MeanRMS`/`PeakRMS`
+population from `job.Stats`) and stored as a new `Chunk.VolumeSparkline
+string` field (`internal/chunks/chunks.go`, `json:"volume_sparkline,omitempty"`),
+consistent with how `MeanRMS`/`PeakRMS` are already precomputed-and-stored
+rather than recomputed on read. No deviation from the ticket's
+recommendation was needed.
+
+**Tests**: `internal/audio/audio_test.go` adds `TestRenderVolumeSparkline`,
+asserting exact glyph-by-glyph output for a synthetic loud-then-quiet PCM
+buffer (`⣶⣶⣶⣶⣶⠀⠀⠀⠀⠀`) vs. a synthetic uniformly-quiet buffer
+(`⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀`), plus a fixed-width check. `internal/chunks/command_test.go`
+extends the existing list/show test with an accepted chunk (mean RMS 842,
+loud-then-quiet sparkline) and a `rej:low_energy_transient` chunk (mean RMS
+95, flat-low sparkline), asserting both the header carries the new `RMS`/
+`LEVEL` labels and each row renders its expected RMS value and sparkline.
+`go build ./...` and `make check` (vet, full test suite, spec validation)
+both pass. `make install` and `make restart-service` were run so the
+installed binary and the live `voxi-agent.service` daemon pick up the
+change. Existing ring-buffer chunks recorded before this change (their
+`MeanRMS`/`PeakRMS` were already populated, but `VolumeSparkline` didn't
+exist as a field yet) show a populated `RMS` column but a blank `LEVEL`
+column, as expected — new chunks recorded going forward get both.
