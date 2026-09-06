@@ -1,4 +1,4 @@
-# 070: Show Recorded Volume (RMS) Column in `voxi chunks list`
+# 070: Show Recorded Volume (RMS) and a Speech-Level Sparkline in `voxi chunks list`
 
 **Status**: Proposed
 **Priority**: P3 (Low)
@@ -68,29 +68,81 @@ thresholds on (`MeanRMS`, optionally `PeakRMS`), not a converted dBFS or
   already serialized JSON fields (`chunks.go:38-39`), so `voxi chunks list
   --format json` already exposes this; only the human-readable table needs
   the new column.
+- **Also add a per-chunk speech-level sparkline** (amended 2026-09-06, at
+  the user's request): a compact, fixed-width (~10 character) visual
+  strip showing how volume/speech-energy varied *across the duration of
+  the chunk*, using Unicode Braille block glyphs for sub-character
+  vertical resolution — e.g. `⣠⣦⣀⣠⣀⣤⣀⣠⣦⣀` — rather than a flat single-value
+  bar. This is a genuinely new visualization, not just surfacing an
+  existing field:
+  - `audio.RenderAudioLevelMeter` (`internal/audio/audio.go:271-287`)
+    already exists but renders a single instantaneous level as a 10-char
+    `■`/`·` bar, used live during recording (`internal/eager/eager.go:531-532`)
+    — it has no time axis and is the wrong shape for "level over the
+    chunk's duration." This ticket needs a *new* renderer, not a reuse of
+    that one.
+  - Requires splitting the chunk's PCM samples into N (e.g. 10, one per
+    sparkline character) equal time buckets and computing a per-bucket
+    RMS (or reusing whatever windowing `audio.AnalyzePCM`
+    (`internal/audio/audio.go:329-367`) already does internally, if its
+    windows are compatible/reusable), then mapping each bucket's level to
+    one of the Braille glyphs' available height steps (Braille cells give
+    a 2-wide-by-4-tall dot grid per character — enough steps for a
+    reasonable "quiet → loud" gradient per bucket without needing a full
+    terminal-graphics library).
+  - Where this is computed matters: the chunk's raw PCM is available
+    while the chunk is being finalized (`internal/eager/eager.go` around
+    where `MeanRMS`/`PeakRMS` are already populated, :358-359/:421-422)
+    but chunks only persist a `.wav` file (`Chunk.WAVFile`) plus
+    aggregate stats afterward — no raw PCM is retained in the manifest.
+    Two options, to be decided at implementation time: (a) compute the
+    sparkline once at finalize time (while PCM is still in memory) and
+    store it as a new `Chunk.VolumeSparkline string` JSON field
+    (cheapest, keeps `list` fast, mirrors how `MeanRMS`/`PeakRMS` are
+    already precomputed-and-stored rather than recomputed on read), or
+    (b) recompute on demand by re-reading the chunk's `.wav` file at
+    `list` time (avoids a new persisted field but re-decodes audio on
+    every listing). Option (a) is recommended for consistency with the
+    existing MeanRMS/PeakRMS pattern.
+  - The sparkline should sit adjacent to the new mean-RMS number (e.g.
+    `RMS` numeric column followed by a `LEVEL` sparkline column) so the
+    user gets both an exact number and an at-a-glance shape — useful for
+    telling a truncated/clipped utterance apart from a uniformly-quiet
+    one, which a single mean number can't distinguish.
 - Out of scope: changing `voxi chunks show`'s existing "Mean / Peak RMS"
-  line, changing the acoustic gate's thresholds or behavior, adding a
-  visual level meter (`audio.RenderAudioLevelMeter` already exists and is
-  used live during recording in `internal/eager/eager.go:531-532`, but a
-  bar-graph column is a separate, optional follow-up, not required here).
+  line (though adding the sparkline there too, if implemented, would be a
+  natural small extension — not required for this ticket's acceptance),
+  changing the acoustic gate's thresholds or behavior.
 
 ## 4. Acceptance Criteria
 
 - `voxi chunks list` gains a volume/level column (mean RMS) for every
   listed chunk, including rejected ones, positioned in the table between
   RTF and STATUS.
-- A test in `internal/chunks/command_test.go` asserts the new column
-  renders the expected RMS value for both an accepted chunk and a
-  rejected (`rej:low_energy_transient`) chunk, and that the header row
-  contains the new column label.
-- `voxi chunks list --format json` is unchanged (still emits the full
-  `Chunk` struct, `MeanRMS`/`PeakRMS` included).
+- `voxi chunks list` also gains a fixed-width Braille speech-level
+  sparkline column next to it, rendering a distinguishably different
+  pattern for a chunk that was loud throughout vs. one that trails off to
+  silence vs. one that was uniformly quiet (`rej:low_energy_transient`
+  cases should visibly read as "flat and low").
+- A test in `internal/chunks/command_test.go` asserts the new RMS column
+  renders the expected value for both an accepted chunk and a rejected
+  (`rej:low_energy_transient`) chunk, and that the header row contains
+  the new column labels.
+- A unit test for the sparkline renderer itself (wherever it lands, e.g.
+  `internal/audio`) asserts that a synthetic loud-then-quiet PCM buffer
+  and a synthetic uniformly-quiet buffer produce visibly different
+  sparkline strings (exact glyph-by-glyph assertions, not just "non-empty").
+- `voxi chunks list --format json` is unchanged for the RMS fields; if
+  `Chunk.VolumeSparkline` is added as a new stored field (implementation
+  option (a) above), it is included in JSON output like every other
+  `Chunk` field.
 
 ## 5. Non-Goals
 
 - Converting RMS to dBFS or a normalized percentage display.
-- Adding a visual ASCII level-meter bar to the list table (could reuse
-  `audio.RenderAudioLevelMeter` in a future ticket if requested).
+- Reworking or replacing `audio.RenderAudioLevelMeter`'s live single-value
+  bar — it serves a different purpose (real-time feedback during active
+  recording) and stays as-is.
 - Changing acoustic gating thresholds or `low_energy_transient` detection
   logic (issue 054's domain, already Implemented).
 
@@ -101,6 +153,15 @@ and seeing several `rej:low_energy_transient` rows with no way to gauge
 how quiet the recording actually was, or to compare rejected chunks
 against accepted ones for volume. Investigation confirmed the underlying
 `MeanRMS`/`PeakRMS` values are already computed and stored per chunk
-(issue 053's ring buffer / issue 054's acoustic gate) — this ticket is
-scoped purely to surfacing them in the `list` table, not adding new
-instrumentation.
+(issue 053's ring buffer / issue 054's acoustic gate) — the RMS-column
+part of this ticket is scoped purely to surfacing them in the `list`
+table, not adding new instrumentation.
+
+Amended same day: the user additionally asked for a "this is speech"-level
+visual indicator — a ~10-character Braille sparkline (e.g.
+`⣠⣦⣀⣠⣀⣤⣀⣠⣦⣀`) showing level over the chunk's duration, rather than a
+single flat number. Unlike the RMS column, this *does* require new
+computation (per-time-bucket RMS + Braille-glyph mapping), since no
+existing code renders a level-over-time strip — the existing
+`audio.RenderAudioLevelMeter` is a single-value live bar, not a
+sparkline. See Section 3 for the two implementation options considered.
