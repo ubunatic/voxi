@@ -1,6 +1,6 @@
 # 059: Live Test Follow-Up: Leading Dash-Fragment Artifacts and VAD Micro-Pause Chunk Splitting Degrade Transcript Quality
 
-**Status**: Proposed
+**Status**: Closed — implemented in 604d0f9
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Bug
@@ -204,3 +204,50 @@ reported honestly as a gap rather than fabricated.
   recorded as a known tradeoff for future discussion, not committed work.
 - Not a conclusive fix for the §2.3 misrecognition — left open, insufficient
   evidence.
+
+## Resolution
+
+**Implemented**: commit `604d0f9` — `fix(asr): strip leading dash-fragment hallucination prefix`
+
+### What was done (§3.1 only)
+
+Added `StripLeadingDashFragment(text string) string` to `internal/asr/asr.go`
+and wired it into both transcript cleaning code paths in `CleanWhisperTranscript`
+(Strategy 1 canonical quote extraction and Strategy 2 line-by-line fallback),
+applied before the existing `StripLeadingHallucinations` / `StripTrailingHallucinations`
+stop-word filters.
+
+### Heuristic design
+
+A single compiled `leadingDashFragmentRe` regexp:
+
+```
+^-\s*\S+[.,!?]*\s+(?:[A-Z])
+```
+
+Matches when **all** of:
+1. Text begins with a literal `-` (optional space after).
+2. Exactly one non-whitespace token follows (the garbled fragment word),
+   optionally trailed by punctuation and whitespace.
+3. The remaining text immediately starts with an upper-case letter (new sentence).
+
+The capital-letter assertion is the key tightening condition: it ensures the
+heuristic fires only when the dash-fragment is clearly a prefix artefact fused
+onto a well-formed continuation, not when the entire transcript is a
+dash-fragment or when the continuation is lower-case (e.g. a dictated bullet
+point).  When the match fires, everything before the capital letter is dropped
+and the remainder is returned trimmed.
+
+### Test coverage (`internal/asr/asr_test.go` — `TestStripLeadingDashFragment`)
+
+| Case | Input | Expected output |
+|---|---|---|
+| Observed live artifact | `-Transcribe. I will now check…` | `I will now check…` |
+| Ring-buffer chunk #186 | `-H. Also file a follow-up ticket…` | `Also file a follow-up ticket…` |
+| Whole-transcript fragment | `-Trap.` | `-Trap.` (unchanged — no capital remainder) |
+| Legitimate hyphen-led list item | `- first item in list` | `- first item in list` (unchanged) |
+
+### Out of scope (unchanged)
+
+- §3.2 VAD micro-pause splitting — `SilenceMs` and segmenter not touched.
+- §2.3 misrecognition — no action, left open.
