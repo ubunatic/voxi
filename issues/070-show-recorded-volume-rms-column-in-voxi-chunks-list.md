@@ -244,3 +244,18 @@ saturates at level 4, since 3000 exceeds the new ceiling of 2048).
 assign `VolumeSparkline` directly as test data, independent of the
 renderer). `go build`/`make check` re-verified passing; binary reinstalled
 and service restarted again.
+
+### Post-implementation fix (2026-09-06): bracket the sparkline column
+
+The user noted the bare glyph string had no visible boundary and "looked
+a bit lost" in the table, especially for near-blank (quiet) chunks where
+it visually disappeared into surrounding whitespace. Wrapped it in `[...]`
+in `internal/chunks/command.go` so the column always reads as a bounded
+meter, and so chunks recorded before the `VolumeSparkline` field existed
+now show a visible `[]` rather than nothing. Test assertions updated to
+match the bracketed output. Real post-fix output confirms the sparkline
+is also surfacing sub-chunk detail invisible in the single mean-RMS
+number — e.g. a `low_energy_transient` rejection showing one brief loud
+bucket amid otherwise-quiet ones (a genuine transient, matching the
+rejection's name), and an accepted chunk showing a clean
+rise-sustain-fall speech envelope.
