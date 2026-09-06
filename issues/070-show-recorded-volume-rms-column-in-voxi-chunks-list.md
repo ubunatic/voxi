@@ -1,6 +1,6 @@
 # 070: Show Recorded Volume (RMS) and a Speech-Level Sparkline in `voxi chunks list`
 
-**Status**: Proposed
+**Status**: In Progress — fresh-sprint: implementing RMS column + speech-level sparkline
 **Priority**: P3 (Low)
 **Severity**: Enhancement
 **Category**: Enhancement
