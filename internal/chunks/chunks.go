@@ -37,6 +37,7 @@ type Chunk struct {
 	PCMBytes               int       `json:"pcm_bytes,omitempty"`
 	MeanRMS                int       `json:"mean_rms,omitempty"`
 	PeakRMS                int       `json:"peak_rms,omitempty"`
+	VolumeSparkline        string    `json:"volume_sparkline,omitempty"` // fixed-width Braille level-over-time sparkline, precomputed at finalize time
 	VoicedRatio            float64   `json:"voiced_ratio,omitempty"`
 	ProbableSilence        bool      `json:"probable_silence"`
 	TranscribeDurationSec  float64   `json:"transcribe_duration_secs"`

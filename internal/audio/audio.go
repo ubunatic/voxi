@@ -286,6 +286,95 @@ func RenderAudioLevelMeter(rms int, threshold int) string {
 	return sb.String()
 }
 
+// sparklineMaxRMS is the reference RMS ceiling mapped to the loudest Braille
+// glyph step in RenderVolumeSparkline. It sits well above the acoustic gate's
+// ~150-2000 raw-RMS thresholds (SegmenterOptions.ThresholdRMS/MinMeanRMS) so
+// that both quiet-but-accepted and clearly loud speech are visually
+// distinguishable, while still saturating on genuinely loud/clipping audio.
+const sparklineMaxRMS = 4000
+
+// sparklineLevels is the number of discrete height steps the sparkline maps
+// RMS values onto (0 = silent glyph, sparklineLevels = loudest glyph). Five
+// steps map cleanly onto filling a Braille cell's four dot-rows bottom-up.
+const sparklineLevels = 4
+
+// RenderVolumeSparkline renders a fixed-width (buckets-character) Braille
+// sparkline showing how RMS energy varies across the duration of a PCM
+// buffer (16-bit signed, mono, any sample rate). Unlike RenderAudioLevelMeter
+// (a single instantaneous live-level bar with no time axis), this splits the
+// buffer into `buckets` equal time slices, computes the RMS of each slice,
+// and maps each to one of sparklineLevels+1 Braille cell heights, giving an
+// at-a-glance "loud throughout" vs "trails off to silence" vs "uniformly
+// quiet" shape.
+func RenderVolumeSparkline(pcmData []byte, buckets int) string {
+	if buckets <= 0 {
+		buckets = 10
+	}
+	// Braille U+2800 (blank) is the natural "silent" glyph and a safe
+	// placeholder for buffers too short to bucket meaningfully.
+	if len(pcmData) < 2 {
+		return strings.Repeat(string(rune(0x2800)), buckets)
+	}
+
+	totalSamples := len(pcmData) / 2
+	samplesPerBucket := totalSamples / buckets
+	if samplesPerBucket < 1 {
+		samplesPerBucket = 1
+	}
+
+	var sb strings.Builder
+	for b := 0; b < buckets; b++ {
+		start := b * samplesPerBucket * 2
+		end := start + samplesPerBucket*2
+		if b == buckets-1 {
+			end = len(pcmData)
+		}
+		if start >= len(pcmData) {
+			sb.WriteRune(sparklineGlyph(0))
+			continue
+		}
+		if end > len(pcmData) {
+			end = len(pcmData)
+		}
+		rms := ComputeAudioRMS(pcmData[start:end])
+		sb.WriteRune(sparklineGlyph(sparklineLevel(rms)))
+	}
+	return sb.String()
+}
+
+// sparklineLevel quantizes a raw RMS value into 0..sparklineLevels.
+func sparklineLevel(rms int) int {
+	if rms <= 0 {
+		return 0
+	}
+	level := rms * sparklineLevels / sparklineMaxRMS
+	if level > sparklineLevels {
+		level = sparklineLevels
+	}
+	return level
+}
+
+// sparklineGlyph maps a 0..sparklineLevels height step to a Braille Pattern
+// codepoint (U+2800-U+28FF) by filling the cell's four dot-rows bottom-up,
+// symmetrically across both dot-columns (dots 7+8, then 3+6, then 2+5, then
+// 1+4 per the standard Braille Patterns dot numbering).
+func sparklineGlyph(level int) rune {
+	var dots byte
+	switch {
+	case level >= 4:
+		dots = 0xFF // all 8 dots
+	case level == 3:
+		dots = 0xF6 // + dots 2,5 (row1)
+	case level == 2:
+		dots = 0xE4 // + dots 3,6 (row2)
+	case level == 1:
+		dots = 0xC0 // dots 7,8 (row3, bottom)
+	default:
+		dots = 0x00 // blank
+	}
+	return rune(0x2800 + int(dots))
+}
+
 // WriteWAVAudio writes 16kHz 16-bit mono PCM data with a standard RIFF/WAVE header.
 func WriteWAVAudio(path string, pcmData []byte, sampleRate int) error {
 	var buf bytes.Buffer

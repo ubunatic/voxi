@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -251,5 +252,33 @@ func TestRenderAudioLevelMeter(t *testing.T) {
 	mFull := RenderAudioLevelMeter(300, 100)
 	if mFull != "■■■■■■■■■■" {
 		t.Fatalf("expected full meter, got %q", mFull)
+	}
+}
+
+func TestRenderVolumeSparkline(t *testing.T) {
+	// Loud first half (RMS 3000, well above sparklineMaxRMS/2), quiet second
+	// half (RMS 20, near-silent) — 10 buckets over 1000 samples means each
+	// bucket is exactly one half or the other.
+	loudThenQuiet := append(generateSineFrame(500, 0, 3000), generateSineFrame(500, 0, 20)...)
+	quietOnly := generateSineFrame(1000, 0, 20)
+
+	gotLoudThenQuiet := RenderVolumeSparkline(loudThenQuiet, 10)
+	gotQuietOnly := RenderVolumeSparkline(quietOnly, 10)
+
+	// level(3000) = 3000*4/4000 = 3 -> glyph 0x28F6; level(20) = 0 -> blank 0x2800.
+	wantLoudThenQuiet := strings.Repeat("⣶", 5) + strings.Repeat("⠀", 5)
+	wantQuietOnly := strings.Repeat("⠀", 10)
+
+	if gotLoudThenQuiet != wantLoudThenQuiet {
+		t.Fatalf("loud-then-quiet sparkline = %q, want %q", gotLoudThenQuiet, wantLoudThenQuiet)
+	}
+	if gotQuietOnly != wantQuietOnly {
+		t.Fatalf("uniformly-quiet sparkline = %q, want %q", gotQuietOnly, wantQuietOnly)
+	}
+	if gotLoudThenQuiet == gotQuietOnly {
+		t.Fatalf("expected loud-then-quiet and uniformly-quiet sparklines to be visibly different, both = %q", gotLoudThenQuiet)
+	}
+	if got := len([]rune(gotLoudThenQuiet)); got != 10 {
+		t.Fatalf("expected fixed-width 10-glyph sparkline, got %d glyphs", got)
 	}
 }

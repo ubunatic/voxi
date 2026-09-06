@@ -22,6 +22,9 @@ func TestChunksCommandListAndShow(t *testing.T) {
 		AudioDurationSecs:     1.5,
 		TranscribeDurationSec: 0.3,
 		RTF:                   0.2,
+		MeanRMS:               842,
+		PeakRMS:               1200,
+		VolumeSparkline:       "⣶⣶⣶⣶⣶⠀⠀⠀⠀⠀",
 		RawTranscript:         "hello world",
 		CleanedTranscript:     "hello world",
 		Accepted:              true,
@@ -32,10 +35,13 @@ func TestChunksCommandListAndShow(t *testing.T) {
 		AudioDurationSecs:     0.8,
 		TranscribeDurationSec: 0.2,
 		RTF:                   0.25,
+		MeanRMS:               95,
+		PeakRMS:               140,
+		VolumeSparkline:       "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀",
 		RawTranscript:         "bye.",
 		CleanedTranscript:     "bye",
 		Accepted:              false,
-		RejectionReason:       "silence_artifact",
+		RejectionReason:       "low_energy_transient",
 	}
 
 	if _, err := buf.Add(c1, dummyPCM, 16000); err != nil {
@@ -58,8 +64,19 @@ func TestChunksCommandListAndShow(t *testing.T) {
 	if !strings.Contains(outStr, "#1") || !strings.Contains(outStr, "#2") {
 		t.Fatalf("expected chunks in list output, got:\n%s", outStr)
 	}
-	if !strings.Contains(outStr, "rej:silence_artifact") {
+	if !strings.Contains(outStr, "rej:low_energy_transient") {
 		t.Fatalf("expected rejection reason in list output, got:\n%s", outStr)
+	}
+	if !strings.Contains(outStr, "RMS") || !strings.Contains(outStr, "LEVEL") {
+		t.Fatalf("expected RMS and LEVEL column headers in list output, got:\n%s", outStr)
+	}
+	// Accepted chunk (c1): mean RMS 842 and its loud-then-quiet sparkline.
+	if !strings.Contains(outStr, "842") || !strings.Contains(outStr, "⣶⣶⣶⣶⣶⠀⠀⠀⠀⠀") {
+		t.Fatalf("expected accepted chunk's RMS/sparkline in list output, got:\n%s", outStr)
+	}
+	// Rejected (low_energy_transient) chunk (c2): mean RMS 95 and its flat-low sparkline.
+	if !strings.Contains(outStr, "95") || !strings.Contains(outStr, "⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀") {
+		t.Fatalf("expected rejected chunk's RMS/sparkline in list output, got:\n%s", outStr)
 	}
 
 	// Test show last command
@@ -69,7 +86,7 @@ func TestChunksCommandListAndShow(t *testing.T) {
 	if err := cmd.ExecuteContext(context.Background()); err != nil {
 		t.Fatalf("chunks show last failed: %v", err)
 	}
-	if !strings.Contains(out.String(), `"index": 2`) || !strings.Contains(out.String(), `"rejection_reason": "silence_artifact"`) {
+	if !strings.Contains(out.String(), `"index": 2`) || !strings.Contains(out.String(), `"rejection_reason": "low_energy_transient"`) {
 		t.Fatalf("unexpected show output:\n%s", out.String())
 	}
 
