@@ -1,6 +1,6 @@
 # 064: FluidVoice Model Landscape: Fluid Intelligence Licensing and Underlying STT Model Portability (Research)
 
-**Status**: In Progress — starting research per user request
+**Status**: Research Complete
 **Priority**: P3 (Low)
 **Severity**: Informational
 **Category**: Research
@@ -149,3 +149,78 @@ NVIDIA NeMo Parakeet-TDT (0.6B/1.1B) licensing and runtime feasibility in
 depth; this ticket extends that survey to the newer/uncovered models and
 separately resolves the Fluid Intelligence licensing question, which 039
 did not address at all.
+
+## 6. Research Findings (2026-09-06)
+
+### 6.1 Fluid Intelligence — Verdict: **Proprietary/unavailable**
+
+No public license, EULA, download-domain, or pricing terms were found for
+Fluid Intelligence anywhere — not in the FluidVoice repo (no
+`PrivateAIProvider.swift` code path exposes a fetchable weights URL or
+license string; it talks to a private endpoint/runtime, not a plain local
+model file the repo ships), not on `altic.dev/fluid`, not in third-party
+coverage (bitdoze.com, explainx.ai, mactools.pro write-ups all repeat the
+README's own framing verbatim, none report new terms). Third-party coverage
+confirms the plain reading of the README: it is "a separately maintained
+local AI runtime — not shipped as open source," free today with no paid
+tier live yet, but explicitly left open for future monetization ("hosted
+API, premium model tiers, or enterprise licensing" per secondary coverage,
+unconfirmed by NVIDIA/altic-dev themselves). Nothing found suggests this
+has changed since the README was fetched this session.
+
+**Direct answer**: No — Fluid Intelligence is not something Voxi can "just
+use." It is privately maintained specifically so altic-dev can give away
+the rest of the app for free; there is no license grant, no published
+weights, and no download artifact to extract even if reverse-engineering
+were on the table (it isn't, per this ticket's Non-Goals and general
+project ethics).
+
+### 6.2 Third-party STT models — per-model verdicts
+
+| Model | Publisher | License | Weights open? | Runtime | Verdict |
+|---|---|---|---|---|---|
+| Parakeet Flash (`parakeet_realtime_eou_120m-v1`) | NVIDIA | NVIDIA Open Model License (permissive commercial + non-commercial use) | Yes, on Hugging Face | Official: NeMo 2.5.3+, CUDA/Linux only (Ampere/Blackwell/Hopper/Volta) — no official ONNX/CoreML export. **Unofficial** community ONNX ports exist: `soniqo/Parakeet-EOU-120M-ONNX-INT8`, `thomas097/Parakeet-ONNX` — unverified maintenance/completeness | **Portable in principle but nontrivial** — same class as issue 039's Parakeet-TDT finding; community ONNX exports narrow the gap but are third-party and unvetted |
+| Nemotron Speech 3.5 streaming (`nvidia/nemotron-3.5-asr-streaming-0.6b`) | NVIDIA | OpenMDW-1.1 (Linux Foundation open-model license NVIDIA adopted 2026; broad commercial/redistribution rights, similar spirit to CC-BY/Apache) | Yes, 600M params, cache-aware streaming, 40 language-locales | Official: NeMo/CUDA. **But** a community `sherpa-onnx` INT8 export already exists: `apbaxel/sherpa-onnx-nemotron-3.5-asr-streaming-0.6b-int8` — and issue 039 already established sherpa-onnx has existing Go bindings and a portable C++/ONNX runtime comparable in footprint to whisper.cpp | **Licensable and portable** — the strongest candidate found in this ticket; a ready-made sherpa-onnx artifact removes the "no lightweight Go/C++ path" objection that kept 039's Parakeet-TDT conclusion at "feasible but heavy" |
+| Cohere Transcribe | Cohere / CohereLabs | **Apache-2.0** (as of ~March 2026 open-sourcing) | Yes — 2B params, Conformer encoder / Transformer decoder, tops the HF Open ASR Leaderboard (5.42% WER, beating Whisper large-v3) | Runs via `transformers`, but also has ONNX exports (`vigneshlabs/cohere-transcribe-03-2026-int8-onnx`, INT8-quantized, CPU/Apple Silicon/GPU, no PyTorch needed) **and** a dedicated `CrispASR` — a whisper.cpp-style C++ CPU runtime built specifically for this model's architecture | **Licensable and portable** — this reverses the ticket's own starting assumption. Cohere Transcribe is not an API-only product; it was open-sourced with a whisper.cpp-equivalent runtime already available. This is the single highest-value finding in this ticket |
+| Apple Speech | Apple | N/A — macOS/iOS system framework | No standalone distributable model | Platform-locked to Apple hardware | **Proprietary/unavailable** (confirmed, as expected) — out of scope for Linux by construction |
+| Whisper (Tiny/Base/Small/Medium/Large) | OpenAI / ggml community | MIT | Yes | Already Voxi's baseline via `voxtype`/`internal/asr` | Not re-researched — already covered |
+
+### 6.3 Direct answer to "can we just use their model?"
+
+- **Fluid Intelligence (the enhancement model)**: No. Proprietary, unpublished terms, kept private by design.
+- **The STT models FluidVoice merely offers as options**: It depends on
+  which one, and none of it is really "theirs" to grant or withhold —
+  these are independent third-party models Voxi could adopt regardless of
+  FluidVoice. Two of the five are genuinely promising *right now*,
+  independent of anything issue 039 found:
+  - **Cohere Transcribe** (Apache-2.0, open weights, whisper.cpp-style
+    `CrispASR` C++ runtime, beats Whisper large-v3 on WER) — the most
+    concrete near-term upgrade candidate surfaced across issues 039/064.
+  - **Nemotron Speech 3.5 streaming** (OpenMDW-1.1, open weights, existing
+    community `sherpa-onnx` INT8 export, and issue 039 already confirmed
+    sherpa-onnx has Go bindings) — a second concrete candidate, notable
+    because it's a *streaming* model (matches Voxi's eager-streaming
+    architecture more naturally than a batch Whisper-style model).
+  - Parakeet Flash remains "portable but nontrivial" as in 039.
+  - Cohere Transcribe/Apple Speech-as-API-only assumption in this ticket's
+    original framing was **wrong for Cohere** — corrected above.
+
+### 6.4 Candidates flagged for future canary-evaluation ticket (not built here)
+
+Per this ticket's Non-Goals, no canary was built. Two candidates are
+flagged as worth a follow-up canary ticket, in priority order:
+
+1. **Cohere Transcribe via `CrispASR` or the ONNX INT8 export** — Apache-2.0,
+   best measured WER of anything surveyed across 039/064, CPU-runnable,
+   whisper.cpp-equivalent runtime already exists. Highest-value candidate
+   found in either research ticket.
+2. **Nemotron Speech 3.5 streaming via the community sherpa-onnx export** —
+   open weights, streaming architecture fits Voxi's eager pipeline, and
+   sherpa-onnx Go bindings already exist per issue 039.
+
+Both would need independent verification of the community-published ONNX/
+sherpa-onnx artifacts' correctness and maintenance status before any canary
+work — they are third-party conversions, not NVIDIA/Cohere-official
+exports (Cohere's own ONNX/CrispASR path is the exception — that one comes
+from Cohere-adjacent tooling, not a random community re-export, so it
+warrants the higher priority above).
