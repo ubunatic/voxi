@@ -23,10 +23,13 @@ by *reading the actual source*, not the README. This paid off directly:
   "dictation-literal" file handled number/date formatting: it turned out to handle
   slash-commands and @mentions instead. The research ticket says so explicitly rather
   than quietly working around the wrong assumption.
-- Issue 064 turned up a real dated fact a web search caught but memory wouldn't have:
+- [Issue 064](../../issues/064-fluidvoice-model-landscape-fluid-intelligence-licensing-and-underlying-stt-model-portability-research.md)
+  turned up a real dated fact a web search caught but memory wouldn't have:
   Cohere Transcribe was open-sourced (Apache-2.0) in ~March 2026 and reportedly beats
-  Whisper large-v3 — this became issue 066, a canary ticket, rather than being lost as a
-  passing observation.
+  Whisper large-v3 — this became [issue 066](../../issues/066-canary-cohere-transcribe-and-nemotron-3-5-streaming-as-alternative-asr-backends.md),
+  a canary ticket, rather than being lost as a passing observation. Anyone looking for
+  "new STT models" or "try new model" research later should start at 064/066, not this
+  retrospective — this doc only covers process lessons, not the model verdicts themselves.
 - Issue 067 (dispatched separately, mid-conversation) was asked to "decompile" a Swift
   package assumed closed-source; before doing anything, it checked GitHub and found
   `FluidInference/FluidAudio` is actually public and Apache-2.0, changing the entire

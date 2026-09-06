@@ -4,7 +4,7 @@
 **Priority**: P3 (Low)
 **Severity**: Informational
 **Category**: Research
-**Related**: [039 OSS/source-available STT landscape and custom-vocabulary research](039-oss-stt-landscape-and-custom-vocabulary-research.md), [062 FluidVoice automatic vocabulary training research](062-fluidvoice-automatic-vocabulary-training-from-user-corrections-research.md), [063 FluidVoice spoken-punctuation research](063-fluidvoice-spoken-punctuation-and-dictation-literal-post-processing-rules-research.md), [047 OSS voice-typing tool landscape research](047-oss-voice-typing-tool-landscape-research.md)
+**Related**: [039 OSS/source-available STT landscape and custom-vocabulary research](039-oss-stt-landscape-and-custom-vocabulary-research.md), [062 FluidVoice automatic vocabulary training research](062-fluidvoice-automatic-vocabulary-training-from-user-corrections-research.md), [063 FluidVoice spoken-punctuation research](063-fluidvoice-spoken-punctuation-and-dictation-literal-post-processing-rules-research.md), [047 OSS voice-typing tool landscape research](047-oss-voice-typing-tool-landscape-research.md), [066 canary ticket built from this ticket's findings](066-canary-cohere-transcribe-and-nemotron-3-5-streaming-as-alternative-asr-backends.md)
 
 ---
 
@@ -224,3 +224,21 @@ work — they are third-party conversions, not NVIDIA/Cohere-official
 exports (Cohere's own ONNX/CrispASR path is the exception — that one comes
 from Cohere-adjacent tooling, not a random community re-export, so it
 warrants the higher priority above).
+
+Both candidates above were carried forward into
+[066](066-canary-cohere-transcribe-and-nemotron-3-5-streaming-as-alternative-asr-backends.md),
+the canary ticket that gates any adoption decision on hands-on
+verification and a real benchmark — see that ticket for current status
+before treating any finding here as production-ready.
+
+Separately, [073](073-read-fluidvoice-s-model-download-code-paths-for-direct-weight-url-reuse-research.md)
+(lower priority, deferred until 066's canary is done) investigates
+whether FluidVoice's own (GPLv3, readable) download code points directly
+at these models' official publisher hosting, which could shortcut
+identifying the exact artifact/variant to fetch.
+
+**See also**: the session retrospective at
+[docs/studies/2026-09-07-fluidvoice-review-and-chunk-diagnostics.md](../docs/studies/2026-09-07-fluidvoice-review-and-chunk-diagnostics.md)
+covers this research alongside the sibling FluidVoice tickets (062/063/065)
+and notes this ticket's findings are secondhand web-search research, not
+independently verified — a caveat 066 already gates on.

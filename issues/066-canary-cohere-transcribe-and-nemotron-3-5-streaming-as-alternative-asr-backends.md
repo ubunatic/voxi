@@ -4,7 +4,7 @@
 **Priority**: P2 (Medium)
 **Severity**: Informational
 **Category**: Research / Feature
-**Related**: [064 FluidVoice model landscape research](064-fluidvoice-model-landscape-fluid-intelligence-licensing-and-underlying-stt-model-portability-research.md), [039 OSS STT landscape research](039-oss-stt-landscape-and-custom-vocabulary-research.md), [041 sherpa-onnx hotwords canary](041-sherpa-onnx-hotwords-canary.md), [050 Optional warm-model daemon transcription](050-optional-warm-model-daemon-transcription.md)
+**Related**: [064 FluidVoice model landscape research](064-fluidvoice-model-landscape-fluid-intelligence-licensing-and-underlying-stt-model-portability-research.md), [039 OSS STT landscape research](039-oss-stt-landscape-and-custom-vocabulary-research.md), [041 sherpa-onnx hotwords canary](041-sherpa-onnx-hotwords-canary.md), [050 Optional warm-model daemon transcription](050-optional-warm-model-daemon-transcription.md), [073 FluidVoice model-download URL research (lower priority, do this canary first)](073-read-fluidvoice-s-model-download-code-paths-for-direct-weight-url-reuse-research.md)
 
 ---
 
@@ -93,3 +93,8 @@ Raised 2026-09-06, following the FluidVoice evaluation sprint (issues
 062-065) and specifically issue 064's model-landscape research, at the
 user's request to canary the two highest-value model findings before
 treating them as anything more than research.
+
+**See also**: [064](064-fluidvoice-model-landscape-fluid-intelligence-licensing-and-underlying-stt-model-portability-research.md)
+for the full per-model verdict table and licensing detail behind §1's
+summary, and the session retrospective at
+[docs/studies/2026-09-07-fluidvoice-review-and-chunk-diagnostics.md](../docs/studies/2026-09-07-fluidvoice-review-and-chunk-diagnostics.md).
