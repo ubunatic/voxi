@@ -259,3 +259,28 @@ number — e.g. a `low_energy_transient` rejection showing one brief loud
 bucket amid otherwise-quiet ones (a genuine transient, matching the
 rejection's name), and an accepted chunk showing a clean
 rise-sustain-fall speech envelope.
+
+### Post-implementation fix (2026-09-06): minimum glyph must be "⣀", space means no data
+
+Follow-up request: the user asked for the minimum sparkline level to
+render as `⣀` rather than blank, and for a literal space to mean "no
+data" specifically. This exposed a real ambiguity the original design
+hadn't separated: blank Braille (U+2800) was being used for two different
+things — "this bucket was measured and found silent" (`sparklineLevel`
+returning 0) and "this bucket has no underlying samples at all" (the
+`len(pcmData) < 2` and out-of-range-bucket paths) — making a genuinely
+quiet chunk indistinguishable from one with a data gap.
+
+Fixed in `internal/audio/audio.go`: `sparklineLevel` now returns
+`sparklineMinLevel..sparklineLevels` (1..4, never 0) — any real
+measurement, however quiet, renders at minimum as `⣀` (dots 7+8).
+`RenderVolumeSparkline` now writes a literal ASCII space directly
+(bypassing `sparklineGlyph` entirely) for the two genuine no-data cases:
+a buffer too short to contain a sample, and a bucket beyond the end of a
+buffer too short to fill every requested bucket. Tests updated
+accordingly, plus a new `TestRenderVolumeSparklineNoData` asserting an
+empty buffer renders as all-spaces with no Braille glyphs.
+`internal/chunks/command_test.go`'s fixture strings were updated to use
+`⣀` instead of the now-unreachable blank glyph, for consistency (they're
+still just fixture data, independent of the renderer). `go build`/
+`make check` pass; binary reinstalled and service restarted again.
