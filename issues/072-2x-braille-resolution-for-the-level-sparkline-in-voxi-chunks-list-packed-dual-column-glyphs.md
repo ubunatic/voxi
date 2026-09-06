@@ -1,6 +1,6 @@
 # 072 — 2x Braille Resolution for the LEVEL Sparkline in voxi chunks list (Packed Dual-Column Glyphs)
 
-**Status**: Proposed
+**Status**: In Progress — fresh-sprint: implementing 2x braille resolution, dev agent to decide open design questions
 **Priority**: P3 (Low)
 **Severity**: Enhancement
 **Category**: Feature
