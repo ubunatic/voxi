@@ -284,3 +284,25 @@ empty buffer renders as all-spaces with no Braille glyphs.
 `⣀` instead of the now-unreachable blank glyph, for consistency (they're
 still just fixture data, independent of the renderer). `go build`/
 `make check` pass; binary reinstalled and service restarted again.
+
+### Post-implementation fix (2026-09-06): ceiling was too low, real speech read as "loud"
+
+User's next observation, on real usage: several unrelated recordings all
+showed 3 of 4 dots, but subjectively felt quieter than that. Investigation
+(a temporary in-module debug tool reading actual stored `.wav` chunk files
+and printing per-bucket RMS, removed after use — not committed) confirmed
+it: ordinary conversational speech commonly spikes to RMS 600-1500 per
+bucket, and the sparkline's ceiling of 2048 was already mapping that into
+2-3 out of 4 dots on *every* recording — everything looked "loud"
+regardless of actual volume, since there was almost no headroom left above
+typical speech.
+
+Fixed by raising `sparklineCeilingRMS` from 2048 to 8192 (25% of int16
+full-scale, 32767) in `internal/audio/audio.go`, giving typical speech
+buckets room to land at level 1-2 and reserving level 3-4 for audio that's
+actually loud or near clipping. Added `TestSparklineLevelRealWorldCalibration`,
+which locks in the real bucket-RMS values pulled from an actual accepted
+chunk during this investigation, asserting none of them reach the max
+level — a regression test tied to observed reality, not just synthetic
+tones. `go build`/`make check` pass; binary reinstalled and service
+restarted again.
