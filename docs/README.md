@@ -8,6 +8,7 @@ In-depth references for architecture, decisions, and operations of the Voxi Linu
 | [VoiceInputArchitecture.md](VoiceInputArchitecture.md) | ADR: Multi-tier architecture, evdev physical modifier key gating daemon, and GNOME Shell companion extension |
 | [BenchBaseline.md](BenchBaseline.md) | `voxi bench` CPU vs GPU RTF baseline for an average dev machine (T14 Gen2 AMD) |
 | [PublicationAndRelease.md](PublicationAndRelease.md) | Codeberg hosting philosophy, local CI quality gates, and release workflow |
+| [ChunkDiagnostics.md](ChunkDiagnostics.md) | `voxi chunks` ring buffer, RMS/acoustic-gate fields, the Braille LEVEL sparkline (dual-column packing, log-scale calibration pitfalls), and `--color` |
 
 ---
 
@@ -33,4 +34,5 @@ In-depth references for architecture, decisions, and operations of the Voxi Linu
 | [studies/2026-08-18-standalone-voxi-extraction-and-migration.md](studies/2026-08-18-standalone-voxi-extraction-and-migration.md) | Standalone Voice Input Engine Extraction (`ubunatic/voxi`) & Decoupling |
 | [studies/2026-08-18-voxtype-popular-applications.md](studies/2026-08-18-voxtype-popular-applications.md) | Linux Wayland/X11 compositors (Hyprland, Sway, GNOME, KDE, River), status bars (Waybar, Polybar), editor workflows (Obsidian, Neovim), LLM post-processing (Ollama), meeting pipelines, and engine setups (Whisper, Parakeet, Soniox). |
 | [studies/2026-08-24-single-agent-mode-orchestration.md](studies/2026-08-24-single-agent-mode-orchestration.md) | Single Agent Mode Orchestration |
+| [studies/2026-09-07-fluidvoice-review-and-chunk-diagnostics.md](studies/2026-09-07-fluidvoice-review-and-chunk-diagnostics.md) | FluidVoice Prior-Art Review, Chunk Diagnostics, and Three Rounds of Calibration |
 
