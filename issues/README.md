@@ -61,3 +61,4 @@
 | 077 | [077-make-voxtype-optional-and-remove-whisper-only-engine-assumptions.md](077-make-voxtype-optional-and-remove-whisper-only-engine-assumptions.md) | Make voxtype Optional and Remove Whisper-Only Engine Assumptions | Closed — fixed voxtype-optional default-Cohere path; verified live |
 | 078 | [078-add-make-install-crispasr-target-for-the-crispasr-binary.md](078-add-make-install-crispasr-target-for-the-crispasr-binary.md) | Add make install-crispasr Target for the crispasr Binary | Closed |
 | 079 | [079-automate-standard-super-x-keybinding-setup.md](079-automate-standard-super-x-keybinding-setup.md) | Automate Standard Super+X Keybinding Setup | Open |
+| 080 | [080-surface-eager-typing-transcription-failures-beyond-private-telemetry.md](080-surface-eager-typing-transcription-failures-beyond-private-telemetry.md) | Surface Eager Typing/Transcription Failures Beyond Private Telemetry | Open |
