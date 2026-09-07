@@ -1,6 +1,6 @@
 # 082 — Deterministic Post-Transcription Vocabulary Replacements for Cohere
 
-**Status**: Open
+**Status**: Closed — resolved in 93140f6
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Feature
@@ -104,3 +104,17 @@ provider policy is spec-owned.
 - Silently correcting text without an explicit user-authored or accepted rule.
 - Replacing the existing decoder-level speech-context vocabulary for engines
   that support it.
+
+## 6. Resolution
+
+Implemented in `93140f6` with a private, atomic `replacements.json` store and
+the `voxi feedback replacement add/list/remove` command tree. Matching is
+exact-case, Unicode word-boundary aware, phrase-capable, longest-match-first,
+and non-cascading. Corrections apply only to completed Cohere chunks at the
+single seam before acceptance, metadata, aggregation, typing, and history;
+Whisper remains unchanged.
+
+Verification passed with table-driven matcher and persistence tests, eager
+provider/chunk-local tests, `make check`, `git diff --check`, an isolated CLI
+canary, and `make restart-service`. The installed command exposes the new
+subcommands and the restarted `voxi-agent.service` is active and responsive.
