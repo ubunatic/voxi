@@ -1,6 +1,6 @@
 # 078 — Add make install-crispasr Target for the crispasr Binary
 
-**Status**: Open
+**Status**: Closed
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Enhancement
@@ -129,3 +129,50 @@ in this ticket or a follow-up, not decided here.
   pipeline — this only consumes whatever upstream already publishes.
 - Re-litigating issue 066's canary conclusion to adopt Cohere Transcribe, or
   issue 077's voxtype-optional scope.
+
+## 6. Resolution (2026-09-07)
+
+**Investigation result**: upstream `CrispStrobe/CrispASR` *does* publish prebuilt
+GitHub Release binaries for Linux, per architecture — confirmed via
+`gh release view v0.8.32 --repo CrispStrobe/CrispASR --json assets`. The plain
+CPU builds are `crispasr-linux-x86_64.tar.gz` and `crispasr-linux-arm64.tar.gz`
+(alongside cuda/vulkan/hip/avx512/legacy variants not needed here). §2's
+priority-1 path applies — no OS packaging check or from-source build was
+needed.
+
+`make install-crispasr` downloads the architecture-matching tarball from
+`https://github.com/CrispStrobe/CrispASR/releases/latest/download/<asset>`
+(a stable, no-API-call redirect URL, canary-verified with `curl -sIL`),
+extracts it to `~/.local/lib/voxi/crispasr/` (binary + its bundled
+`.so` runtime deps: libopenblas, libgomp, libgfortran, libquadmath,
+libc2pa_c — the release binary has `RUNPATH=$ORIGIN`, verified with
+`readelf -d`, so these must stay siblings of the binary; a bare copy without
+them fails with `error while loading shared libraries`), and symlinks
+`crispasr` into `~/go/bin` (the same install location `make install` uses
+for `voxi`, confirmed by `ldd`/manual run that `$ORIGIN` resolves through
+the symlink to the real directory).
+
+**Verification**:
+- `make install-crispasr` ran for real on this machine (no prior `crispasr`
+  on `PATH`): downloaded 37.55 MiB, `which crispasr` → `~/go/bin/crispasr`,
+  `crispasr --version`/`--help` run successfully.
+- `make check` (`go vet`, `go test ./...`, spec validation) — all packages
+  pass, no regressions.
+- `make restart-service` picked up the change; `voxi record status` returns
+  `idle` without touching `voxtype` (issue 077's fix intact).
+- Live functional proof of the Cohere path: ran the exact binary/args/weights
+  the daemon uses (`crispasr -m ~/.cache/voxi/models/cohere-transcribe-q5_0.gguf
+  --backend cohere -t 6 --language en -np -nt -f jfk.wav`) against
+  whisper.cpp's real JFK reference clip, freshly downloaded — produced a
+  correct transcription ("And so, my fellow Americans, ask not what your
+  country can do for you, ask what you can do for your country.") in 2.2s.
+  This proves the crispasr binary + downloaded Cohere weights transcribe real
+  speech correctly now that this ticket's gap is closed. A full mic-to-keystroke
+  `voxi record toggle` pass requires a human physically speaking into this
+  session's hardware mic, which an agent session cannot trigger itself — not
+  re-verified here beyond this direct-invocation proof.
+- `install-crispasr` intentionally left out of `install-all` per §3/§5 — no
+  reason found to change that default.
+
+Implementation: `Makefile` (`install-crispasr` target only; no changes to
+`internal/eager/cohere.go`).

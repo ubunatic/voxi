@@ -43,6 +43,24 @@ restart-service: ⚙️ install  # rebuild, install, and restart the running vox
 install-system: ⚙️ build  # install binary to PREFIX/bin via sudo (system-wide)
 	sudo install -m 0755 $(BINARY) $(PREFIX)/bin/$(BINARY)
 
+install-crispasr: ⚙️  # download official CrispASR release binary (crispasr, needed by the cohere-transcribe engine; issue 078)
+	@arch="$$(uname -m)"; \
+	case "$$arch" in \
+		x86_64) asset=crispasr-linux-x86_64.tar.gz ;; \
+		aarch64|arm64) asset=crispasr-linux-arm64.tar.gz ;; \
+		*) echo "❌ install-crispasr: unsupported architecture $$arch (CrispASR has no prebuilt release for it)"; exit 1 ;; \
+	esac; \
+	dir="$(HOME)/.local/lib/voxi/crispasr"; \
+	mkdir -p "$$dir" "$(HOME)/go/bin"; \
+	tmp="$$(mktemp -d)"; \
+	trap 'rm -rf "$$tmp"' EXIT; \
+	echo "Downloading $$asset from CrispStrobe/CrispASR latest release..."; \
+	curl -fL -o "$$tmp/$$asset" "https://github.com/CrispStrobe/CrispASR/releases/latest/download/$$asset" || \
+		(echo "❌ install-crispasr: download failed"; exit 1); \
+	tar -xzf "$$tmp/$$asset" -C "$$dir" --strip-components=1; \
+	ln -sf "$$dir/crispasr" "$(HOME)/go/bin/crispasr"; \
+	"$(HOME)/go/bin/crispasr" --version
+
 install-modifierd: ⚙️ build-modifierd  # install voxi-modifierd and enable system service via sudo
 	sudo install -m 0755 $(MODIFIER) $(PREFIX)/bin/$(MODIFIER)
 	sudo cp systemd/voxi-modifierd.service /etc/systemd/system/
