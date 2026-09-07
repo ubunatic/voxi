@@ -1,6 +1,6 @@
 # 077 — Make voxtype Optional and Remove Whisper-Only Engine Assumptions
 
-**Status**: Open
+**Status**: Closed — fixed voxtype-optional default-Cohere path; verified live
 **Priority**: P1 (High)
 **Severity**: Major
 **Category**: Bug
