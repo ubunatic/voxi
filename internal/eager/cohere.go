@@ -43,8 +43,16 @@ const (
 // CrispASR's --prompt/--hotwords flags are no-ops for the Cohere Transcribe
 // backend specifically (no vocabulary-biasing hook exists yet -- see issue
 // 074 §5, an explicit known gap, not a bug here).
+//
+// --language en is required: unlike voxtype's small.en (an English-only
+// model architecturally incapable of emitting another language), Cohere
+// Transcribe is multilingual and defaults to CrispASR's --language auto
+// (per-chunk language auto-detection). Without forcing English, short or
+// ambiguous chunks can be misdetected and transcribed into a wrong
+// language wholesale rather than merely mis-hearing English words --
+// observed live after this engine became the default (2026-09-07).
 func crispASRTranscribeArgs(modelPath, wavPath string) []string {
-	return []string{"-m", modelPath, "--backend", "cohere", "-t", "6", "-np", "-nt", "-f", wavPath}
+	return []string{"-m", modelPath, "--backend", "cohere", "-t", "6", "--language", "en", "-np", "-nt", "-f", wavPath}
 }
 
 // ensureCohereWeights returns the local path to the Cohere Transcribe GGUF

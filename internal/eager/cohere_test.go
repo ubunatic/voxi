@@ -18,7 +18,7 @@ import (
 
 func TestCrispASRTranscribeArgsShape(t *testing.T) {
 	got := crispASRTranscribeArgs("/cache/cohere-transcribe-q5_0.gguf", "/tmp/one.wav")
-	want := []string{"-m", "/cache/cohere-transcribe-q5_0.gguf", "--backend", "cohere", "-t", "6", "-np", "-nt", "-f", "/tmp/one.wav"}
+	want := []string{"-m", "/cache/cohere-transcribe-q5_0.gguf", "--backend", "cohere", "-t", "6", "--language", "en", "-np", "-nt", "-f", "/tmp/one.wav"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("crispASRTranscribeArgs() = %#v, want %#v", got, want)
 	}
