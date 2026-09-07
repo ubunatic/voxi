@@ -60,3 +60,4 @@
 | 076 | [076-publish-cohere-transcribe-as-the-new-default-on-the-voxi-website.md](076-publish-cohere-transcribe-as-the-new-default-on-the-voxi-website.md) | Publish Cohere Transcribe as the New Default on the Voxi Website | Implemented and pushed — public deployment verification pending |
 | 077 | [077-make-voxtype-optional-and-remove-whisper-only-engine-assumptions.md](077-make-voxtype-optional-and-remove-whisper-only-engine-assumptions.md) | Make voxtype Optional and Remove Whisper-Only Engine Assumptions | Closed — fixed voxtype-optional default-Cohere path; verified live |
 | 078 | [078-add-make-install-crispasr-target-for-the-crispasr-binary.md](078-add-make-install-crispasr-target-for-the-crispasr-binary.md) | Add make install-crispasr Target for the crispasr Binary | Open |
+| 079 | [079-automate-standard-super-x-keybinding-setup.md](079-automate-standard-super-x-keybinding-setup.md) | Automate Standard Super+X Keybinding Setup | Open |
