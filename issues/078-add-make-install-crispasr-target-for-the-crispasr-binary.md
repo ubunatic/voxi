@@ -176,3 +176,13 @@ the symlink to the real directory).
 
 Implementation: `Makefile` (`install-crispasr` target only; no changes to
 `internal/eager/cohere.go`).
+
+**Correction (2026-09-07, same day)**: line 174's opt-in-only call was wrong.
+`cohere-transcribe-03-2026` is the default eager ASR engine (commit
+`9789a68`), so leaving `install-crispasr` out of `install-all` meant a fresh
+default `install-all` still lacked its required dependency — the same class
+of bug this ticket exists to close, just moved one Makefile target over.
+Folded `install-crispasr` into `install-all`'s prerequisites in `c57fba5`;
+verified with a real `make install-all` run (fresh download, symlink placed,
+build succeeded). `install-crispasr` remains available standalone for
+reinstall/repair use.
