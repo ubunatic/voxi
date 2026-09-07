@@ -68,7 +68,7 @@ func (f *fakeSettings) deps(out *bytes.Buffer) deps.Dependencies {
 func TestSetupConstructsOwnedShortcut(t *testing.T) {
 	f := &fakeSettings{entries: map[string]entry{}}
 	var out bytes.Buffer
-	if err := Setup(context.Background(), f.deps(&out)); err != nil {
+	if err := Setup(context.Background(), f.deps(&out), false); err != nil {
 		t.Fatal(err)
 	}
 	want := []string{
@@ -87,7 +87,7 @@ func TestSetupConstructsOwnedShortcut(t *testing.T) {
 func TestSetupIdempotent(t *testing.T) {
 	f := &fakeSettings{paths: []string{ownedPath}, entries: map[string]entry{ownedPath: {Name: ownedName, Command: "/opt/voxi/bin/voxi record toggle", Binding: accelerator}}}
 	var out bytes.Buffer
-	if err := Setup(context.Background(), f.deps(&out)); err != nil {
+	if err := Setup(context.Background(), f.deps(&out), false); err != nil {
 		t.Fatal(err)
 	}
 	if len(f.calls) != 0 {
@@ -107,7 +107,7 @@ func TestSetupDetectsConflictsWithoutWrites(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var out bytes.Buffer
-			if err := Setup(context.Background(), tt.f.deps(&out)); err == nil {
+			if err := Setup(context.Background(), tt.f.deps(&out), false); err == nil {
 				t.Fatal("expected conflict")
 			}
 			if len(tt.f.calls) != 0 {
@@ -145,11 +145,32 @@ func TestUnsupportedDesktopDoesNotReadOrWrite(t *testing.T) {
 	f := &fakeSettings{entries: map[string]entry{}}
 	d := f.deps(&bytes.Buffer{})
 	d.Getenv = func(string) string { return "sway" }
-	if err := Setup(context.Background(), d); err == nil {
+	if err := Setup(context.Background(), d, false); err == nil {
 		t.Fatal("expected unsupported desktop error")
 	}
 	if len(f.calls) != 0 {
 		t.Fatalf("unsupported setup wrote settings: %#v", f.calls)
+	}
+}
+
+func TestSetupDoesNotTreatLongerAcceleratorAsSuperX(t *testing.T) {
+	f := &fakeSettings{entries: map[string]entry{}, builtins: "org.example key ['XF86TouchpadToggle', '<Ctrl><Super>XF86TouchpadToggle']"}
+	if err := Setup(context.Background(), f.deps(&bytes.Buffer{}), false); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSetupForcePermitsAcceleratorConflicts(t *testing.T) {
+	f := &fakeSettings{
+		paths:    []string{"/custom/one/"},
+		entries:  map[string]entry{"/custom/one/": {Name: "Other", Command: "/bin/other", Binding: accelerator}},
+		builtins: "org.example key ['<Super>x']",
+	}
+	if err := Setup(context.Background(), f.deps(&bytes.Buffer{}), true); err != nil {
+		t.Fatal(err)
+	}
+	if !contains(f.calls, "set "+mediaSchema+" custom-keybindings ['/custom/one/', '"+ownedPath+"']") {
+		t.Fatalf("forced setup did not preserve conflicting custom shortcut: %#v", f.calls)
 	}
 }
 

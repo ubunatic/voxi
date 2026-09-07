@@ -91,6 +91,7 @@ On GNOME, opt in to Voxi's standard global shortcut with:
 
 ```bash
 voxi shortcut setup    # bind Super+X to this installed voxi binary
+voxi shortcut setup -f # proceed if GNOME reports an existing assignment
 voxi shortcut remove   # remove only the Voxi-owned binding
 ```
 
@@ -98,7 +99,8 @@ Setup uses GNOME's supported custom-keybinding settings, records the executable'
 absolute installed path (so the desktop session does not depend on `PATH`), and is
 idempotent. It refuses to overwrite an existing `Super+X`, another Voxi shortcut, or a
 modified entry at Voxi's reserved settings path. Resolve the named conflict in GNOME
-Settings and retry. Other desktops are not currently supported and are left unchanged.
+Settings and retry, or pass `--force` (`-f`) to proceed while preserving the existing
+setting. Other desktops are not currently supported and are left unchanged.
 
 Start speaking, toggle recording off (or pause in eager mode), and watch your words typed directly into the active application.
 

@@ -93,7 +93,9 @@ commands. Repeating setup does not add another entry.
 Before writing anything, setup checks GNOME's custom and built-in shortcut settings. If
 `Super+X`, a prior Voxi command, or Voxi's reserved settings path is already in use, it
 reports the conflicting entry and asks you to resolve it in GNOME Settings; it never
-silently replaces the binding. `voxi shortcut remove` removes the entry only when its
+silently replaces the binding. Pass `voxi shortcut setup --force` (or `-f`) to proceed
+despite an accelerator conflict; Voxi preserves rather than edits the conflicting GNOME
+setting. `voxi shortcut remove` removes the entry only when its
 name, command shape, and accelerator still identify it as Voxi-owned. Modified or
 unrelated entries are preserved. Currently only GNOME is supported; unavailable
 `gsettings` and non-GNOME desktops fail before any settings are changed.

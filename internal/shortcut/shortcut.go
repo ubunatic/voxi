@@ -23,7 +23,8 @@ const (
 var quotedValue = regexp.MustCompile(`^'(.*)'$`)
 
 // Setup installs the standard GNOME shortcut without replacing other settings.
-func Setup(ctx context.Context, d deps.Dependencies) error {
+// Force permits an accelerator conflict but never edits the conflicting setting.
+func Setup(ctx context.Context, d deps.Dependencies, force bool) error {
 	if err := supported(d); err != nil {
 		return err
 	}
@@ -58,13 +59,13 @@ func Setup(ctx context.Context, d deps.Dependencies) error {
 		if isVoxiCommand(entry.Command) || entry.Name == ownedName {
 			return fmt.Errorf("an existing Voxi shortcut was found at %s; remove it in GNOME Settings before running setup to avoid duplicates", path)
 		}
-		if sameAccelerator(entry.Binding, accelerator) {
+		if sameAccelerator(entry.Binding, accelerator) && !force {
 			return fmt.Errorf("Super+X is already assigned to %q (%s); change or remove that shortcut in GNOME Settings, then retry", entry.Name, entry.Command)
 		}
 	}
 	if conflict, err := builtinConflict(ctx, d); err != nil {
 		return err
-	} else if conflict != "" {
+	} else if conflict != "" && !force {
 		return fmt.Errorf("Super+X is already assigned by GNOME (%s); clear it in Settings > Keyboard > View and Customize Shortcuts, then retry", conflict)
 	}
 
@@ -173,8 +174,10 @@ func builtinConflict(ctx context.Context, d deps.Dependencies) (string, error) {
 			return "", fmt.Errorf("inspect GNOME shortcuts in %s: %w", schema, err)
 		}
 		for _, line := range strings.Split(out, "\n") {
-			if strings.Contains(normalizeAccel(line), normalizeAccel(accelerator)) {
-				return line, nil
+			for _, value := range regexp.MustCompile(`'([^']+)'`).FindAllStringSubmatch(line, -1) {
+				if sameAccelerator(value[1], accelerator) {
+					return line, nil
+				}
 			}
 		}
 	}
