@@ -54,6 +54,8 @@ voxi record status                # show active dictation status (idle or record
 voxi record toggle                # universal toggle across active mode (batch/streaming/eager)
 voxi record start                 # start active voice recording
 voxi record stop                  # stop active voice recording
+voxi shortcut setup               # GNOME: safely configure Super+X
+voxi shortcut remove              # GNOME: remove only Voxi's owned shortcut
 voxi eager [--type] [--history] [--daemon] [--model <name>]  # run eager dictation directly
 voxi monitor                  # print daemon health, memory, GPU Vulkan accel, and processes
 voxi monitor --watch          # live updating resource monitor (aliases: top, resources, stats)
@@ -79,6 +81,22 @@ systemd user services:
 
 `voxi record toggle` acts as a universal toggle for all 3 modes, allowing a single global
 shortcut (`Super+X`) to control whichever mode is currently active.
+
+### GNOME global shortcut
+
+Shortcut installation is explicit and opt-in; neither `make install` nor the GNOME Shell
+extension changes keyboard settings. Run `voxi shortcut setup` inside a GNOME desktop
+session. Voxi resolves its installed executable to an absolute path and creates a GNOME
+custom shortcut for `<Super>x`, avoiding the reduced `PATH` available to desktop-launched
+commands. Repeating setup does not add another entry.
+
+Before writing anything, setup checks GNOME's custom and built-in shortcut settings. If
+`Super+X`, a prior Voxi command, or Voxi's reserved settings path is already in use, it
+reports the conflicting entry and asks you to resolve it in GNOME Settings; it never
+silently replaces the binding. `voxi shortcut remove` removes the entry only when its
+name, command shape, and accelerator still identify it as Voxi-owned. Modified or
+unrelated entries are preserved. Currently only GNOME is supported; unavailable
+`gsettings` and non-GNOME desktops fail before any settings are changed.
 
 ### Eager telemetry queries
 

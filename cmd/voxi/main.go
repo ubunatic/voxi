@@ -23,6 +23,7 @@ import (
 	"ubunatic.com/voxi/internal/modifiers"
 	"ubunatic.com/voxi/internal/monitor"
 	"ubunatic.com/voxi/internal/record"
+	"ubunatic.com/voxi/internal/shortcut"
 	"ubunatic.com/voxi/internal/telemetry"
 	"ubunatic.com/voxi/internal/typing"
 	"ubunatic.com/voxi/spec"
@@ -358,7 +359,7 @@ func main() {
 	if err != nil {
 		panic(fmt.Sprintf("load embedded model specification: %v", err))
 	}
-	root.AddCommand(modeCmd, recordCmd, eagerCmd, monitorCmd, historyCmd, configCmd, daemonCmd, benchCmd, telemetry.NewCommand(d.Stdout, d.Getenv), feedback.NewCommand(d.Stdout, d.Getenv("HOME"), modelSpec.BuiltinStopWords(modelSpec.DefaultModel), modelSpec.SpeechContext.MaxTermChars, modelSpec.SpeechContext.Terms, d), agent.NewCommand(d), chunks.NewCommand(d, nil))
+	root.AddCommand(modeCmd, recordCmd, eagerCmd, monitorCmd, historyCmd, configCmd, daemonCmd, benchCmd, shortcut.NewCommand(d), telemetry.NewCommand(d.Stdout, d.Getenv), feedback.NewCommand(d.Stdout, d.Getenv("HOME"), modelSpec.BuiltinStopWords(modelSpec.DefaultModel), modelSpec.SpeechContext.MaxTermChars, modelSpec.SpeechContext.Terms, d), agent.NewCommand(d), chunks.NewCommand(d, nil))
 	addDebugCommands(root, d)
 
 	if err := root.Execute(); err != nil {

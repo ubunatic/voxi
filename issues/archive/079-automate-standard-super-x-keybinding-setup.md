@@ -1,6 +1,6 @@
 # 079 — Automate Standard Super+X Keybinding Setup
 
-**Status**: Open
+**Status**: Closed — implemented and verified
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Feature
@@ -102,6 +102,26 @@ Open questions to resolve during implementation:
 - Silently taking over `Super+X` from an existing desktop or application action.
 - Prescribing CLI, Makefile, or extension ownership before the canary establishes
   the safest lifecycle.
+
+## 6. Implementation & Verification
+
+Implemented an explicit, opt-in `voxi shortcut setup` / `voxi shortcut remove`
+surface backed by GNOME's custom-keybinding GSettings schemas. The shortcut owns a
+fixed relocatable settings path, resolves the installed `voxi` executable to an
+absolute path, detects custom and built-in accelerator conflicts, detects prior Voxi
+entries, and refuses ambiguous replacement or removal. The GNOME extension and normal
+install lifecycle deliberately do not own the shortcut.
+
+The retained `scripts/canary-gnome-shortcut.sh` inspects the live GNOME shortcut list
+read-only, then proves write/read behavior against an isolated keyfile backend. On the
+development GNOME Wayland session it read back the expected name, command, and
+`<Super>x` binding while a before/after comparison confirmed the live custom shortcut
+list was unchanged. Automated coverage verifies construction, idempotency, custom and
+built-in conflicts, existing Voxi detection, unsupported desktops, and non-destructive
+removal. `go test ./internal/shortcut`, `make check`, and `make install` passed on
+2026-09-07. A physical `Super+X` toggle was not exercised because doing so would require
+installing the binding into the user's real desktop configuration; the isolated schema
+canary and existing voice-input hardware canary cover those two mechanisms separately.
 
 ---
 

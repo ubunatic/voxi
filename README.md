@@ -87,6 +87,19 @@ voxi record toggle
 voxi record status
 ```
 
+On GNOME, opt in to Voxi's standard global shortcut with:
+
+```bash
+voxi shortcut setup    # bind Super+X to this installed voxi binary
+voxi shortcut remove   # remove only the Voxi-owned binding
+```
+
+Setup uses GNOME's supported custom-keybinding settings, records the executable's
+absolute installed path (so the desktop session does not depend on `PATH`), and is
+idempotent. It refuses to overwrite an existing `Super+X`, another Voxi shortcut, or a
+modified entry at Voxi's reserved settings path. Resolve the named conflict in GNOME
+Settings and retry. Other desktops are not currently supported and are left unchanged.
+
 Start speaking, toggle recording off (or pause in eager mode), and watch your words typed directly into the active application.
 
 ---
@@ -105,6 +118,8 @@ gnome-extensions enable voxi@ubunatic.com
 ```
 
 *Note: On Wayland sessions, log out and log back in or restart your session if GNOME Shell needs to discover the newly linked extension.*
+The extension does not create the global keyboard shortcut; run `voxi shortcut setup`
+separately if you want the standard `Super+X` binding.
 
 ---
 
