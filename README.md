@@ -37,7 +37,8 @@ Ensure the following tools and packages are installed on your Linux system:
 | **Go 1.22+** | Compiling `voxi` and `voxi-modifierd` | `golang` / `go` |
 | **`dotoold` / `dotool`** | Hotkey-safe Wayland synthetic typing | [git.sr.ht/~geb/dotool](https://git.sr.ht/~geb/dotool) |
 | **`wl-clipboard`** | Clipboard operations (`wl-copy`) & fallback | `wl-clipboard` |
-| **`whisper.cpp` / `voxtype`** | Fast local Whisper inference (Vulkan/CPU) | [whisper.cpp](https://github.com/ggerganov/whisper.cpp) / [voxtype](https://github.com/peteon/voxtype) |
+| **`crispasr`** | Default eager ASR engine (Cohere Transcribe 03-2026, CPU); first use lazily downloads ~1.66 GiB of GGUF weights into `~/.cache/voxi/models/`, then runs offline | [CrispASR](https://github.com/CrispStrobe/CrispASR) |
+| **`whisper.cpp` / `voxtype`** *(optional)* | Local Whisper inference (Vulkan/CPU); only needed if you explicitly select a Whisper `--model`, or for legacy batch/streaming modes | [whisper.cpp](https://github.com/ggerganov/whisper.cpp) / [voxtype](https://github.com/peteon/voxtype) |
 | **Audio Capture** | 16kHz mono audio recording | `pipewire-pulse` (`parec`) or `alsa-utils` (`arecord`) |
 | **evdev Access** | Physical modifier key monitoring | `voxi-modifierd` service (root/systemd) |
 

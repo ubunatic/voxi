@@ -158,12 +158,17 @@ func TestCaptureTelemetryCorrelatesChunkThroughTyping(t *testing.T) {
 			}
 			return ""
 		},
-		LookPath: func(name string) (string, error) { return name, nil },
+		LookPath: func(name string) (string, error) {
+			if name == "voxtype" {
+				return voxtypePath, nil
+			}
+			return name, nil
+		},
 		RunStdin: func(context.Context, string, string, ...string) error { return nil },
 		Stdout:   io.Discard,
 	}
 	opts := EagerOptions{ThresholdRMS: 500, SilenceMs: 60, PreRollMs: 40, MinSpeechMs: 40, MaxWindowMs: 1000, TypeOutput: true, Model: "small.en", SpeechContext: false}
-	if err := runEagerCaptureSession(context.Background(), d, opts, tmp, voxtypePath, "cat", []string{rawPath}, true, "session-correlation", recorder, nil); err != nil {
+	if err := runEagerCaptureSession(context.Background(), d, opts, tmp, "cat", []string{rawPath}, true, "session-correlation", recorder, nil); err != nil {
 		t.Fatalf("runEagerCaptureSession: %v", err)
 	}
 
@@ -368,8 +373,9 @@ func TestRunEagerCaptureSessionSignalsCaptureStoppedOnEarlyReturn(t *testing.T) 
 	// recCmd.Start()) ever runs, reproducing the race.
 
 	d := deps.Dependencies{
-		Getenv: func(string) string { return "" },
-		Stdout: io.Discard,
+		Getenv:   func(string) string { return "" },
+		LookPath: func(name string) (string, error) { return name, nil },
+		Stdout:   io.Discard,
 	}
 	opts := EagerOptions{
 		Model:         "small.en",
@@ -379,7 +385,7 @@ func TestRunEagerCaptureSessionSignalsCaptureStoppedOnEarlyReturn(t *testing.T) 
 	var stoppedCount atomic.Int32
 	done := make(chan error, 1)
 	go func() {
-		done <- runEagerCaptureSession(ctx, d, opts, t.TempDir(), "voxtype", "sleep", []string{"5"}, true, "test-session", nil, func() {
+		done <- runEagerCaptureSession(ctx, d, opts, t.TempDir(), "sleep", []string{"5"}, true, "test-session", nil, func() {
 			stoppedCount.Add(1)
 		})
 	}()
@@ -396,5 +402,195 @@ func TestRunEagerCaptureSessionSignalsCaptureStoppedOnEarlyReturn(t *testing.T) 
 	if got := stoppedCount.Load(); got != 1 {
 		t.Fatalf("onCaptureStopped invoked %d times on the early-return path, want exactly 1 -- "+
 			"a caller blocked in eagerSessionManager.Stop() waiting on this signal would hang forever", got)
+	}
+}
+
+// TestRequireEngineBinaryWhisperMissingVoxtypeGivesPreciseError is issue
+// 077's acceptance criterion that an explicit Whisper selection without
+// voxtype produces a precise, backend-specific error naming both the model
+// and the missing executable -- not a generic PATH failure.
+func TestRequireEngineBinaryWhisperMissingVoxtypeGivesPreciseError(t *testing.T) {
+	d := deps.Dependencies{
+		LookPath: func(name string) (string, error) {
+			return "", fmt.Errorf("exec: %q: executable file not found in $PATH", name)
+		},
+	}
+	_, _, err := requireEngineBinary(context.Background(), d, "small.en", "whisper")
+	if err == nil {
+		t.Fatal("requireEngineBinary() error = nil, want a missing-voxtype error")
+	}
+	for _, want := range []string{"small.en", "whisper", "voxtype"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("requireEngineBinary() error = %q, want it to mention %q", err, want)
+		}
+	}
+}
+
+// TestRequireEngineBinaryCohereMissingCrispASRGivesPreciseError mirrors the
+// whisper case above for the cohere-transcribe engine: a missing crispasr
+// binary must name crispasr and the model, and must never mention voxtype
+// (which this engine never touches).
+func TestRequireEngineBinaryCohereMissingCrispASRGivesPreciseError(t *testing.T) {
+	d := deps.Dependencies{
+		LookPath: func(name string) (string, error) {
+			return "", fmt.Errorf("exec: %q: executable file not found in $PATH", name)
+		},
+	}
+	_, _, err := requireEngineBinary(context.Background(), d, "cohere-transcribe-03-2026", cohereTranscribeEngine)
+	if err == nil {
+		t.Fatal("requireEngineBinary() error = nil, want a missing-crispasr error")
+	}
+	for _, want := range []string{"cohere-transcribe-03-2026", "crispasr"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("requireEngineBinary() error = %q, want it to mention %q", err, want)
+		}
+	}
+	if strings.Contains(err.Error(), "voxtype") {
+		t.Errorf("requireEngineBinary() error = %q, must not mention voxtype for the cohere-transcribe engine", err)
+	}
+}
+
+// TestRequireEngineBinaryCohereSucceedsWithoutVoxtype is the direct unit
+// counterpart of issue 077's central acceptance criterion: given crispasr on
+// PATH and cached weights, the cohere-transcribe engine resolves its binary
+// successfully even though LookPath fails outright for voxtype.
+func TestRequireEngineBinaryCohereSucceedsWithoutVoxtype(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(tmp, "cache"))
+	weightsPath, err := cohereWeightsPath()
+	if err != nil {
+		t.Fatalf("cohereWeightsPath(): %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(weightsPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Create(weightsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Truncate(cohereGGUFMinBytes); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	crispasrPath := filepath.Join(tmp, "fake-crispasr")
+	d := deps.Dependencies{
+		LookPath: func(name string) (string, error) {
+			if name == crispasrBinary {
+				return crispasrPath, nil
+			}
+			return "", fmt.Errorf("exec: %q: executable file not found in $PATH", name)
+		},
+	}
+	binPath, gotWeights, err := requireEngineBinary(context.Background(), d, "cohere-transcribe-03-2026", cohereTranscribeEngine)
+	if err != nil {
+		t.Fatalf("requireEngineBinary() with voxtype absent = %v, want success", err)
+	}
+	if binPath != crispasrPath {
+		t.Errorf("requireEngineBinary() binPath = %q, want %q", binPath, crispasrPath)
+	}
+	if gotWeights != weightsPath {
+		t.Errorf("requireEngineBinary() weightsPath = %q, want %q", gotWeights, weightsPath)
+	}
+}
+
+// TestRunEagerDaemonReachesReadyWithoutVoxtype is issue 077's live-readiness
+// proof for the daemon path (mirrors TestRequireEngineBinaryCohereSucceedsWithoutVoxtype's
+// direct-path proof): the actual production runEagerDaemon entry point --
+// the same function voxi-agent.service's eager child process runs -- must
+// bind its control socket and answer "status" once the default Cohere model
+// is resolvable and crispasr+weights are available, even though LookPath
+// fails outright for voxtype. Before this issue's fix, runEagerDaemon
+// unconditionally required voxtype before ever reaching model/engine
+// resolution, so this exact scenario crash-looped voxi-agent.service
+// (confirmed live via `journalctl --user -u voxi-agent.service`).
+func TestRunEagerDaemonReachesReadyWithoutVoxtype(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(tmp, "cache"))
+	weightsPath, err := cohereWeightsPath()
+	if err != nil {
+		t.Fatalf("cohereWeightsPath(): %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(weightsPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Create(weightsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Truncate(cohereGGUFMinBytes); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	runtimeDir := filepath.Join(tmp, "runtime")
+	if err := os.MkdirAll(runtimeDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	crispasrPath := filepath.Join(tmp, "fake-crispasr")
+
+	d := deps.Dependencies{
+		Getenv: func(key string) string {
+			if key == "XDG_RUNTIME_DIR" {
+				return runtimeDir
+			}
+			if key == "HOME" {
+				return tmp
+			}
+			return ""
+		},
+		LookPath: func(name string) (string, error) {
+			switch name {
+			case "voxtype":
+				return "", fmt.Errorf("exec: %q: executable file not found in $PATH", name)
+			case crispasrBinary:
+				return crispasrPath, nil
+			default:
+				// pw-record/arecord audio-tool discovery: resolving the name
+				// is enough since no capture session starts in this test.
+				return name, nil
+			}
+		},
+		Stdout: io.Discard,
+	}
+	opts := DefaultEagerOptions() // opts.Model is the spec default: cohere-transcribe-03-2026
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	daemonErr := make(chan error, 1)
+	go func() { daemonErr <- runEagerDaemon(ctx, d, opts) }()
+
+	deadline := time.Now().Add(5 * time.Second)
+	var status string
+	for time.Now().Before(deadline) {
+		select {
+		case err := <-daemonErr:
+			t.Fatalf("runEagerDaemon exited early (want it still running/ready) with err=%v -- likely still unconditionally requiring voxtype", err)
+		default:
+		}
+		status, err = GetEagerRecordingStatus(ctx, d)
+		if err == nil && status == "idle" {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if status != "idle" {
+		t.Fatalf("eager daemon did not reach ready ('idle' over its control socket) within the deadline without voxtype on PATH; last status=%q err=%v", status, err)
+	}
+
+	cancel()
+	select {
+	case err := <-daemonErr:
+		if err != nil {
+			t.Fatalf("runEagerDaemon returned error after cancel: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("runEagerDaemon did not shut down promptly after context cancellation")
 	}
 }

@@ -156,8 +156,75 @@ func gpuAvailable() bool {
 	return err == nil
 }
 
+// requireEngineBinary validates and resolves the one runtime dependency the
+// given model's resolved engine actually needs: voxtype for "whisper" (the
+// legacy default engine value, unchanged behavior and requirement), or
+// crispasr plus cached/downloaded Cohere Transcribe GGUF weights for
+// "cohere-transcribe" (see issue 074). It returns the transcription binary
+// path and, for cohere-transcribe only, the resolved weights path (empty for
+// whisper, where voxtypeTranscribeArgs takes the model name directly instead).
+//
+// This is the single shared check used by runEagerCaptureSession, which both
+// the direct (RunEagerDictation) and daemon (runEagerDaemon) entry points
+// call after resolving the model -- so neither path can require a binary the
+// resolved engine does not actually use, and both apply identical rules. See
+// issue 077.
+func requireEngineBinary(ctx context.Context, d deps.Dependencies, modelName, engine string) (transcribeBinPath, weightsPath string, err error) {
+	switch engine {
+	case "", "whisper":
+		voxtypePath, lookErr := d.LookPath("voxtype")
+		if lookErr != nil {
+			return "", "", fmt.Errorf("eager: model %q needs engine %q, which requires the %q binary; not found on PATH: %w", modelName, "whisper", "voxtype", lookErr)
+		}
+		return voxtypePath, "", nil
+	case cohereTranscribeEngine:
+		crispasrPath, lookErr := d.LookPath(crispasrBinary)
+		if lookErr != nil {
+			return "", "", fmt.Errorf("eager: model %q needs engine %q, which requires the %q binary; not found on PATH: %w", modelName, engine, crispasrBinary, lookErr)
+		}
+		wp, weightsErr := ensureCohereWeights(ctx, d)
+		if weightsErr != nil {
+			return "", "", fmt.Errorf("eager: %w", weightsErr)
+		}
+		return crispasrPath, wp, nil
+	default:
+		return "", "", fmt.Errorf("eager: model %q has unknown engine %q", modelName, engine)
+	}
+}
+
+// checkEagerModelReady resolves opts.Model (or the spec default, with the
+// same GPU-availability fallback applied at transcription time) to its
+// engine and validates that engine's runtime dependency via
+// requireEngineBinary, without keeping any of the resolved values -- it
+// exists purely so both eager entry points (RunEagerDictation and
+// runEagerDaemon) can fail fast with a precise, backend-specific error before
+// spawning an audio capture subprocess or (for the daemon) opening its
+// control socket, rather than only discovering a missing/unusable engine
+// dependency once a session actually starts inside runEagerCaptureSession
+// (whose own resolution -- reached via the same requireEngineBinary call --
+// remains the source of truth actually used for transcription). See issue
+// 077.
+func checkEagerModelReady(ctx context.Context, d deps.Dependencies, opts EagerOptions) error {
+	modelSpec, err := spec.LoadModels()
+	if err != nil {
+		return fmt.Errorf("eager: load model spec: %w", err)
+	}
+	modelName := opts.Model
+	if modelName == "" {
+		modelName = modelSpec.DefaultModel
+	}
+	resolvedModel, _, err := modelSpec.ResolveModel(modelName, gpuAvailable())
+	if err != nil {
+		return fmt.Errorf("eager: %w", err)
+	}
+	_, _, err = requireEngineBinary(ctx, d, resolvedModel, modelSpec.Models[resolvedModel].Engine)
+	return err
+}
+
 // RunEagerDictation orchestrates continuous audio capture, rolling phrase segmentation,
-// Whisper transcription, instant text typing via dotool, and history appending.
+// transcription through the selected model's engine (Cohere Transcribe via crispasr by
+// default, Whisper via voxtype for an explicit Whisper --model), instant text typing via
+// dotool, and history appending.
 func RunEagerDictation(ctx context.Context, d deps.Dependencies, opts EagerOptions) error {
 	if opts.Daemon {
 		return runEagerDaemon(ctx, d, opts)
@@ -176,9 +243,8 @@ func RunEagerDictation(ctx context.Context, d deps.Dependencies, opts EagerOptio
 		return fmt.Errorf("neither pw-record nor arecord found on PATH")
 	}
 
-	voxtypePath, err := d.LookPath("voxtype")
-	if err != nil {
-		return fmt.Errorf("voxtype not found on PATH: %w", err)
+	if err := checkEagerModelReady(ctx, d, opts); err != nil {
+		return err
 	}
 
 	tmpDir, err := os.MkdirTemp("", "voxi-eager-*")
@@ -208,7 +274,7 @@ func RunEagerDictation(ctx context.Context, d deps.Dependencies, opts EagerOptio
 	defer func() {
 		_ = recorder.Record(telemetry.Event{Event: telemetry.MicDeactivated, Timestamp: time.Now(), SessionID: sessionID})
 	}()
-	return runEagerCaptureSession(ctx, d, opts, tmpDir, voxtypePath, recCmdName, recArgs, false, sessionID, recorder, nil)
+	return runEagerCaptureSession(ctx, d, opts, tmpDir, recCmdName, recArgs, false, sessionID, recorder, nil)
 }
 
 // runEagerCaptureSession runs one audio-capture + sequential-transcription
@@ -220,7 +286,7 @@ func RunEagerDictation(ctx context.Context, d deps.Dependencies, opts EagerOptio
 // know "is it safe to start a new session" without waiting for a stale
 // transcription to finish should wait on onCaptureStopped rather than on this
 // function's return (see issue 057 and eagerSessionManager below).
-func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts EagerOptions, tmpDir string, voxtypePath string, recCmdName string, recArgs []string, isDaemon bool, sessionID string, recorder *telemetry.Recorder, onCaptureStopped func()) error {
+func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts EagerOptions, tmpDir string, recCmdName string, recArgs []string, isDaemon bool, sessionID string, recorder *telemetry.Recorder, onCaptureStopped func()) error {
 	// Guarantee onCaptureStopped fires exactly once no matter which of this
 	// function's many return paths is taken -- including the early
 	// `return fmt.Errorf(...)` guards below (model spec load failure, audio
@@ -316,34 +382,29 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 		silenceArtifacts = overrides.SilenceArtifacts
 	}
 
-	// Dispatch on the resolved model's engine: whisper (today's default,
-	// unchanged) keeps using the voxtypePath/voxtypeTranscribeArgs already
-	// resolved by the caller; cohere-transcribe resolves and invokes the
-	// crispasr binary instead, lazily downloading its GGUF weights on first
-	// use. See issue 074.
+	// Dispatch on the resolved model's engine: whisper (the legacy/default
+	// engine value, unchanged behavior) requires and invokes voxtype; cohere-transcribe
+	// requires and invokes the crispasr binary instead, lazily downloading its
+	// GGUF weights on first use. requireEngineBinary is the single place
+	// (shared by both the direct RunEagerDictation path and the daemon path,
+	// which both funnel into this function) that validates and resolves the
+	// dependency the *resolved* model's engine actually needs -- see issue
+	// 077: previously both callers unconditionally required voxtype on PATH
+	// before ever reaching this dispatch, breaking a stock Cohere-default
+	// install (and crash-looping voxi-agent.service) even though the Cohere
+	// path never invokes voxtype. See issue 074 for the engine itself.
 	engine := modelSpec.Models[modelName].Engine
-	transcribeBinPath := voxtypePath
+	transcribeBinPath, weightsPath, err := requireEngineBinary(ctx, d, modelName, engine)
+	if err != nil {
+		return err
+	}
 	buildTranscribeArgs := func(wavPath string) []string {
 		return voxtypeTranscribeArgs(modelName, wavPath, initialPrompt)
 	}
-	switch engine {
-	case "", "whisper":
-		// unchanged default path above
-	case cohereTranscribeEngine:
-		crispasrPath, lookErr := d.LookPath(crispasrBinary)
-		if lookErr != nil {
-			return fmt.Errorf("eager: model %q needs engine %q, which requires the %q binary; not found on PATH: %w", modelName, engine, crispasrBinary, lookErr)
-		}
-		weightsPath, weightsErr := ensureCohereWeights(ctx, d)
-		if weightsErr != nil {
-			return fmt.Errorf("eager: %w", weightsErr)
-		}
-		transcribeBinPath = crispasrPath
+	if engine == cohereTranscribeEngine {
 		buildTranscribeArgs = func(wavPath string) []string {
 			return crispASRTranscribeArgs(weightsPath, wavPath)
 		}
-	default:
-		return fmt.Errorf("eager: model %q has unknown engine %q", modelName, engine)
 	}
 
 	jobChan := make(chan TranscribeJob, 10)
@@ -845,9 +906,8 @@ func runEagerDaemon(ctx context.Context, d deps.Dependencies, opts EagerOptions)
 		return fmt.Errorf("audio capture tool (pw-record or arecord) missing")
 	}
 
-	voxtypePath, err := d.LookPath("voxtype")
-	if err != nil {
-		return fmt.Errorf("voxtype missing: %w", err)
+	if err := checkEagerModelReady(ctx, d, opts); err != nil {
+		return err
 	}
 
 	tmpDir, err := os.MkdirTemp("", "voxi-eager-daemon-*")
@@ -881,7 +941,7 @@ func runEagerDaemon(ctx context.Context, d deps.Dependencies, opts EagerOptions)
 		// returns -- otherwise external state readers (voxi monitor, the
 		// GNOME extension) would keep reporting "recording" for up to
 		// transcribeTimeout after the user told the daemon to stop.
-		_ = runEagerCaptureSession(sessCtx, d, opts, sessTmpDir, voxtypePath, recCmdName, recArgs, true, sessionID, recorder, func() {
+		_ = runEagerCaptureSession(sessCtx, d, opts, sessTmpDir, recCmdName, recArgs, true, sessionID, recorder, func() {
 			writeVoxtypeState("idle")
 			onCaptureStopped()
 		})

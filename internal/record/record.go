@@ -10,6 +10,7 @@ import (
 	"ubunatic.com/voxi/internal/deps"
 	"ubunatic.com/voxi/internal/eager"
 	"ubunatic.com/voxi/internal/mode"
+	"ubunatic.com/voxi/spec"
 )
 
 // RecordAction represents a recording control verb (toggle, start, stop).
@@ -20,6 +21,25 @@ const (
 	RecordActionStart  RecordAction = "start"
 	RecordActionStop   RecordAction = "stop"
 )
+
+// defaultEngineNeedsVoxtype reports whether the model spec's currently
+// configured default model resolves to the "whisper" engine -- the only
+// engine voxtype's own "record"/"status" subcommands can serve. See issue
+// 077: before this, ModeNeither (no voice-input systemd unit active, the
+// common state before any dictation session has been started, or the
+// steady state when the default engine's own session lives behind the
+// voxi-agent RPC rather than a tracked systemd unit) unconditionally
+// required voxtype even when the default model is cohere-transcribe, which
+// never touches voxtype. If the spec cannot be loaded at all, this
+// preserves the pre-issue-077 behavior (unconditional voxtype requirement)
+// rather than silently routing around a broken install.
+func defaultEngineNeedsVoxtype() bool {
+	modelSpec, err := spec.LoadModels()
+	if err != nil {
+		return true
+	}
+	return modelSpec.IsWhisperEngine(modelSpec.DefaultModel)
+}
 
 // ControlRecording sends a recording control action to the active speech engine.
 func ControlRecording(ctx context.Context, d deps.Dependencies, action RecordAction) error {
@@ -33,7 +53,7 @@ func ControlRecording(ctx context.Context, d deps.Dependencies, action RecordAct
 	}
 
 	m := mode.CurrentVoiceInputMode(ctx, d)
-	if m == mode.ModeEager {
+	if m == mode.ModeEager || (m == mode.ModeNeither && !defaultEngineNeedsVoxtype()) {
 		return eager.ControlEagerDaemon(ctx, d, string(action))
 	}
 
@@ -69,7 +89,7 @@ func GetRecordingStatus(ctx context.Context, d deps.Dependencies) (string, error
 	}
 
 	m := mode.CurrentVoiceInputMode(ctx, d)
-	if m == mode.ModeEager {
+	if m == mode.ModeEager || (m == mode.ModeNeither && !defaultEngineNeedsVoxtype()) {
 		return eager.GetEagerRecordingStatus(ctx, d)
 	}
 

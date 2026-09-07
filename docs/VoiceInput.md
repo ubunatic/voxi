@@ -19,8 +19,11 @@ transcription speed numbers, see [BenchBaseline.md](BenchBaseline.md).
 
 - No tagged release yet — install from `main` via `make install` (see
   [Installation](#installation)).
-- The Voxtype backend (batch, streaming, and eager engines) is a separate, independently
-  installed binary; `voxi` orchestrates it but does not vendor or download it.
+- ASR backends are separate, independently installed binaries that `voxi` orchestrates but
+  does not vendor: `crispasr` (Cohere Transcribe, the default eager engine) and `voxtype`
+  (Whisper batch/streaming, and eager when an explicit Whisper `--model` is selected).
+  `voxtype` is not required for the default eager path; see spec/models.yaml's `engine`
+  field per model and issue 077.
 - The Fedora 44 GNOME Wayland canary fully passed: microphone capture, local `base.en`
   transcription, the global GNOME toggle shortcut, and direct text injection at the
   focused cursor (correct on a German QWERTZ layout) via a user-level `dotool`+`dotoold`

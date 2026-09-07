@@ -230,7 +230,10 @@ func DefaultVADProbeOptions() VADProbeOptions {
 	}
 }
 
-// RunVADProbe runs the interactive VAD segmentation dictation probe.
+// RunVADProbe runs the interactive VAD segmentation dictation probe. It is
+// whisper-only (always dispatches through voxtype, using DefaultWhisperModel
+// rather than the spec's current -- possibly non-whisper -- DefaultModel);
+// see issue 077.
 func RunVADProbe(ctx context.Context, d deps.Dependencies, opts VADProbeOptions) error {
 	recCmdName := ""
 	var recArgs []string
@@ -277,6 +280,15 @@ func RunVADProbe(ctx context.Context, d deps.Dependencies, opts VADProbeOptions)
 	if err != nil {
 		return fmt.Errorf("load model spec: %w", err)
 	}
+	// This probe is hard-wired to voxtype (it has no engine/model dispatch
+	// of its own), so it must not use the spec's current DefaultModel --
+	// since issue 074 that may be a non-whisper engine (e.g.
+	// cohere-transcribe), which voxtype cannot run. Use the explicit
+	// whisper default instead. See issue 077.
+	probeModel, err := modelSpec.DefaultWhisperModel()
+	if err != nil {
+		return fmt.Errorf("resolve whisper model for VAD probe: %w", err)
+	}
 
 	recCmd := exec.CommandContext(ctx, recCmdName, recArgs...)
 	audioOut, err := recCmd.StdoutPipe()
@@ -315,7 +327,7 @@ func RunVADProbe(ctx context.Context, d deps.Dependencies, opts VADProbeOptions)
 			wavPath := filepath.Join(tmpDir, fmt.Sprintf("utt_%03d.wav", uttCount))
 			_ = audio.WriteWAVAudio(wavPath, cand.Audio, 16000)
 
-			cmd := exec.CommandContext(ctx, voxtypePath, "--model", modelSpec.DefaultModel, "-q", "transcribe", wavPath)
+			cmd := exec.CommandContext(ctx, voxtypePath, "--model", probeModel, "-q", "transcribe", wavPath)
 			out, err := cmd.Output()
 			_ = os.Remove(wavPath)
 			if err == nil {

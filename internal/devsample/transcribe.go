@@ -47,7 +47,15 @@ func transcribeRawTranscript(ctx context.Context, d deps.Dependencies, pcm []byt
 	if err != nil {
 		return "", fmt.Errorf("load model spec: %w", err)
 	}
-	modelName := modelSpec.DefaultModel
+	// This sampler is hard-wired to voxtype (see the package-level comment
+	// on the import-cycle constraint), so it must never pass the spec's
+	// current DefaultModel straight through -- since issue 074 that may be
+	// a non-whisper engine (e.g. cohere-transcribe), which voxtype cannot
+	// run. Use the explicit whisper default instead. See issue 077.
+	modelName, err := modelSpec.DefaultWhisperModel()
+	if err != nil {
+		return "", fmt.Errorf("resolve whisper model for raw-transcript sampling: %w", err)
+	}
 
 	tmpFile, err := os.CreateTemp("", "voxi-devsample-*.wav")
 	if err != nil {

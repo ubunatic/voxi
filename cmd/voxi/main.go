@@ -122,8 +122,11 @@ func main() {
 		Short: "Continuous eager sentence streaming dictation into focused window",
 		Long: "Continuously captures audio from the microphone with a circular pre-roll buffer.\n" +
 			"Segments speech on natural conversational pauses (silence > 800ms) or rolling windows,\n" +
-			"transcribes completed phrases immediately with local Whisper, and types finalized sentences\n" +
-			"directly into the active application via dotool with zero dropped words across pauses.",
+			"transcribes completed phrases immediately with the selected model's engine (Cohere\n" +
+			"Transcribe via crispasr by default, or Whisper via voxtype for an explicit --model),\n" +
+			"and types finalized sentences directly into the active application via dotool with zero\n" +
+			"dropped words across pauses. crispasr is required for the default engine; voxtype is only\n" +
+			"required when an explicit Whisper --model is selected.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return eager.RunEagerDictation(cmd.Context(), d, eagerOpts)
@@ -137,7 +140,7 @@ func main() {
 	eagerCmd.Flags().BoolVar(&eagerOpts.TypeOutput, "type", eagerOpts.TypeOutput, "type transcribed sentences directly into the focused window via dotool")
 	eagerCmd.Flags().BoolVar(&eagerOpts.RecordHistory, "history", eagerOpts.RecordHistory, "record transcribed utterances into local dictation history")
 	eagerCmd.Flags().BoolVar(&eagerOpts.Daemon, "daemon", eagerOpts.Daemon, "run as background systemd daemon listening for toggle control")
-	eagerCmd.Flags().StringVar(&eagerOpts.Model, "model", eagerOpts.Model, fmt.Sprintf("Whisper model name, see spec/models.yaml (default: %s)", eagerOpts.Model))
+	eagerCmd.Flags().StringVar(&eagerOpts.Model, "model", eagerOpts.Model, fmt.Sprintf("model name, see spec/models.yaml (default: %s, engine cohere-transcribe via crispasr; explicit whisper-engine models need voxtype)", eagerOpts.Model))
 	eagerCmd.Flags().BoolVar(&eagerOpts.SpeechContext, "speech-context", eagerOpts.SpeechContext, "bounded local vocabulary hints for small.en (default: on; use --speech-context=false to disable)")
 	eagerCmd.Flags().StringSliceVar(&eagerOpts.Vocabulary, "vocabulary", eagerOpts.Vocabulary, "additional comma-separated speech-context terms (requires --speech-context)")
 
@@ -317,10 +320,11 @@ func main() {
 	benchCmd := &cobra.Command{
 		Use:   "bench",
 		Short: "Benchmark CPU vs GPU transcription speed across configured Whisper models",
-		Long: "Transcribes one audio clip through every model in spec/models.yaml on each\n" +
-			"requested backend, reporting the real-time factor (RTF) and speedup for each\n" +
-			"model x backend pair. By default it uses a fixed reference clip downloaded\n" +
-			"on demand into the user cache dir (never committed to the repo); pass\n" +
+		Long: "Transcribes one audio clip through every whisper-engine model in spec/models.yaml\n" +
+			"(driven via voxtype) on each requested backend, reporting the real-time factor (RTF)\n" +
+			"and speedup for each model x backend pair. Non-whisper engines (e.g. cohere-transcribe)\n" +
+			"are reported as skipped rather than benched. By default it uses a fixed reference clip\n" +
+			"downloaded on demand into the user cache dir (never committed to the repo); pass\n" +
 			"--record for a live microphone clip or --file for a local WAV.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -345,7 +349,7 @@ func main() {
 	benchCmd.Flags().BoolVar(&benchOpts.Record, "record", benchOpts.Record, "record live microphone audio instead of using the downloaded reference clip")
 	benchCmd.Flags().IntVar(&benchOpts.DurationSecs, "duration", benchOpts.DurationSecs, "seconds of microphone audio to record when --record is set")
 	benchCmd.Flags().StringVar(&benchOpts.WavFile, "file", benchOpts.WavFile, "use this 16kHz mono WAV instead of the reference clip or recording")
-	benchCmd.Flags().StringSliceVar(&benchOpts.Models, "models", benchOpts.Models, "comma-separated model names to bench (default: every model in spec/models.yaml)")
+	benchCmd.Flags().StringSliceVar(&benchOpts.Models, "models", benchOpts.Models, "comma-separated model names to bench (default: every whisper-engine model in spec/models.yaml; non-whisper models are reported as skipped)")
 	benchCmd.Flags().StringSliceVar(&benchOpts.Backends, "backends", benchOpts.Backends, fmt.Sprintf("comma-separated backends to bench: cpu, gpu (default: %s)", strings.Join(benchOpts.Backends, ",")))
 	benchCmd.Flags().IntVar(&benchOpts.Threads, "threads", benchOpts.Threads, "CPU threads passed to voxtype")
 	benchCmd.Flags().StringVar(&benchJSONPath, "json", "", "write the full bench report as JSON to this path")

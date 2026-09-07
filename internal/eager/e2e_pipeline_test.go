@@ -346,8 +346,7 @@ func TestEagerCaptureSessionEndToEndSingleFixture(t *testing.T) {
 	if err != nil {
 		t.Skip(err.Error())
 	}
-	voxtypePath, err := d.LookPath("voxtype")
-	if err != nil {
+	if _, err := d.LookPath("voxtype"); err != nil {
 		t.Skip("voxtype not found on PATH")
 	}
 
@@ -366,7 +365,7 @@ func TestEagerCaptureSessionEndToEndSingleFixture(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	if err := runEagerCaptureSession(ctx, d, opts, t.TempDir(), voxtypePath, audioCmd, audioArgs, true, "test-session", nil, nil); err != nil {
+	if err := runEagerCaptureSession(ctx, d, opts, t.TempDir(), audioCmd, audioArgs, true, "test-session", nil, nil); err != nil {
 		t.Fatalf("runEagerCaptureSession: %v", err)
 	}
 
@@ -428,13 +427,11 @@ func TestEagerCaptureSessionEndToEndCohereTranscribe(t *testing.T) {
 	if _, err := d.LookPath(crispasrBinary); err != nil {
 		t.Skip("crispasr not found on PATH")
 	}
-	// voxtypePath is still resolved and passed through exactly like the
-	// whisper-engine tests: the point of this test is that the
-	// cohere-transcribe engine dispatch branch never uses it.
-	voxtypePath, err := d.LookPath("voxtype")
-	if err != nil {
-		t.Skip("voxtype not found on PATH")
-	}
+	// Deliberately does NOT require voxtype on PATH: issue 077's whole point
+	// is that a Cohere-engine session reaches readiness and transcribes
+	// without it, which this live end-to-end run (real VAD, real crispasr
+	// subprocess, real GGUF weights) proves directly on a machine that may
+	// genuinely lack voxtype.
 
 	opts := EagerOptions{
 		ThresholdRMS:  150,
@@ -451,7 +448,7 @@ func TestEagerCaptureSessionEndToEndCohereTranscribe(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	if err := runEagerCaptureSession(ctx, d, opts, t.TempDir(), voxtypePath, audioCmd, audioArgs, true, "test-session", nil, nil); err != nil {
+	if err := runEagerCaptureSession(ctx, d, opts, t.TempDir(), audioCmd, audioArgs, true, "test-session", nil, nil); err != nil {
 		t.Fatalf("runEagerCaptureSession: %v", err)
 	}
 
@@ -540,8 +537,7 @@ func TestEagerCaptureSessionEndToEndSplicedNoiseSession(t *testing.T) {
 	if err != nil {
 		t.Skip(err.Error())
 	}
-	voxtypePath, err := d.LookPath("voxtype")
-	if err != nil {
+	if _, err := d.LookPath("voxtype"); err != nil {
 		t.Skip("voxtype not found on PATH")
 	}
 
@@ -560,7 +556,7 @@ func TestEagerCaptureSessionEndToEndSplicedNoiseSession(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
-	if err := runEagerCaptureSession(ctx, d, opts, t.TempDir(), voxtypePath, audioCmd, audioArgs, true, "test-session", nil, nil); err != nil {
+	if err := runEagerCaptureSession(ctx, d, opts, t.TempDir(), audioCmd, audioArgs, true, "test-session", nil, nil); err != nil {
 		t.Fatalf("runEagerCaptureSession: %v", err)
 	}
 

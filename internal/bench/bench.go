@@ -1,6 +1,11 @@
 // Package bench measures Whisper transcription speed (RTF, real-time
 // factor) per model and per compute backend (CPU vs GPU), driving voxtype
-// exactly like eager mode does. GPU is forced off by setting
+// the same way eager mode's whisper engine does. It is voxtype/whisper-only:
+// since issue 074 the model registry can also carry non-whisper engines
+// (e.g. cohere-transcribe), which voxtype cannot run, so a default run
+// benches whisper-engine models only and an explicitly named non-whisper
+// model is reported as skipped rather than mis-invoked (see issue 077). GPU
+// is forced off by setting
 // GGML_VK_VISIBLE_DEVICES="" — confirmed against whisper.cpp/ggml-vulkan's
 // device-enumeration fallback: with no visible devices it logs
 // "whisper_backend_init_gpu: no GPU found" and runs on CPU. voxtype does
@@ -124,7 +129,18 @@ func Run(ctx context.Context, d deps.Dependencies, opts Options) (*Report, error
 	}
 	models := opts.Models
 	if len(models) == 0 {
-		models = modelSpec.Names()
+		// bench drives voxtype exclusively (see the package doc comment), so
+		// an auto-selected default run must stick to whisper-engine models;
+		// since issue 074 the registry can carry non-whisper entries (e.g.
+		// cohere-transcribe), which voxtype cannot run. A model explicitly
+		// named via opts.Models still goes through -- it is caught and
+		// reported per-result below instead of silently mis-invoked. See
+		// issue 077.
+		for _, name := range modelSpec.Names() {
+			if modelSpec.IsWhisperEngine(name) {
+				models = append(models, name)
+			}
+		}
 		sort.Strings(models)
 	}
 	backends := opts.Backends
@@ -177,6 +193,13 @@ func Run(ctx context.Context, d deps.Dependencies, opts Options) (*Report, error
 	report := &Report{GeneratedAt: time.Now(), AudioSecs: audioSecs, AudioSource: audioSource}
 	for _, backend := range backends {
 		for _, model := range models {
+			if !modelSpec.IsWhisperEngine(model) {
+				report.Results = append(report.Results, Result{
+					Model: model, Backend: backend, AudioSecs: audioSecs,
+					Error: fmt.Sprintf("skipped: model %q uses a non-whisper engine; bench only drives voxtype (see spec/models.yaml)", model),
+				})
+				continue
+			}
 			if backend == "cpu" && !modelSpec.AllowsCPU(model) {
 				report.Results = append(report.Results, Result{
 					Model: model, Backend: backend, AudioSecs: audioSecs,

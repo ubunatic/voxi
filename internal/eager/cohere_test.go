@@ -3,6 +3,7 @@ package eager
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -122,7 +123,11 @@ func TestEnsureWeightsFileSurfacesHTTPErrorStatus(t *testing.T) {
 // branch actually resolves the "crispasr" binary via LookPath (not
 // "voxtype") and builds cohere-shaped args -- not just that
 // crispASRTranscribeArgs alone produces the right shape in isolation. The
-// weights cache is pre-seeded so no network call is attempted.
+// weights cache is pre-seeded so no network call is attempted. The fake
+// LookPath fails outright for "voxtype", so this also proves issue 077's
+// acceptance criterion directly: a Cohere-engine session reaches readiness
+// and transcribes an utterance even when voxtype cannot be found on PATH at
+// all.
 func TestEagerDispatchesCohereTranscribeEngineToCrispASR(t *testing.T) {
 	tmp := t.TempDir()
 	rawPath := filepath.Join(tmp, "audio.raw")
@@ -147,14 +152,6 @@ func TestEagerDispatchesCohereTranscribeEngineToCrispASR(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A fake voxtype binary is still resolved by the caller (mirroring
-	// production) but must never be invoked for this model: the fake
-	// script exits nonzero, so the test fails loudly if the whisper path
-	// is ever reached by mistake.
-	voxtypePath := filepath.Join(tmp, "fake-voxtype")
-	if err := os.WriteFile(voxtypePath, []byte("#!/bin/sh\necho 'must not be called' >&2\nexit 1\n"), 0700); err != nil {
-		t.Fatal(err)
-	}
 	crispasrPath := filepath.Join(tmp, "fake-crispasr")
 	if err := os.WriteFile(crispasrPath, []byte("#!/bin/sh\nprintf 'voxey uses voxtype cohere path\\n'\n"), 0700); err != nil {
 		t.Fatal(err)
@@ -196,9 +193,16 @@ func TestEagerDispatchesCohereTranscribeEngineToCrispASR(t *testing.T) {
 			}
 			return ""
 		},
+		// voxtype deliberately fails LookPath (issue 077: a Cohere-engine
+		// session must reach readiness -- resolve its model, dispatch, and
+		// transcribe -- without voxtype on PATH at all, not merely without
+		// invoking it).
 		LookPath: func(name string) (string, error) {
 			if name == crispasrBinary {
 				return crispasrPath, nil
+			}
+			if name == "voxtype" {
+				return "", fmt.Errorf("exec: %q: executable file not found in $PATH", name)
 			}
 			return name, nil
 		},
@@ -206,7 +210,7 @@ func TestEagerDispatchesCohereTranscribeEngineToCrispASR(t *testing.T) {
 		Stdout:   io.Discard,
 	}
 	opts := EagerOptions{ThresholdRMS: 500, SilenceMs: 60, PreRollMs: 40, MinSpeechMs: 40, MaxWindowMs: 1000, TypeOutput: true, Model: "cohere-transcribe-03-2026", SpeechContext: false}
-	if err := runEagerCaptureSession(context.Background(), d, opts, tmp, voxtypePath, "cat", []string{rawPath}, true, "session-correlation", recorder, nil); err != nil {
+	if err := runEagerCaptureSession(context.Background(), d, opts, tmp, "cat", []string{rawPath}, true, "session-correlation", recorder, nil); err != nil {
 		t.Fatalf("runEagerCaptureSession: %v", err)
 	}
 

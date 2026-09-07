@@ -7,6 +7,7 @@ package spec
 import (
 	_ "embed"
 	"fmt"
+	"sort"
 
 	"gopkg.in/yaml.v3"
 )
@@ -145,6 +146,44 @@ func (s *ModelSpec) ResolveModel(name string, gpuAvailable bool) (resolved strin
 		return "", false, fmt.Errorf("model %q requires GPU acceleration and has no cpu_fallback configured in spec/models.yaml", name)
 	}
 	return m.CPUFallback, true, nil
+}
+
+// IsWhisperEngine reports whether name resolves to the "whisper" engine
+// (including the legacy empty engine value, which means whisper). An
+// unknown name reports false rather than panicking on a missing map entry.
+func (s *ModelSpec) IsWhisperEngine(name string) bool {
+	m, ok := s.Models[name]
+	if !ok {
+		return false
+	}
+	return m.Engine == "" || m.Engine == "whisper"
+}
+
+// DefaultWhisperModel returns the model name for tooling that is hard-wired
+// to drive voxtype specifically (internal/devsample's raw ASR sampler, the
+// debug VAD probe, internal/bench) rather than whatever engine DefaultModel
+// currently resolves to -- which, since issue 074, may be a non-whisper
+// engine such as cohere-transcribe. It never returns a model whose engine is
+// not whisper. It prefers "small.en", the pre-Cohere eager default (see the
+// speech_context comment in spec/models.yaml), and falls back to the first
+// whisper-engine model name in sorted order so a spec that ever drops
+// small.en still resolves deterministically instead of silently handing a
+// non-whisper model name to voxtype (see issue 077).
+func (s *ModelSpec) DefaultWhisperModel() (string, error) {
+	if s.IsWhisperEngine("small.en") {
+		return "small.en", nil
+	}
+	var names []string
+	for name := range s.Models {
+		if s.IsWhisperEngine(name) {
+			names = append(names, name)
+		}
+	}
+	if len(names) == 0 {
+		return "", fmt.Errorf("spec: no whisper-engine model configured in models.yaml")
+	}
+	sort.Strings(names)
+	return names[0], nil
 }
 
 // Names returns all configured model names.
