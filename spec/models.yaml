@@ -10,7 +10,7 @@
 # below because none of these models are known to diverge yet; split a
 # model out with its own list as soon as it shows model-specific leakage.
 
-default_model: small.en
+default_model: cohere-transcribe-03-2026
 
 # Decoder-only terminology hints for the small.en speech context, active by
 # default (disable per invocation with --speech-context=false). These values

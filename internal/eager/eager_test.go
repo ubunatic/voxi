@@ -66,19 +66,24 @@ func TestSpeechContextIsSmallEnOnlyAndDisableable(t *testing.T) {
 }
 
 // TestDefaultEagerOptionsEnableSpeechContext locks in issue 046's flipped
-// default: a fresh `voxi eager` invocation with no --speech-context flag
-// must have prompting active (small.en is also the default model, so the
-// shouldUseSpeechContext gate above will fire). Explicit
-// --speech-context=false still overrides this via the Cobra flag binding
-// in cmd/voxi/main.go, which is exercised by TestSpeechContextIsSmallEnOnlyAndDisableable
-// above (the enabled=false cases).
+// default: the SpeechContext *flag* defaults on, and still actually fires
+// for small.en with no explicit --speech-context flag. It does NOT assert
+// that the flag fires for whatever model is currently spec/models.yaml's
+// default_model: since issue 074, default_model can be cohere-transcribe-03-2026,
+// which has no vocabulary-biasing hook (shouldUseSpeechContext is deliberately
+// gated to "small.en" only, per issue 066 §7.5) — so a default `voxi eager`
+// invocation on a non-small.en default model has SpeechContext=true but
+// shouldUseSpeechContext=false, and that is expected, not a bug. Explicit
+// --speech-context=false still overrides everything via the Cobra flag
+// binding in cmd/voxi/main.go, exercised by
+// TestSpeechContextIsSmallEnOnlyAndDisableable above (the enabled=false cases).
 func TestDefaultEagerOptionsEnableSpeechContext(t *testing.T) {
 	opts := DefaultEagerOptions()
 	if !opts.SpeechContext {
 		t.Fatal("DefaultEagerOptions().SpeechContext = false, want true (issue 046: default-on)")
 	}
-	if !shouldUseSpeechContext(opts.Model, opts.SpeechContext) {
-		t.Fatalf("shouldUseSpeechContext(%q, true) = false, want true for the default model", opts.Model)
+	if !shouldUseSpeechContext("small.en", opts.SpeechContext) {
+		t.Fatal("shouldUseSpeechContext(\"small.en\", true) = false, want true")
 	}
 }
 
