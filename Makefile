@@ -34,7 +34,7 @@ install: ⚙️ build  # install voxi binary to ~/go/bin (user)
 install-debug: ⚙️ build-debug  # install debug binary to ~/go/bin
 	go install -tags debug ./cmd/voxi
 
-install-all: ⚙️ install install-user-services  # install user binaries and systemd user services
+install-all: ⚙️ install install-user-services install-crispasr  # install user binaries, systemd user services, and the default engine's crispasr binary
 	go install ./cmd/voxi-modifierd
 
 restart-service: ⚙️ install  # rebuild, install, and restart the running voxi-agent user service
