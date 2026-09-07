@@ -40,8 +40,8 @@
           },
           "engine": {
             "type": "string",
-            "description": "Inference engine backing this model.",
-            "enum": ["whisper"]
+            "description": "Inference engine backing this model. 'whisper' dispatches through voxtype; 'cohere-transcribe' dispatches through the crispasr binary (see issue 074).",
+            "enum": ["whisper", "cohere-transcribe"]
           },
           "stop_words": {
             "type": "array",

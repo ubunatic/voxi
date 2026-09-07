@@ -1,6 +1,6 @@
 # 074 — Wire Cohere Transcribe In as an Additional Selectable ASR Backend
 
-**Status**: Open
+**Status**: Closed
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Feature
@@ -162,3 +162,75 @@ always assuming `voxtype`.
 - Run existing `internal/eager` and `spec` package tests
   (`go test ./internal/eager/... ./spec/...`) to confirm no regression to
   the `whisper`/`voxtype` path.
+
+## 8. Implementation Notes (2026-09-07)
+
+Implemented as designed in §3, with no scope changes:
+
+- `spec/models.yaml`: new `cohere-transcribe-03-2026` model entry with
+  `engine: cohere-transcribe`, reusing `*common_stop_words` (066's
+  transcripts on this corpus showed no model-specific hallucination
+  pattern). `spec/schemas/models.schema.json`'s `engine` enum extended to
+  `["whisper", "cohere-transcribe"]`.
+- `internal/eager/eager.go`'s `runEagerCaptureSession` now resolves the
+  model's `Engine` once (after `modelSpec`/`ResolveModel`) and picks a
+  `transcribeBinPath` + `buildTranscribeArgs` closure per engine; the
+  `whisper` branch is byte-for-byte the prior unconditional behavior
+  (`voxtypePath` / `voxtypeTranscribeArgs`), so the existing whisper/voxtype
+  path is unmodified. `cohere-transcribe` resolves `crispasr` via
+  `d.LookPath` (same pattern as `voxtype`) and calls new
+  `internal/eager/cohere.go`.
+- `internal/eager/cohere.go` (new): `crispASRTranscribeArgs` (mirrors
+  `voxtypeTranscribeArgs`'s shape: model path, wav path, thread count;
+  deliberately has no `initialPrompt` parameter -- 066 §7.5 confirmed
+  `--prompt`/`--hotwords` are no-ops for this backend) and
+  `ensureCohereWeights`/`ensureWeightsFile`/`downloadFile` (lazy on-demand
+  GGUF download into `os.UserCacheDir()/voxi/models/`, atomic
+  tmp-then-rename, idempotent size-based cache check, no vendored/bundled
+  weight -- never touched by `make install`).
+- Per §3 item 5, `shouldUseSpeechContext` is untouched (still gated to
+  `small.en` only); `cohere-transcribe` gets no `--initial-prompt`-equivalent
+  flag.
+- Tests: `internal/eager/cohere_test.go` (new) unit-tests the arg builder
+  and the download/cache logic (skip-when-cached, download-when-missing,
+  truncated-download rejection, HTTP-error surfacing) against an
+  `httptest.Server`, plus a mocked-subprocess dispatch test
+  (`TestEagerDispatchesCohereTranscribeEngineToCrispASR`) proving
+  `runEagerCaptureSession` resolves `crispasr` (not `voxtype`) for this
+  engine. `internal/eager/e2e_pipeline_test.go` gained
+  `TestEagerCaptureSessionEndToEndCohereTranscribe`, a `VOXI_E2E=1`-gated
+  real-pipeline replay (same harness as the existing whisper e2e test) that
+  drives the actual `crispasr` binary and real GGUF weights against a real
+  corpus fixture.
+- Verification performed: `go test ./...` and `make check` green
+  (including the new tests); real end-to-end replay against
+  `~/.config/voxi/samples/kt-core.wav` via
+  `VOXI_E2E=1 VOXI_E2E_CORPUS=~/.config/voxi/samples VOXI_E2E_FIXTURE=kt-core
+  go test ./internal/eager/... -run TestEagerCaptureSessionEndToEndCohereTranscribe`
+  produced `"you Voxy uses VoxType with DoTool on Pipefire and Wayland."`
+  (WER 0.333 against expected `"Voxi uses voxtype with dotool on PipeWire
+  and Wayland."`), consistent with 066's canary transcript quality; the
+  equivalent whisper/small.en e2e test was re-run alongside it and still
+  passes (WER 0.222), confirming no regression. `make install` and `make
+  restart-service` both succeeded and `voxi-agent.service` is active
+  running the new binary. The actually-installed `voxi` binary was also
+  launched directly (`voxi eager --model cohere-transcribe-03-2026`)
+  against the real microphone and real `crispasr`/weights with no crash.
+  No live human-spoken microphone dictation was possible in this
+  non-interactive agent session (no speaker present) -- the real-pipeline
+  replay test above is the closest available substitute, since it drives
+  the identical `runEagerCaptureSession` code path the daemon runs, with
+  real (not mocked) subprocesses, binaries, and weights, only the audio
+  source (file replay via `ffmpeg` instead of `pw-record`) differs, exactly
+  as issue 056 established for the existing whisper e2e tests. A human
+  operator should still do one live spoken dictation via `voxi-agent`
+  (toggle to `cohere-transcribe-03-2026`) at their convenience to close that
+  last gap.
+- Local machine setup performed (not part of the repo diff): `crispasr`
+  symlinked to `~/.local/bin/crispasr` (from issue 066's canary build) and
+  the GGUF weights symlinked into `~/.cache/voxi/models/cohere-transcribe-q5_0.gguf`
+  (from issue 066's canary download) so `ensureCohereWeights`'s cache check
+  finds them without re-downloading 1.66 GiB.
+- Out-of-scope items from §5 were left untouched: no official-vs-mirror
+  weight resolution, no vocabulary-biasing hook, issue 073 not read, and
+  `spec/models.yaml`'s `default_model` remains `small.en`.

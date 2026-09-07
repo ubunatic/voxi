@@ -316,6 +316,36 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 		silenceArtifacts = overrides.SilenceArtifacts
 	}
 
+	// Dispatch on the resolved model's engine: whisper (today's default,
+	// unchanged) keeps using the voxtypePath/voxtypeTranscribeArgs already
+	// resolved by the caller; cohere-transcribe resolves and invokes the
+	// crispasr binary instead, lazily downloading its GGUF weights on first
+	// use. See issue 074.
+	engine := modelSpec.Models[modelName].Engine
+	transcribeBinPath := voxtypePath
+	buildTranscribeArgs := func(wavPath string) []string {
+		return voxtypeTranscribeArgs(modelName, wavPath, initialPrompt)
+	}
+	switch engine {
+	case "", "whisper":
+		// unchanged default path above
+	case cohereTranscribeEngine:
+		crispasrPath, lookErr := d.LookPath(crispasrBinary)
+		if lookErr != nil {
+			return fmt.Errorf("eager: model %q needs engine %q, which requires the %q binary; not found on PATH: %w", modelName, engine, crispasrBinary, lookErr)
+		}
+		weightsPath, weightsErr := ensureCohereWeights(ctx, d)
+		if weightsErr != nil {
+			return fmt.Errorf("eager: %w", weightsErr)
+		}
+		transcribeBinPath = crispasrPath
+		buildTranscribeArgs = func(wavPath string) []string {
+			return crispASRTranscribeArgs(weightsPath, wavPath)
+		}
+	default:
+		return fmt.Errorf("eager: model %q has unknown engine %q", modelName, engine)
+	}
+
 	jobChan := make(chan TranscribeJob, 10)
 	var transWg sync.WaitGroup
 	var fullTranscript strings.Builder
@@ -373,9 +403,9 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 			}
 
 			writeVoxtypeState("transcribing")
-			cmdArgs := voxtypeTranscribeArgs(modelName, wavPath, initialPrompt)
+			cmdArgs := buildTranscribeArgs(wavPath)
 			transcribeCtx, cancelTranscribe := context.WithTimeout(context.Background(), transcribeTimeout)
-			cmd := exec.CommandContext(transcribeCtx, voxtypePath, cmdArgs...)
+			cmd := exec.CommandContext(transcribeCtx, transcribeBinPath, cmdArgs...)
 			cmd.Env = append(os.Environ(), "NO_COLOR=1", "RUST_LOG=error")
 			var outBuf bytes.Buffer
 			cmd.Stdout = &outBuf

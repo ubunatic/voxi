@@ -78,3 +78,14 @@ models:
     requires_gpu: true
     # Model to use instead when no GPU render node is present.
     cpu_fallback: small.en
+
+  cohere-transcribe-03-2026:
+    label: "Cohere Transcribe 03-2026 (English/Multilingual)"
+    engine: cohere-transcribe
+    # 066's transcripts on this same fixture corpus showed no model-specific
+    # hallucination pattern distinct from the whisper.cpp models (066 §7.4's
+    # representative transcript is a fragment/near-miss, not a stock
+    # hallucinated phrase) -- reuse common_stop_words per the file header's
+    # own guidance ("split a model out ... as soon as it shows model-specific
+    # leakage").
+    stop_words: *common_stop_words

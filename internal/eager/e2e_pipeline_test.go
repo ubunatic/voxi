@@ -383,6 +383,91 @@ func TestEagerCaptureSessionEndToEndSingleFixture(t *testing.T) {
 	}
 }
 
+// TestEagerCaptureSessionEndToEndCohereTranscribe is issue 074's live
+// verification: the same real-pipeline replay as
+// TestEagerCaptureSessionEndToEndSingleFixture, but selecting the
+// cohere-transcribe engine (model cohere-transcribe-03-2026) instead of
+// small.en, to prove the engine-dispatch branch in runEagerCaptureSession
+// actually resolves and drives the real crispasr binary end-to-end (real VAD
+// segmenter, real chunk dispatch, real `crispasr --backend cohere`
+// subprocess, real GGUF weights) rather than only a mocked-subprocess unit
+// test (see TestEagerDispatchesCohereTranscribeEngineToCrispASR in
+// cohere_test.go for that faster, mocked coverage). Requires the same
+// VOXI_E2E=1 gate as the other e2e tests here, plus a "crispasr" binary on
+// PATH and the Cohere Transcribe GGUF weights already cached (or reachable
+// over the network) -- see issue 066 §7.2 for the build/download commands.
+func TestEagerCaptureSessionEndToEndCohereTranscribe(t *testing.T) {
+	if reason := e2eSkipReason(); reason != "" {
+		t.Skip(reason)
+	}
+
+	corpusDir := e2eCorpusDir()
+	fixtures, err := loadE2ECorpus(filepath.Join(corpusDir, "corpus.tsv"))
+	if err != nil {
+		t.Fatalf("load corpus manifest: %v", err)
+	}
+	fixtureID := os.Getenv("VOXI_E2E_FIXTURE")
+	if fixtureID == "" {
+		fixtureID = "kt-core"
+	}
+	fx, ok := findE2EFixture(fixtures, fixtureID)
+	if !ok {
+		t.Fatalf("fixture %q not found in %s", fixtureID, corpusDir)
+	}
+	wavPath := filepath.Join(corpusDir, fx.File)
+	if _, err := os.Stat(wavPath); err != nil {
+		t.Skipf("fixture WAV %s not present locally (private recording; see testdata/speech-context/README.md): %v", wavPath, err)
+	}
+
+	d, transcript := e2eDeps(t)
+
+	audioCmd, audioArgs, err := resolvePCMStreamCmd(d, wavPath)
+	if err != nil {
+		t.Skip(err.Error())
+	}
+	if _, err := d.LookPath(crispasrBinary); err != nil {
+		t.Skip("crispasr not found on PATH")
+	}
+	// voxtypePath is still resolved and passed through exactly like the
+	// whisper-engine tests: the point of this test is that the
+	// cohere-transcribe engine dispatch branch never uses it.
+	voxtypePath, err := d.LookPath("voxtype")
+	if err != nil {
+		t.Skip("voxtype not found on PATH")
+	}
+
+	opts := EagerOptions{
+		ThresholdRMS:  150,
+		SilenceMs:     800,
+		PreRollMs:     500,
+		MinSpeechMs:   200,
+		MaxWindowMs:   8000,
+		TypeOutput:    true,
+		RecordHistory: true,
+		Model:         "cohere-transcribe-03-2026",
+		SpeechContext: true,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	if err := runEagerCaptureSession(ctx, d, opts, t.TempDir(), voxtypePath, audioCmd, audioArgs, true, "test-session", nil, nil); err != nil {
+		t.Fatalf("runEagerCaptureSession: %v", err)
+	}
+
+	got := transcript()
+	wer := wordErrorRate(fx.Expected, got)
+	t.Logf("fixture=%s expected=%q got=%q wer=%.3f", fx.ID, fx.Expected, got, wer)
+
+	if got == "" {
+		t.Fatalf("no transcript typed for fixture %s: expected %q -- either VAD rejected all speech or transcription failed", fx.ID, fx.Expected)
+	}
+	const maxWER = 0.4 // loose bound: real ASR output, not exact-match; matches the whisper e2e test's bound
+	if wer > maxWER {
+		t.Fatalf("WER %.3f exceeds %.3f for fixture %s\n  expected: %q\n  got:      %q", wer, maxWER, fx.ID, fx.Expected, got)
+	}
+}
+
 // TestEagerCaptureSessionEndToEndSplicedNoiseSession is issue 056 Phase 2: a
 // multi-utterance synthetic session splicing two speech fixtures together
 // with a real non-speech noise transient (the corpus's
