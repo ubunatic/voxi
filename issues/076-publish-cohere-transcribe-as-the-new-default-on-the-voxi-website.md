@@ -1,6 +1,6 @@
 # 076 — Publish Cohere Transcribe as the New Default on the Voxi Website
 
-**Status**: Implemented — synced to publishing repo; public deployment awaits publishing-repo commit/push
+**Status**: Implemented and pushed — public deployment verification pending
 **Priority**: P1 (High)
 **Severity**: Minor
 **Category**: Documentation
@@ -122,3 +122,10 @@ goals.
   explicitly authorized sync, not a cross-repository commit or push, so those
   actions were not taken. Close the ticket after that publication step and a
   second live-page content/render check.
+- Follow-up publication (2026-09-07): after explicit user authorization, committed
+  the synced files in the `ubunatic.com` publishing repository as `649fcd4`
+  (`docs(voxi): advertise Cohere as default`) and pushed `main` successfully.
+  Production and a cache-busted request still served the prior
+  `Privacy-First Voice Input` badge throughout a bounded post-push check, so the
+  ticket remains open pending confirmation that the deployment hook has applied
+  the pushed commit and a final live-page content/render check.
