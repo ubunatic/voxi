@@ -394,6 +394,13 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 	// install (and crash-looping voxi-agent.service) even though the Cohere
 	// path never invokes voxtype. See issue 074 for the engine itself.
 	engine := modelSpec.Models[modelName].Engine
+	var replacements []feedback.Replacement
+	if engine == cohereTranscribeEngine {
+		replacements, err = feedback.LoadReplacements(feedback.ReplacementPath(d.Getenv("HOME")))
+		if err != nil {
+			fmt.Fprintf(d.Stdout, "Warning: cannot load Cohere transcript replacements; continuing without them: %v\n", err)
+		}
+	}
 	transcribeBinPath, weightsPath, err := requireEngineBinary(ctx, d, modelName, engine)
 	if err != nil {
 		return err
@@ -481,6 +488,7 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 
 			rawText := outBuf.String()
 			text := asr.CleanWhisperTranscript(rawText, stopWords)
+			text = applyEngineReplacements(engine, text, replacements)
 			accepted := acceptTranscript(err, text, stopWords, silenceArtifacts)
 			wordCount := len(strings.Fields(text))
 			transSuccess := err == nil
@@ -693,6 +701,13 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 	}
 
 	return nil
+}
+
+func applyEngineReplacements(engine, text string, rules []feedback.Replacement) string {
+	if engine != cohereTranscribeEngine {
+		return text
+	}
+	return feedback.ApplyReplacements(text, rules)
 }
 
 func voxtypeTranscribeArgs(modelName, wavPath, initialPrompt string) []string {

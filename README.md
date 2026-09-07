@@ -93,6 +93,7 @@ On GNOME, opt in to Voxi's standard global shortcut with:
 voxi shortcut setup    # bind Super+X to this installed voxi binary
 voxi shortcut setup -f # proceed if GNOME reports an existing assignment
 voxi shortcut remove   # remove only the Voxi-owned binding
+voxi feedback replacement add Voxy voxi # correct exact Cohere output forms
 ```
 
 Setup uses GNOME's supported custom-keybinding settings, records the executable's
@@ -103,6 +104,22 @@ Settings and retry, or pass `--force` (`-f`) to proceed while preserving the exi
 setting. Other desktops are not currently supported and are left unchanged.
 
 Start speaking, toggle recording off (or pause in eager mode), and watch your words typed directly into the active application.
+
+Recurring Cohere spelling errors can be corrected deterministically without fuzzy
+matching:
+
+```bash
+voxi feedback replacement add Voxy voxi
+voxi feedback replacement add "Voxy project" "voxi project"
+voxi feedback replacement list
+voxi feedback replacement remove Voxy
+```
+
+Sources are exact-case and word/phrase-boundary aware; phrase spaces accept any
+transcript whitespace. Every occurrence is replaced with the target spelling literally,
+longer overlapping phrases win, and replacements never cascade. These rules apply only
+to Cohere output. `voxi feedback vocabulary` remains the separate decoder-prompt feature
+for supported Whisper models. Restart an already-running agent after changing rules.
 
 ---
 

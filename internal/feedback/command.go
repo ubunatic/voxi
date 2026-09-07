@@ -178,6 +178,51 @@ func NewCommand(out io.Writer, home string, builtins []spec.StopWord, maxVocabul
 		}},
 	)
 	cmd.AddCommand(vocabulary)
+	replacementPath := ReplacementPath(home)
+	replacement := &cobra.Command{Use: "replacement", Short: "Manage exact Cohere transcript corrections"}
+	replacement.AddCommand(
+		&cobra.Command{Use: "add HEARD WRITTEN", Short: "Add an exact heard-form to written-form mapping", Args: cobra.ExactArgs(2), RunE: func(_ *cobra.Command, a []string) error {
+			rules, err := LoadReplacements(replacementPath)
+			if err != nil {
+				return err
+			}
+			rules, rule, err := AddReplacement(rules, a[0], a[1])
+			if err != nil {
+				return err
+			}
+			if err := SaveReplacements(replacementPath, rules); err != nil {
+				return err
+			}
+			fmt.Fprintf(out, "Added Cohere transcript replacement %q -> %q. Remove it with: voxi feedback replacement remove %q\n", rule.From, rule.To, rule.From)
+			return nil
+		}},
+		&cobra.Command{Use: "list", Short: "List exact Cohere transcript corrections", Args: cobra.NoArgs, RunE: func(_ *cobra.Command, _ []string) error {
+			rules, err := LoadReplacements(replacementPath)
+			if err != nil {
+				return err
+			}
+			for _, rule := range rules {
+				fmt.Fprintf(out, "%s\t%s\n", rule.From, rule.To)
+			}
+			return nil
+		}},
+		&cobra.Command{Use: "remove HEARD", Short: "Remove an exact heard-form mapping", Args: cobra.ExactArgs(1), RunE: func(_ *cobra.Command, a []string) error {
+			rules, err := LoadReplacements(replacementPath)
+			if err != nil {
+				return err
+			}
+			rules, rule, err := RemoveReplacement(rules, a[0])
+			if err != nil {
+				return err
+			}
+			if err := SaveReplacements(replacementPath, rules); err != nil {
+				return err
+			}
+			fmt.Fprintf(out, "Removed Cohere transcript replacement %q -> %q. Add it again with: voxi feedback replacement add %q %q\n", rule.From, rule.To, rule.From, rule.To)
+			return nil
+		}},
+	)
+	cmd.AddCommand(replacement)
 	status := &cobra.Command{
 		Use:   "status",
 		Short: "Show a combined summary of local stop-word, silence-artifact, and vocabulary state",

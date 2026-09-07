@@ -70,8 +70,25 @@ voxi history clear                # wipe local history file
 voxi history record               # stdin/stdout pass-through hook for Voxtype
 voxi config get type-delay-ms     # read type_delay_ms from ~/.config/voxtype/config.toml
 voxi config set type-delay-ms <MS> # edit type_delay_ms preserving comments
+voxi feedback replacement add Voxy voxi # exact post-transcription Cohere correction
+voxi feedback replacement list         # HEARD<TAB>WRITTEN mappings
+voxi feedback replacement remove Voxy  # exact-case source removal
 voxi daemon modifier-service      # run voxi-modifierd directly (normally a system service)
 ```
+
+### Cohere transcript replacements
+
+`voxi feedback replacement` manages private mappings in
+`~/.config/voxi/replacements.json`. A source matches exact case and only at Unicode
+word/phrase boundaries, so `Voxy` matches `Voxy,` but not `myVoxy` or `Voxyology`.
+Multi-word sources are supported and their spaces match non-empty transcript whitespace.
+All matches are applied once against the original chunk, with the longest overlapping
+source winning; output is therefore literal and non-cascading. Add separate aliases when
+Cohere emits multiple forms. No fuzzy, phonetic, semantic, or model-based matching occurs.
+
+Corrections are loaded when an eager Cohere session starts and happen before acceptance,
+chunk metadata, aggregation, typing, and history. They never span chunk boundaries.
+Whisper output is unchanged: use `voxi feedback vocabulary` for its decoder prompt.
 
 Until issue 029 is implemented, `voxi mode` toggles between these mutually exclusive
 systemd user services:

@@ -15,6 +15,7 @@ import (
 
 	"ubunatic.com/voxi/internal/audio"
 	"ubunatic.com/voxi/internal/deps"
+	"ubunatic.com/voxi/internal/feedback"
 	"ubunatic.com/voxi/internal/telemetry"
 )
 
@@ -27,6 +28,24 @@ func TestAcceptTranscriptRejectsIsolatedSilenceArtifactBeforeTypingAndHistory(t 
 		if !acceptTranscript(nil, text, nil, artifacts) {
 			t.Errorf("longer genuine transcript %q did not reach eager typing/history gate", text)
 		}
+	}
+}
+
+func TestApplyEngineReplacementsIsCohereOnlyAndChunkLocal(t *testing.T) {
+	rules := []feedback.Replacement{{From: "Voxy", To: "voxi"}}
+	if got := applyEngineReplacements(cohereTranscribeEngine, "Voxy one", rules); got != "voxi one" {
+		t.Fatalf("Cohere result = %q", got)
+	}
+	if got := applyEngineReplacements("whisper", "Voxy one", rules); got != "Voxy one" {
+		t.Fatalf("Whisper was changed: %q", got)
+	}
+	// Rules never span completed eager chunks or retroactively edit prior text.
+	chunks := []string{"Voxy", "project and Voxy"}
+	for i := range chunks {
+		chunks[i] = applyEngineReplacements(cohereTranscribeEngine, chunks[i], []feedback.Replacement{{From: "Voxy project", To: "voxi project"}, {From: "Voxy", To: "voxi"}})
+	}
+	if got := strings.Join(chunks, " "); got != "voxi project and voxi" {
+		t.Fatalf("chunk-local aggregate = %q", got)
 	}
 }
 
