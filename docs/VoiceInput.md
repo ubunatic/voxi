@@ -157,10 +157,22 @@ carefully.
 The Fedora 44 GNOME Wayland canary fully passed as of 2026-08-17. Microphone capture,
 local transcription, the `Super+X` toggle, and direct text injection (verified in
 a terminal and in Prime Agent's own input field) all work. GNOME text injection needed
-a user systemd `dotoold` daemon (`DOTOOL_XKB_LAYOUT=de`) for the fast, reliable
-`dotoolc` path, plus `language_to_layout = {}` in Voxtype's config to stop it
-auto-forcing `layout=us` for English speech regardless of the physical keyboard layout.
-The script can repeat the guided manual test; ordinary `go test` never runs it.
+a user systemd `dotoold` daemon for the fast, reliable `dotoolc` path, plus
+`language_to_layout = {}` in Voxtype's config to stop it auto-forcing `layout=us` for
+English speech regardless of the physical keyboard layout. The script can repeat the
+guided manual test; ordinary `go test` never runs it.
+
+As of issue 081, the `dotoold` daemon setup above is no longer manual: `make
+install-dotoold` (folded into `install-all`) installs the `dotoold`/`dotoolc` scripts
+shipped alongside `dotool`, installs `systemd/dotoold.service`, and runs `systemctl
+--user enable --now dotoold.service`. The keyboard layout (`DOTOOL_XKB_LAYOUT`) is no
+longer hardcoded to `de` — it is auto-detected per machine from `localectl status`'s
+X11 Layout at install time, overridable with `make DOTOOL_XKB_LAYOUT=<layout>
+install-dotoold`. This closed the last gap where telemetry reported `typing_completed:
+success: true` even though nothing was typed: raw one-shot `dotool` exits 0 on an
+ephemeral `/dev/uinput` device the compositor never reliably picks up, while the
+persistent `dotoold` daemon (one stable device, fed via the `dotoolc` pipe) is the path
+this canary actually validated.
 
 ## Streaming (opt-in — see issue 021)
 

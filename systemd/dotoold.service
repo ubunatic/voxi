@@ -1,0 +1,18 @@
+[Unit]
+Description=Voxi dotoold Persistent Keystroke Injection Daemon
+Documentation=https://codeberg.org/ubunatic/voxi
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/go/bin/dotoold
+Restart=on-failure
+RestartSec=3
+
+Environment=XDG_RUNTIME_DIR=%t
+Environment=PATH=%h/go/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=DOTOOL_XKB_LAYOUT=@DOTOOL_XKB_LAYOUT@
+
+[Install]
+WantedBy=graphical-session.target

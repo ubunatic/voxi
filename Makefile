@@ -34,11 +34,22 @@ install: ⚙️ build  # install voxi binary to ~/go/bin (user)
 install-debug: ⚙️ build-debug  # install debug binary to ~/go/bin
 	go install -tags debug ./cmd/voxi
 
-install-all: ⚙️ install install-user-services install-crispasr install-dotool  # install user binaries, systemd user services, and default engine + typing-injection deps
+install-all: ⚙️ install install-user-services install-crispasr install-dotool install-dotoold  # install user binaries, systemd user services, and default engine + typing-injection deps
 	go install ./cmd/voxi-modifierd
 
 install-dotool: ⚙️  # install dotool (direct keystroke injection) to ~/go/bin
 	go install git.sr.ht/~geb/dotool@latest
+
+# DOTOOL_XKB_LAYOUT: auto-detected from localectl's X11 Layout (this machine's actual
+# physical keyboard layout); override per machine, e.g. `make DOTOOL_XKB_LAYOUT=us install-dotoold`
+DOTOOL_XKB_LAYOUT ?= $(shell localectl status 2>/dev/null | awk -F': *' '/X11 Layout/{print $$2}')
+
+install-dotoold: ⚙️ install-dotool  # install dotoold/dotoolc scripts + dotoold.service, enable+start it (persistent uinput daemon needed for reliable GNOME Wayland typing; issue 081)
+	install -m 0755 "$$(go list -m -f '{{.Dir}}' git.sr.ht/~geb/dotool@latest)/dotoold" "$$(go list -m -f '{{.Dir}}' git.sr.ht/~geb/dotool@latest)/dotoolc" $(HOME)/go/bin/
+	mkdir -p $(HOME)/.config/systemd/user
+	sed 's|@DOTOOL_XKB_LAYOUT@|$(DOTOOL_XKB_LAYOUT)|' systemd/dotoold.service > $(HOME)/.config/systemd/user/dotoold.service
+	systemctl --user daemon-reload
+	systemctl --user enable --now dotoold.service
 
 restart-service: ⚙️ install  # rebuild, install, and restart the running voxi-agent user service
 	systemctl --user restart voxi-agent.service
