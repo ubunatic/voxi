@@ -62,4 +62,4 @@
 | 078 | [078-add-make-install-crispasr-target-for-the-crispasr-binary.md](078-add-make-install-crispasr-target-for-the-crispasr-binary.md) | Add make install-crispasr Target for the crispasr Binary | Closed |
 | 079 | [079-automate-standard-super-x-keybinding-setup.md](079-automate-standard-super-x-keybinding-setup.md) | Automate Standard Super+X Keybinding Setup | Open |
 | 080 | [080-surface-eager-typing-transcription-failures-beyond-private-telemetry.md](080-surface-eager-typing-transcription-failures-beyond-private-telemetry.md) | Surface Eager Typing/Transcription Failures Beyond Private Telemetry | Open |
-| 081 | [081-install-and-run-a-persistent-dotoold-systemd-user-service.md](081-install-and-run-a-persistent-dotoold-systemd-user-service.md) | Install and Run a Persistent dotoold Systemd User Service | Open |
+| 081 | [081-install-and-run-a-persistent-dotoold-systemd-user-service.md](081-install-and-run-a-persistent-dotoold-systemd-user-service.md) | Install and Run a Persistent dotoold Systemd User Service | Closed — implemented + verified: dotoold.service running, canary-nested token match, live typing confirmed by user |

@@ -1,6 +1,6 @@
 # 081 — Install and Run a Persistent dotoold Systemd User Service
 
-**Status**: Open
+**Status**: Closed — implemented + verified: dotoold.service running, canary-nested token match, live typing confirmed by user
 **Priority**: P0 (Critical)
 **Severity**: Critical
 **Category**: Feature
