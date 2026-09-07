@@ -34,8 +34,11 @@ install: ⚙️ build  # install voxi binary to ~/go/bin (user)
 install-debug: ⚙️ build-debug  # install debug binary to ~/go/bin
 	go install -tags debug ./cmd/voxi
 
-install-all: ⚙️ install install-user-services install-crispasr  # install user binaries, systemd user services, and the default engine's crispasr binary
+install-all: ⚙️ install install-user-services install-crispasr install-dotool  # install user binaries, systemd user services, and default engine + typing-injection deps
 	go install ./cmd/voxi-modifierd
+
+install-dotool: ⚙️  # install dotool (direct keystroke injection) to ~/go/bin
+	go install git.sr.ht/~geb/dotool@latest
 
 restart-service: ⚙️ install  # rebuild, install, and restart the running voxi-agent user service
 	systemctl --user restart voxi-agent.service
