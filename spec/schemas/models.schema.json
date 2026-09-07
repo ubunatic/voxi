@@ -3,7 +3,7 @@
   "title": "Voxi ASR Model Registry",
   "description": "Whisper models Voxi may invoke via voxtype, and the per-model hallucination stop-word patterns used to filter transcripts.",
   "type": "object",
-  "required": ["default_model", "speech_context", "models"],
+  "required": ["default_model", "speech_context", "transcript_safety", "models"],
   "properties": {
     "default_model": {
       "type": "string",
@@ -23,6 +23,19 @@
         "max_terms": { "type": "integer", "minimum": 1, "maximum": 100 },
         "max_chars": { "type": "integer", "minimum": 1, "maximum": 2000 },
         "max_term_chars": { "type": "integer", "minimum": 1, "maximum": 200 }
+      },
+      "additionalProperties": false
+    },
+    "transcript_safety": {
+      "type": "object",
+      "description": "Conservative pre-injection transcript circuit breaker limits, measured in Unicode characters.",
+      "required": ["max_chars", "max_token_chars", "max_repeat_unit_chars", "min_repeat_count", "min_repeated_chars"],
+      "properties": {
+        "max_chars": { "type": "integer", "minimum": 1 },
+        "max_token_chars": { "type": "integer", "minimum": 1 },
+        "max_repeat_unit_chars": { "type": "integer", "minimum": 1 },
+        "min_repeat_count": { "type": "integer", "minimum": 2 },
+        "min_repeated_chars": { "type": "integer", "minimum": 1 }
       },
       "additionalProperties": false
     },

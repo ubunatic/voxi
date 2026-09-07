@@ -338,3 +338,17 @@ To prevent synthetic keystrokes from clashing with held modifier keys (e.g. typi
   sudo make install-modifierd
   ```
   Installs `/usr/local/bin/voxi-modifierd` and enables the systemd service `/etc/systemd/system/voxi-modifierd.service` (`DeviceAllow=char-input r`, `SupplementaryGroups=input`).
+
+### Transcript injection safety
+
+Every cleaned transcript passes a conservative circuit breaker before it can enter
+history or desktop typing. Limits in `spec/models.yaml` bound total output and token
+length and reject long repeated-substring runs such as malformed `tuktuktuk...` ASR
+output. The rules intentionally preserve ordinary repeated words, punctuation, URLs,
+hashes, and code. Rejected pathological text is not retained verbatim: chunk metadata
+records its character count, digest, repeat unit/count, and rejection reason.
+
+Stopping recording cancels that session's queued or in-flight transcription and typing.
+A result finishing after stop is recorded as rejected and cannot begin injection. If a
+FIFO submission fails, Voxi does not replay the complete text through standalone dotool,
+because a partial FIFO write cannot safely be distinguished from a zero-byte write.

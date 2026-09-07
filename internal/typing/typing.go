@@ -56,10 +56,16 @@ func TypeText(ctx context.Context, d deps.Dependencies, text string) error {
 	if text == "" {
 		return nil
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	// Gate on active physical modifier keys: wait up to 5s for user to release modifiers
 	if reader := modifiers.NewModifierReader(""); reader != nil {
 		_ = reader.WaitModifiersReleased(ctx, 5*time.Second)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	typeDelayMs := 0
@@ -71,9 +77,12 @@ func TypeText(ctx context.Context, d deps.Dependencies, text string) error {
 	commands := BuildDotoolCommands(text, typeDelayMs)
 
 	if dotoolDaemonReady(dotoolPipePath(d.Getenv)) {
-		if err := d.RunStdin(ctx, commands, "dotoolc"); err == nil {
-			return nil
+		// Once a FIFO submission is attempted its partial-write status is
+		// unknowable. Never retry the whole script through standalone dotool.
+		if err := d.RunStdin(ctx, commands, "dotoolc"); err != nil {
+			return fmt.Errorf("dotoolc: %w", err)
 		}
+		return nil
 	}
 	if _, err := d.LookPath("dotool"); err != nil {
 		return fmt.Errorf("dotool not found on PATH: %w", err)

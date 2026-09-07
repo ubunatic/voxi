@@ -1,6 +1,7 @@
 package eager
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"ubunatic.com/voxi/internal/audio"
+	"ubunatic.com/voxi/internal/chunks"
 	"ubunatic.com/voxi/internal/deps"
 	"ubunatic.com/voxi/internal/feedback"
 	"ubunatic.com/voxi/internal/telemetry"
@@ -221,6 +223,127 @@ func TestCaptureTelemetryCorrelatesChunkThroughTyping(t *testing.T) {
 	}
 	if stages[2].TranscriptWordCount == nil || *stages[2].TranscriptWordCount != 3 {
 		t.Fatalf("transcript word count = %+v, want 3", stages[2].TranscriptWordCount)
+	}
+}
+
+func TestPathologicalTranscriptProducesZeroInjection(t *testing.T) {
+	tmp := t.TempDir()
+	rawPath := filepath.Join(tmp, "audio.raw")
+	frame := make([]byte, 640)
+	for i := 0; i < len(frame); i += 2 {
+		binary.LittleEndian.PutUint16(frame[i:i+2], 1000)
+	}
+	pcm := append([]byte{}, frame...)
+	for range 10 {
+		pcm = append(pcm, frame...)
+	}
+	pcm = append(pcm, make([]byte, 640*4)...)
+	if err := os.WriteFile(rawPath, pcm, 0600); err != nil {
+		t.Fatal(err)
+	}
+	transcriber := filepath.Join(tmp, "fake-voxtype")
+	bad := "Ubun" + strings.Repeat("tuk", 150)
+	if err := os.WriteFile(transcriber, []byte("#!/bin/sh\nprintf '%s\\n' '"+bad+"'\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	var injections atomic.Int32
+	d := deps.Dependencies{
+		Getenv: func(key string) string {
+			if key == "HOME" || key == "XDG_RUNTIME_DIR" {
+				return tmp
+			}
+			return ""
+		},
+		LookPath: func(name string) (string, error) {
+			if name == "voxtype" {
+				return transcriber, nil
+			}
+			return name, nil
+		},
+		RunStdin: func(context.Context, string, string, ...string) error { injections.Add(1); return nil },
+		Stdout:   io.Discard,
+	}
+	opts := EagerOptions{ThresholdRMS: 500, SilenceMs: 60, PreRollMs: 40, MinSpeechMs: 40, MaxWindowMs: 1000, TypeOutput: true, Model: "small.en"}
+	if err := runEagerCaptureSession(context.Background(), d, opts, tmp, "cat", []string{rawPath}, true, "pathological-session", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := injections.Load(); got != 0 {
+		t.Fatalf("captured %d injector calls, want zero", got)
+	}
+	items, err := chunks.NewBuffer(chunks.StorageDir(tmp, tmp), chunks.DefaultBufferSize).List(false)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("chunks: len=%d err=%v", len(items), err)
+	}
+	c := items[0]
+	if c.Accepted || c.RejectionReason != "pathological_repetition" || c.RepeatUnit != "tuk" || c.RepeatCount != 150 {
+		t.Fatalf("unexpected rejection metadata: %+v", c)
+	}
+	if c.RawTranscript != "" || c.CleanedTranscript != "" || c.TranscriptDigest == "" {
+		t.Fatalf("pathological content was not privacy-safe: %+v", c)
+	}
+}
+
+func TestStopCancelsInflightTranscriptionBeforeInjection(t *testing.T) {
+	tmp := t.TempDir()
+	rawPath := filepath.Join(tmp, "audio.raw")
+	frame := make([]byte, 640)
+	for i := 0; i < len(frame); i += 2 {
+		binary.LittleEndian.PutUint16(frame[i:i+2], 1000)
+	}
+	pcm := bytes.Repeat(frame, 12)
+	pcm = append(pcm, make([]byte, 640*4)...)
+	if err := os.WriteFile(rawPath, pcm, 0600); err != nil {
+		t.Fatal(err)
+	}
+	started := filepath.Join(tmp, "started")
+	transcriber := filepath.Join(tmp, "fake-voxtype")
+	script := "#!/bin/sh\n: > '" + started + "'\nexec sleep 30\n"
+	if err := os.WriteFile(transcriber, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	var injections atomic.Int32
+	d := deps.Dependencies{
+		Getenv: func(key string) string {
+			if key == "HOME" || key == "XDG_RUNTIME_DIR" {
+				return tmp
+			}
+			return ""
+		},
+		LookPath: func(name string) (string, error) {
+			if name == "voxtype" {
+				return transcriber, nil
+			}
+			return name, nil
+		},
+		RunStdin: func(context.Context, string, string, ...string) error { injections.Add(1); return nil }, Stdout: io.Discard,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	opts := EagerOptions{ThresholdRMS: 500, SilenceMs: 60, PreRollMs: 40, MinSpeechMs: 40, MaxWindowMs: 1000, TypeOutput: true, Model: "small.en"}
+	go func() {
+		done <- runEagerCaptureSession(ctx, d, opts, tmp, "cat", []string{rawPath}, true, "stopped-session", nil, nil)
+	}()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if _, err := os.Stat(started); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("transcription did not start")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("session did not cancel promptly")
+	}
+	if got := injections.Load(); got != 0 {
+		t.Fatalf("captured %d injector calls after stop", got)
 	}
 }
 

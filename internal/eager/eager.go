@@ -472,7 +472,7 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 
 			writeVoxtypeState("transcribing")
 			cmdArgs := buildTranscribeArgs(wavPath)
-			transcribeCtx, cancelTranscribe := context.WithTimeout(context.Background(), transcribeTimeout)
+			transcribeCtx, cancelTranscribe := context.WithTimeout(ctx, transcribeTimeout)
 			cmd := exec.CommandContext(transcribeCtx, transcribeBinPath, cmdArgs...)
 			cmd.Env = append(os.Environ(), "NO_COLOR=1", "RUST_LOG=error")
 			var outBuf bytes.Buffer
@@ -490,6 +490,9 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 			text := asr.CleanWhisperTranscript(rawText, stopWords)
 			text = applyEngineReplacements(engine, text, replacements)
 			accepted := acceptTranscript(err, text, stopWords, silenceArtifacts)
+			safety := asr.CheckTranscriptSafety(text, modelSpec.TranscriptSafety)
+			if safety.Reason != "" { accepted = false }
+			if ctx.Err() != nil { accepted = false }
 			wordCount := len(strings.Fields(text))
 			transSuccess := err == nil
 			transError := ""
@@ -500,6 +503,8 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 			rejReason := ""
 			if !accepted {
 				rejReason = rejectionReason(err, rawText, text, stopWords, silenceArtifacts)
+				if safety.Reason != "" { rejReason = safety.Reason }
+				if ctx.Err() != nil { rejReason = "session_stopped" }
 			}
 
 			rtf := 0.0
@@ -530,11 +535,21 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 				CleanedTranscript:      text,
 				Accepted:               accepted,
 				RejectionReason:        rejReason,
+				TranscriptChars:        safety.Chars,
+				TranscriptDigest:       safety.Digest,
+				RepeatUnit:             safety.RepeatUnit,
+				RepeatCount:            safety.RepeatCount,
+			}
+			if safety.Reason != "" {
+				// Do not persist a pathological transcript's private, potentially
+				// enormous contents; the digest and structural facts are sufficient.
+				chunkMeta.RawTranscript = ""
+				chunkMeta.CleanedTranscript = ""
 			}
 			_, _ = chunkBuf.AddExistingWAV(chunkMeta, wavPath, true)
 			_ = os.Remove(wavPath) // Ensure removal if AddExistingWAV didn't move it
 
-			if accepted {
+			if accepted && ctx.Err() == nil {
 				transLock.Lock()
 				if fullTranscript.Len() > 0 {
 					fullTranscript.WriteString(" ")
@@ -550,7 +565,7 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 				if opts.TypeOutput {
 					typeStart := time.Now()
 					_ = recorder.Record(telemetry.Event{Event: telemetry.TypingStarted, Timestamp: typeStart, SessionID: sessionID, ChunkID: chunkID, ChunkIndex: job.Index})
-					typeErr := typing.TypeText(context.Background(), d, text+" ")
+					typeErr := typing.TypeText(ctx, d, text+" ")
 					typeEnd := time.Now()
 					typeSuccess := typeErr == nil
 					typeError := ""
@@ -672,7 +687,7 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 	signalCaptureStopped()
 
 	// Flush remaining speech upon exit
-	if finalCandidate := segmenter.Flush(); len(finalCandidate.Audio) > 0 {
+	if finalCandidate := segmenter.Flush(); ctx.Err() == nil && len(finalCandidate.Audio) > 0 {
 		utteranceCount++
 		finalizedAt := time.Now()
 		audioDur := float64(len(finalCandidate.Audio)) / float64(bytesPerSec)

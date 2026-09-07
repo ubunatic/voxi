@@ -33,6 +33,16 @@ speech_context:
     - JSON
     - Git
 
+# Last-resort safety circuit breaker before irreversible desktop input. Counts
+# are Unicode characters. Repetition requires both thresholds, avoiding normal
+# emphatic speech and repeated punctuation.
+transcript_safety:
+  max_chars: 2000
+  max_token_chars: 256
+  max_repeat_unit_chars: 16
+  min_repeat_count: 12
+  min_repeated_chars: 96
+
 models:
   base.en:
     label: "Whisper Base (English)"

@@ -47,6 +47,10 @@ type Chunk struct {
 	CleanedTranscript      string    `json:"cleaned_transcript"`
 	Accepted               bool      `json:"accepted"`
 	RejectionReason        string    `json:"rejection_reason,omitempty"`
+	TranscriptChars        int       `json:"transcript_chars,omitempty"`
+	TranscriptDigest       string    `json:"transcript_digest,omitempty"`
+	RepeatUnit             string    `json:"repeat_unit,omitempty"`
+	RepeatCount            int       `json:"repeat_count,omitempty"`
 	WAVFile                string    `json:"wav_file"` // relative filename in chunks dir, e.g. "chunk_0001.wav"
 }
 

@@ -33,9 +33,20 @@ type StopWord struct {
 
 // ModelSpec is the parsed contents of spec/models.yaml.
 type ModelSpec struct {
-	DefaultModel  string            `yaml:"default_model"`
-	SpeechContext SpeechContextSpec `yaml:"speech_context"`
-	Models        map[string]Model  `yaml:"models"`
+	DefaultModel     string               `yaml:"default_model"`
+	SpeechContext    SpeechContextSpec    `yaml:"speech_context"`
+	TranscriptSafety TranscriptSafetySpec `yaml:"transcript_safety"`
+	Models           map[string]Model     `yaml:"models"`
+}
+
+// TranscriptSafetySpec defines conservative limits applied after transcript
+// cleanup/replacements and before history or desktop injection.
+type TranscriptSafetySpec struct {
+	MaxChars           int `yaml:"max_chars"`
+	MaxTokenChars      int `yaml:"max_token_chars"`
+	MaxRepeatUnitChars int `yaml:"max_repeat_unit_chars"`
+	MinRepeatCount     int `yaml:"min_repeat_count"`
+	MinRepeatedChars   int `yaml:"min_repeated_chars"`
 }
 
 // SpeechContextSpec defines the bounded decoder prompt used by the
@@ -78,6 +89,9 @@ func parseModelSpec(data []byte) (*ModelSpec, error) {
 	}
 	if s.SpeechContext.MaxTerms <= 0 || s.SpeechContext.MaxChars <= 0 || s.SpeechContext.MaxTermChars <= 0 {
 		return nil, fmt.Errorf("spec: speech_context limits must be positive")
+	}
+	if s.TranscriptSafety.MaxChars <= 0 || s.TranscriptSafety.MaxTokenChars <= 0 || s.TranscriptSafety.MaxRepeatUnitChars <= 0 || s.TranscriptSafety.MinRepeatCount <= 1 || s.TranscriptSafety.MinRepeatedChars <= 0 {
+		return nil, fmt.Errorf("spec: transcript_safety limits must be positive and min_repeat_count must exceed one")
 	}
 	for name, m := range s.Models {
 		seen := make(map[string]bool)

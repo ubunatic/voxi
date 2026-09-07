@@ -1,6 +1,6 @@
 # 083 — Reject Pathological Repetitive ASR Output Before Desktop Injection
 
-**Status**: Open
+**Status**: In Progress
 **Priority**: P1 (High)
 **Severity**: Critical
 **Category**: Bug
@@ -162,3 +162,14 @@ delivery of one transcript.
 - Killing all system-wide dotool processes or modifying unrelated keyboard
   behavior.
 - Using the real focused desktop as a test target.
+
+## 7. Implemented Safety Slice (2026-09-07)
+
+Implemented the immediate critical boundary: spec-owned output/token/repetition limits,
+the exact retained `Ubun` + repeated `tuk` regression with zero captured injector calls,
+privacy-safe rejection metadata, session-derived ASR and typing cancellation, no flush
+after stop, and no whole-script fallback replay after a failed FIFO attempt.
+
+The issue remains open because the broader acceptance contract still needs an explicit
+cross-session delivery ledger/duplicate telemetry, injector attempt/process telemetry,
+and exhaustive FIFO/standalone process-lifecycle and active partial-write canaries.
