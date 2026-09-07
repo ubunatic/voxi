@@ -54,6 +54,12 @@ a:hover {
   text-decoration: underline;
 }
 
+a:focus-visible,
+button:focus-visible {
+  outline: 3px solid var(--accent-cyan);
+  outline-offset: 3px;
+}
+
 code {
   font-family: var(--mono);
   font-size: 0.9em;
@@ -179,6 +185,16 @@ code {
 .btn-outline:hover {
   border-color: var(--accent-2);
   color: var(--accent-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* -- Hero -- */

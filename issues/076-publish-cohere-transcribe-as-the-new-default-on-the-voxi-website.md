@@ -1,6 +1,6 @@
 # 076 — Publish Cohere Transcribe as the New Default on the Voxi Website
 
-**Status**: Open
+**Status**: Implemented — synced to publishing repo; public deployment awaits publishing-repo commit/push
 **Priority**: P1 (High)
 **Severity**: Minor
 **Category**: Documentation
@@ -91,3 +91,34 @@ This ticket authorizes the website sync only after the source update and local
 verification are complete. It does not broaden scope to unrelated website
 redesign or implementation of issue 001's interactive demos and packaging
 goals.
+
+## 5. Implementation Notes (2026-09-07)
+
+- Updated `website/index.html` so the hero, terminal example, monitor example,
+  backend filtering copy, prerequisites, and CLI model help consistently name
+  Cohere Transcribe 03-2026 as the default. Whisper remains documented as an
+  alternative and for legacy modes.
+- Added a "Why Cohere Transcribe?" section grounded in issue 066's local canary
+  results. Added precise first-run behavior: the approximately 1.66 GiB Q5_0
+  GGUF comes from the ungated `cstr/cohere-transcribe-03-2026-GGUF` community
+  mirror, is cached in `~/.cache/voxi/models/`, and then runs CPU-local and
+  offline without uploading audio for transcription.
+- Added `crispasr` to prerequisites and linked the actual CrispASR and Voxtype
+  upstream projects. `voxtype` is not called optional yet because issue 077
+  tracks removing the current eager-startup dependency.
+- Updated `website/index.css` with explicit `:focus-visible` outlines and a
+  `prefers-reduced-motion` fallback. No media or dynamic/CDN dependency was
+  introduced.
+- Verification: custom HTML audit (unique IDs, fragments, local assets, and
+  button labels), `node --check website/index.js`, `git diff --check`, stale
+  default-message search, HTTP 200 checks for every external destination,
+  and Chromium renders at 1440x1200 and 390x844. `make install` succeeded.
+- Ran `uman website sync voxi`; all post-sync package, asset, REUSE, LFS, and
+  shared-navigation checks passed. The synced output is present in
+  `/home/uwe/projects/ubunatic.com/voxi/`.
+- Deployment boundary: `https://ubunatic.com/voxi/` returns HTTP 200, but still
+  serves the prior Whisper-default page because the publishing repository now
+  has uncommitted `voxi/index.html` and `voxi/index.css` changes. This ticket
+  explicitly authorized sync, not a cross-repository commit or push, so those
+  actions were not taken. Close the ticket after that publication step and a
+  second live-page content/render check.

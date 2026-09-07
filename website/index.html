@@ -34,13 +34,15 @@
     <div class="wrap hero-shell">
       <section class="hero-intro" aria-label="voxi overview">
         <div class="hero-badge-wrap">
-          <span class="hero-badge">Linux / Wayland · Privacy-First Voice Input</span>
+          <span class="hero-badge">Now powered by Cohere Transcribe 03-2026</span>
         </div>
         <h1><span class="name">voxi</span> types what you say, as you say it.</h1>
         <p class="lede">
-          High-performance, local speech-to-text dictation for Linux/Wayland.
+          High-quality, local speech-to-text dictation for Linux/Wayland, now using
+          Cohere Transcribe 03-2026 by default for strong multilingual recognition.
           Continuous eager sentence streaming, kernel-level modifier key gating safety,
-          and direct synthetic typing injection into any active window with zero cloud dependencies.
+          and direct synthetic typing injection into any active window. Audio stays on your
+          machine; after a one-time model download, transcription works offline on the CPU.
         </p>
         <div class="actions">
           <a class="btn btn-primary" href="#quickstart">Get Started</a>
@@ -48,7 +50,7 @@
           <a class="btn btn-secondary" href="https://codeberg.org/ubunatic/voxi" rel="noopener" target="_blank">Source Code</a>
         </div>
         <div class="hero-meta">
-          <span>⚡ Local Whisper (Vulkan / CPU)</span>
+          <span>✨ Cohere Transcribe (CPU-local)</span>
           <span>🛡️ Hotkey-Safe Gating</span>
           <span>⌨️ Wayland Direct Typing</span>
           <span>📜 AGPL-3.0</span>
@@ -62,15 +64,15 @@
             <span class="term-dot dot-yellow"></span>
             <span class="term-dot dot-green"></span>
           </div>
-          <span class="terminal-title">voxi eager --type --history --model small.en</span>
-          <button class="copy-term-btn" data-copy="voxi eager --type --history --model small.en" title="Copy command">copy</button>
+          <span class="terminal-title">voxi eager --type --history</span>
+          <button class="copy-term-btn" data-copy="voxi eager --type --history" title="Copy command">copy</button>
         </div>
-        <pre class="terminal-body"><code><span class="ln-listen">● listening... (pre-roll 500ms, threshold 150 RMS, model small.en)</span>
+        <pre class="terminal-body"><code><span class="ln-listen">● listening... (pre-roll 500ms, threshold 150 RMS, model cohere-transcribe-03-2026)</span>
 <span class="ln-info">→ speech detected: buffering audio stream...</span>
 <span class="ln-gate">◆ modifier gate: Super held down, buffering typed output</span>
 <span class="ln-gate">✓ modifier gate: Super released, safe to inject keystrokes</span>
 <span class="ln-type">⌨ typed: "Shipping continuous eager sentence streaming today."</span>
-<span class="ln-metric">⚡ transcribed: 1.82s audio in 0.31s (5.87x realtime, GPU Vulkan)</span>
+<span class="ln-metric">⚡ transcribed locally with Cohere Transcribe (CPU)</span>
 <span class="ln-listen">● silence 800ms detected, phrase finalized</span>
 <span class="ln-sum">✔ history: appended entry a91f (36 chars)</span></code></pre>
       </section>
@@ -141,8 +143,9 @@
           <div class="feat-icon">🧹</div>
           <h3>Spec-Driven Hallucination Filtering</h3>
           <p>
-            Automatically suppresses Whisper silence hallucinations and repetitive subtitle loops using embedded
-            model specifications (<code>spec/models.yaml</code>) alongside automatic GPU fallback orchestration.
+            Automatically suppresses known silence hallucinations and repetitive subtitle loops using embedded,
+            per-model specifications (<code>spec/models.yaml</code>). Whisper alternatives retain their own
+            backend and GPU fallback behavior.
           </p>
           <div class="feat-badge"><code>spec/models.yaml</code></div>
         </div>
@@ -167,9 +170,9 @@
           <span class="monitor-tag">LIVE HUD</span>
         </div>
         <pre class="monitor-body"><code>╭──[s] voice &amp; speed────────────────────────╮ ╭──[h] hardware load─────────────────────────╮
-│ status:  <span class="t-green">RECORDING</span> (eager / small.en)     │ │ cpu:  <span class="t-white">12.4%</span>  <span class="t-cyan">[ ▂▃▅▄▃▂  ▂▃]</span>  avg 4.2% (1c) │
-│ engine:  <span class="t-green">gpu:Vulkan0</span>  ·  mods: <span class="t-teal">gate-ready</span> │ │ gpu:  <span class="t-white">34.8%</span>  <span class="t-violet">[ ▃▅▇█▆▄▃   ]</span>  sys 1.05% │
-│ speed:   <span class="t-green"> 5.8x realtime</span> <span class="t-green">█████████░</span>         │ │ mem:  42.8 MB daemon   512 MB / 8.0 GB VRAM│
+│ status:  <span class="t-green">RECORDING</span> (eager / Cohere)       │ │ cpu:  <span class="t-white">38.4%</span>  <span class="t-cyan">[ ▂▃▅▄▃▂  ▂▃]</span>  avg 4.2% (1c) │
+│ engine:  <span class="t-green">crispasr:CPU</span>  ·  mods: <span class="t-teal">gate-ready</span> │ │ gpu:  <span class="t-white"> 1.8%</span>  <span class="t-violet">[ ▁▁▁▂▁▁▁   ]</span>  sys 1.05% │
+│ speed:   <span class="t-green"> local inference</span> <span class="t-green">█████████░</span>         │ │ mem:  42.8 MB daemon                  │
 │ lag:     <span class="t-white">0.31s</span> · 1m 24s audio (14 utt)     │ │ up:   1h 42m 10s (PID 34821)               │
 ╰───────────────────────────────────────────╯ ╰────────────────────────────────────────────╯
 ╭──[t] transcript feed─────────────────────────────────────────────────────────────────────╮
@@ -180,6 +183,18 @@
 ╭──[d] daemon health &amp; processes───────────────────────────────────────────────────────────╮
 │ <span class="t-green">✓ voxi-agent</span> (PID 34821)  ·  <span class="t-green">✓ voxi-modifierd</span> (PID 1120)  ·  <span class="t-green">✓ dotoold</span> (PID 2104)             │
 ╰──────────────────────────────────────────────────────────────────────────────────────────╯</code></pre>
+      </div>
+    </section>
+
+    <section class="wrap section-wrap" aria-labelledby="why-title">
+      <div class="section-heading">
+        <h2 id="why-title">Why Cohere Transcribe?</h2>
+        <p class="section-desc">
+          Voxi adopted Cohere Transcribe 03-2026 after local canary testing showed a clear
+          recognition-quality improvement on its dictation fixtures, including multilingual
+          speech. The default stays private in use: <code>crispasr</code> performs inference
+          locally on the CPU and sends no audio to a transcription service.
+        </p>
       </div>
     </section>
 
@@ -269,9 +284,14 @@
               <td><code>wl-clipboard</code></td>
             </tr>
             <tr>
-              <td><strong><code>whisper.cpp</code> / <code>voxtype</code></strong></td>
-              <td>Local Whisper inference (Vulkan GPU acceleration / multi-threaded CPU)</td>
-              <td><a href="https://github.com/ggerganov/whisper.cpp" rel="noopener" target="_blank">whisper.cpp</a></td>
+              <td><strong><code>crispasr</code></strong></td>
+              <td>Default CPU-local Cohere Transcribe inference</td>
+              <td><a href="https://github.com/CrispStrobe/CrispASR" rel="noopener" target="_blank">CrispASR source</a></td>
+            </tr>
+            <tr>
+              <td><strong><code>voxtype</code></strong></td>
+              <td>Legacy modes and local Whisper model alternatives</td>
+              <td><a href="https://github.com/peteonrails/voxtype" rel="noopener" target="_blank">Voxtype source</a></td>
             </tr>
             <tr>
               <td><strong>Audio Capture</strong></td>
@@ -285,6 +305,18 @@
             </tr>
           </tbody>
         </table>
+      </div>
+      <div class="gnome-box download-note">
+        <div class="gnome-features">
+          <h3>First-run model download</h3>
+          <p>
+            The default backend lazily downloads the approximately 1.66 GiB Q5_0 GGUF from the
+            ungated <a href="https://huggingface.co/cstr/cohere-transcribe-03-2026-GGUF" rel="noopener" target="_blank"><code>cstr/cohere-transcribe-03-2026-GGUF</code> community mirror</a>
+            into <code>~/.cache/voxi/models/</code>. This first uncached run needs network access;
+            subsequent transcription uses the cached weights locally and works offline. Your audio
+            is never uploaded for transcription.
+          </p>
+        </div>
       </div>
     </section>
 
@@ -398,7 +430,7 @@
           <dd>Run as a background daemon responding to record toggle controls.</dd>
 
           <dt>--model <i>name</i></dt>
-          <dd>Whisper model specification to load (default: <code>small.en</code>, with automatic <code>base.en</code> or CPU fallback).</dd>
+          <dd>ASR model to load. The default is <code>cohere-transcribe-03-2026</code>, running locally on the CPU through <code>crispasr</code>. Select <code>base.en</code>, <code>small.en</code>, or <code>large-v3-turbo</code> to use an optional Whisper backend.</dd>
         </dl>
 
         <h3 class="mp-sh" id="gating">Modifier Gating Architecture</h3>
