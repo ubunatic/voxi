@@ -532,8 +532,10 @@ func formatActionLabel(id string) string {
 // formatRecordState renders the daemon's recording status alongside its icon. While
 // recording, the icon is replaced by the live mic loudness glyph itself (in place of a
 // static ●), so the status line doubles as the level meter instead of carrying a
-// separate level: row.
+// separate level: row. spec/monitor.yaml's status_icon.always_show_loudness (issue 086)
+// extends that swap to the idle state too, so the loudness glyph is always visible.
 func formatRecordState(status string, micLevel float64, micAvailable bool) string {
+	alwaysLoudness := loadedMonitorSpec().StatusIcon.AlwaysShowLoudness
 	switch strings.ToLower(status) {
 	case "recording":
 		icon := "\x1b[31;1m●\x1b[0m"
@@ -544,6 +546,9 @@ func formatRecordState(status string, micLevel float64, micAvailable bool) strin
 	case "transcribing":
 		return "\x1b[33;1m⏳ transcribing\x1b[0m"
 	case "idle":
+		if alwaysLoudness && micAvailable {
+			return RenderLevelChar(micLevel) + " \x1b[32midle\x1b[0m"
+		}
 		return "\x1b[32m○ idle\x1b[0m"
 	default:
 		return status

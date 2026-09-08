@@ -29,10 +29,20 @@ type MicLevelSpec struct {
 	DecayMs      float64 `yaml:"decay_ms"`
 }
 
+// StatusIconSpec controls the monitor status line's leading icon (see
+// internal/monitor/render.go's formatRecordState).
+type StatusIconSpec struct {
+	// AlwaysShowLoudness: false shows a static idle/transcribing glyph that
+	// only becomes the live loudness meter while actually recording; true
+	// shows the live loudness glyph always, even while idle (issue 086).
+	AlwaysShowLoudness bool `yaml:"always_show_loudness"`
+}
+
 // MonitorSpec is the parsed contents of spec/monitor.yaml.
 type MonitorSpec struct {
-	Paint    PaintSpec    `yaml:"paint"`
-	MicLevel MicLevelSpec `yaml:"mic_level"`
+	Paint      PaintSpec      `yaml:"paint"`
+	MicLevel   MicLevelSpec   `yaml:"mic_level"`
+	StatusIcon StatusIconSpec `yaml:"status_icon"`
 }
 
 // LoadMonitor parses the embedded monitor tuning spec.

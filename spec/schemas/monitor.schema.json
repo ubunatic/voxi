@@ -3,7 +3,7 @@
   "title": "Voxi Monitor TUI Performance Tuning",
   "description": "Screen redraw rate and live mic loudness meter sampling/ballistics for `voxi monitor -w`.",
   "type": "object",
-  "required": ["paint", "mic_level"],
+  "required": ["paint", "mic_level", "status_icon"],
   "properties": {
     "paint": {
       "type": "object",
@@ -47,6 +47,18 @@
           "exclusiveMinimum": 0,
           "maximum": 5000,
           "description": "Exponential decay time constant for the displayed level's falloff, in milliseconds."
+        }
+      },
+      "additionalProperties": false
+    },
+    "status_icon": {
+      "type": "object",
+      "description": "The monitor status line's leading icon (see internal/monitor/render.go's formatRecordState).",
+      "required": ["always_show_loudness"],
+      "properties": {
+        "always_show_loudness": {
+          "type": "boolean",
+          "description": "false: icon is a static idle/transcribing glyph, only becoming the live loudness meter while actually recording. true: icon is always the live loudness glyph, even while idle."
         }
       },
       "additionalProperties": false

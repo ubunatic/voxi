@@ -33,3 +33,14 @@ mic_level:
   # giving the displayed bar a VU-meter-style falloff instead of snapping
   # straight to the new (quieter) reading.
   decay_ms: 100
+
+# The status line's leading icon (see internal/monitor/render.go's
+# formatRecordState). Addresses issue 086.
+status_icon:
+  # false (default): the icon is a static ○/⏳ reflecting idle/transcribing,
+  # and only becomes the live loudness glyph while actually recording.
+  # true: the icon is always the live loudness glyph (even while idle), so
+  # you can see whether the mic is picking up sound before you ever start
+  # dictating.
+  always_show_loudness: true
+

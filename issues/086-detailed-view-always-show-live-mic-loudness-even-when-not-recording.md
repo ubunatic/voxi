@@ -1,6 +1,6 @@
 # 086 — Detailed view: always show live mic loudness, even when not recording
 
-**Status**: Open
+**Status**: Closed — resolved via spec/monitor.yaml status_icon.always_show_loudness
 **Priority**: P3 (Low)
 **Severity**: Enhancement
 **Category**: Enhancement
@@ -48,3 +48,31 @@ start dictating first.
 - Not reintroducing the removed compact-view `level:` row; this is about
   an opt-in detailed view, not changing the default compact status line
   shipped in 084/085.
+
+## 5. Resolution — 2026-09-08
+
+Resolved the Open Questions' second bullet directly rather than a separate
+"detailed view" section: `formatRecordState`
+(`internal/monitor/render.go`) now checks
+`spec/monitor.yaml`'s new `status_icon.always_show_loudness` — when true
+(the shipped default), the idle case renders `RenderLevelChar(micLevel) +
+"idle"` instead of the static `○ idle`, i.e. exactly "same code path as
+recording, just no longer gated by `RecordStatus`," reusing the existing
+icon slot rather than adding a new row or `ResourceSections` key.
+
+Left as-is / not addressed by this resolution:
+- **One-shot path** (bullet 3): still unaffected — `cmd/voxi/main.go`'s
+  one-shot invocation still passes `audiolevel.Reading{}`, so
+  `always_show_loudness` has no visible effect outside `--watch`. Spinning
+  up a brief capture window for one-shot mode remains unimplemented; file a
+  follow-up if that's wanted.
+- No noise-floor threshold gating was added (bullet 2's other half) — the
+  glyph reflects the raw ballistics-smoothed level at all times, including
+  near-zero ambient noise, rather than snapping back to `○` below a
+  cutoff.
+
+Toggle lives in `spec/monitor.yaml` (schema:
+`spec/schemas/monitor.schema.json`), loader: `spec.LoadMonitor()` /
+`spec.MonitorSpec.StatusIcon`. Verified live: `voxi monitor -w` shows a
+colored loudness glyph in place of `○` while genuinely idle. `go test
+./...` and `make check` pass.
