@@ -173,3 +173,26 @@ after stop, and no whole-script fallback replay after a failed FIFO attempt.
 The issue remains open because the broader acceptance contract still needs an explicit
 cross-session delivery ledger/duplicate telemetry, injector attempt/process telemetry,
 and exhaustive FIFO/standalone process-lifecycle and active partial-write canaries.
+
+## 8. Regression: trailing utterance silently dropped on every normal stop (2026-09-08)
+
+The §7 "no flush after stop" and session-derived ASR cancellation were too broad: tying
+*all* transcription/typing to the session `ctx` and gating `segmenter.Flush()` on
+`ctx.Err() == nil` meant every ordinary Super-X stop — not just a stale/pathological
+late result — dropped whatever utterance was still buffered but not yet VAD-finalized
+at the moment of stop. User-reported: a three-chunk dictation test where the chunk
+spoken right up to the stop keypress never appeared.
+
+Fixed in `internal/eager/eager.go` (commit `8795182`): the trailing
+`segmenter.Flush()` job is now marked `Final` and runs its transcription/typing on a
+context detached from the already-canceled session `ctx`, while every other job (one
+genuinely still mid-transcription when stop arrives, e.g. a stale/pathological result)
+keeps the tested abort-and-never-type behavior this issue introduced
+(`TestStopCancelsInflightTranscriptionBeforeInjection`,
+`TestPathologicalTranscriptProducesZeroInjection`). New regression test:
+`TestStopFlushesTrailingUtteranceForTranscriptionAndTyping`.
+
+This is a caution for the remaining open work in §3/§8: the at-most-once/generation-ID
+design still needs to distinguish "the last thing the user said, right up to stop" from
+"a stale or pathological result arriving after stop" — collapsing both into one
+`ctx.Err()` check reintroduces this regression.
