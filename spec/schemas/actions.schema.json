@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Voxi Monitor TUI Actions",
+  "description": "Single-key hotkeys the `voxi monitor -w` TUI reads from raw-mode /dev/tty, and the labels/box titles displayed for each.",
+  "type": "object",
+  "required": ["actions"],
+  "properties": {
+    "actions": {
+      "type": "object",
+      "description": "Map of action id to its keys, category, and display labels. Action ids are referenced directly by internal/monitor's key dispatcher.",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["title", "short", "keys", "category"],
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Full label shown after the bracketed hotkey in a box header, e.g. 'hardware load'."
+          },
+          "short": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Short lowercase word shown after the bracketed hotkey in the footer badge row, e.g. 'hardware'."
+          },
+          "keys": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "pattern": "^(.|<c-c>|<esc>)$",
+              "description": "A single printable character, or one of the control-key tokens <c-c> (Ctrl-C) / <esc> (Escape)."
+            },
+            "description": "All raw bytes that trigger this action. keys[0] is the canonical letter shown in box headers and footer badges."
+          },
+          "category": {
+            "type": "string",
+            "enum": ["monitor", "system"],
+            "description": "'monitor' toggles one of the resource boxes; 'system' controls the TUI itself (show-all, quit)."
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

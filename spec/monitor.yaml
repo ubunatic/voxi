@@ -1,0 +1,35 @@
+# yaml-language-server: $schema=schemas/monitor.schema.json
+#
+# voxi monitor TUI performance tuning: screen redraw rate and the live mic
+# loudness meter's sampling/ballistics. See docs/Spec.md — internal/monitor
+# and its use of the audiolevel package must read these values from here
+# rather than hardcoding them.
+
+# Screen redraw cadence. Independent of --interval (which paces the slower
+# CPU/GPU/process data collection, see internal/monitor/monitor.go) so the
+# mic loudness glyph — updated continuously in the background at
+# mic_level.sample_rate_hz / mic_level.chunk_ms — reads as smooth motion
+# instead of a slow stroboscopic sample of that continuous signal.
+paint:
+  fps: 30
+
+# Live mic-level meter: raw PCM capture rate/chunking (audiolevel.RunCapture)
+# and the VU-meter-style ballistics applied on top (audiolevel.Meter.Update).
+mic_level:
+  # Raw audio capture rate. Deliberately low: a level meter only needs a
+  # coarse amplitude reading, not audio fidelity, and a low rate keeps the
+  # capture subprocess's CPU/bandwidth footprint negligible for a status box
+  # that may sit open for a whole session.
+  sample_rate_hz: 8000
+  # Duration of each raw-amplitude sample fed into the meter's rolling
+  # window. Also sets how often the mic signal updates in the background,
+  # independent of paint.fps above.
+  chunk_ms: 50
+  # Rolling-window duration the meter reduces (via metric: max) to a single
+  # target level per update — smooths jitter between individual chunks
+  # without lagging noticeably behind speech onset.
+  window_ms: 50
+  # Exponential decay time constant applied when the target level falls,
+  # giving the displayed bar a VU-meter-style falloff instead of snapping
+  # straight to the new (quieter) reading.
+  decay_ms: 100

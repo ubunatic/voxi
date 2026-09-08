@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Voxi Monitor TUI Performance Tuning",
+  "description": "Screen redraw rate and live mic loudness meter sampling/ballistics for `voxi monitor -w`.",
+  "type": "object",
+  "required": ["paint", "mic_level"],
+  "properties": {
+    "paint": {
+      "type": "object",
+      "description": "Screen redraw cadence, independent of --interval's slower CPU/GPU/process collection.",
+      "required": ["fps"],
+      "properties": {
+        "fps": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 60,
+          "description": "Redraw rate in frames per second."
+        }
+      },
+      "additionalProperties": false
+    },
+    "mic_level": {
+      "type": "object",
+      "description": "Live mic-level meter capture rate/chunking and VU-meter ballistics.",
+      "required": ["sample_rate_hz", "chunk_ms", "window_ms", "decay_ms"],
+      "properties": {
+        "sample_rate_hz": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 48000,
+          "description": "Raw PCM capture sample rate in Hz."
+        },
+        "chunk_ms": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1000,
+          "description": "Duration of each raw-amplitude sample chunk, in milliseconds."
+        },
+        "window_ms": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 5000,
+          "description": "Rolling-window duration reduced to one target level per update, in milliseconds."
+        },
+        "decay_ms": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 5000,
+          "description": "Exponential decay time constant for the displayed level's falloff, in milliseconds."
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

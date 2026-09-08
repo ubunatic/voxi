@@ -1,0 +1,44 @@
+# yaml-language-server: $schema=schemas/actions.schema.json
+#
+# voxi monitor TUI actions: the single-key hotkeys read from raw-mode
+# /dev/tty by `voxi monitor -w` (internal/monitor/monitor.go). This is the
+# single source of truth for those hotkeys and their display labels — see
+# docs/Spec.md. The key dispatcher and the box-title/footer-badge letters
+# must resolve from here, not hardcode byte literals that could drift out
+# of sync with what this file documents.
+#
+# `<c-c>` and `<esc>` are control-key tokens (Ctrl-C / Escape), not literal
+# characters — internal/monitor resolves them to their raw byte values (3
+# and 27 respectively).
+
+actions:
+  speed:
+    title: "voice & speed"
+    short: "speed"
+    keys: ["s", "S", "1", "v", "V"]
+    category: "monitor"
+  hardware:
+    title: "hardware load"
+    short: "hardware"
+    keys: ["h", "H", "2", "c", "C", "g", "G"]
+    category: "monitor"
+  transcript:
+    title: "transcript feed"
+    short: "transcript"
+    keys: ["t", "T", "3"]
+    category: "monitor"
+  daemons:
+    title: "active daemons & health"
+    short: "daemons"
+    keys: ["d", "D", "4", "p", "P"]
+    category: "monitor"
+  all:
+    title: "show all sections"
+    short: "all"
+    keys: ["a", "A"]
+    category: "system"
+  quit:
+    title: "quit monitor"
+    short: "quit"
+    keys: ["q", "Q", "<c-c>", "<esc>"]
+    category: "system"
