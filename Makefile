@@ -113,7 +113,5 @@ format: ⚙️  # format source code
 clean: ⚙️  # remove build artifacts
 	rm -f $(BINARY) $(MODIFIER)
 
-release: ⚙️  # release the project using uman
-	@echo "To release this project using 'uman':"
-	@echo "  1. Ensure you have 'uman', 'goreleaser', 'minisign', and 'fj' installed."
-	@echo "  2. Run 'uman release' to release interactively."
+release: check ⚙️  # release the project using harnez
+	harnez release

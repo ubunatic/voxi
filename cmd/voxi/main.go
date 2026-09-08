@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"ubunatic.com/voxi"
 	"ubunatic.com/voxi/internal/agent"
 	"ubunatic.com/voxi/internal/bench"
 	"ubunatic.com/voxi/internal/chunks"
@@ -33,8 +34,9 @@ func main() {
 	d := deps.DefaultDependencies(os.Stdin, os.Stdout)
 
 	root := &cobra.Command{
-		Use:   "voxi",
-		Short: "Standalone Linux voice input, continuous eager streaming, and desktop typing engine",
+		Use:     "voxi",
+		Version: voxi.Version,
+		Short:   "Standalone Linux voice input, continuous eager streaming, and desktop typing engine",
 		Long: "Voxi is a high-performance voice input and typing engine for Linux/Wayland.\n" +
 			"It provides continuous eager sentence streaming with rolling Whisper inference,\n" +
 			"modifier key gating daemon for hotkey safety, synthetic typing injection, and a btop-style monitor.",

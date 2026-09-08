@@ -1,0 +1,43 @@
+version: 2
+
+project_name: voxi
+
+builds:
+  - id: voxi
+    main: ./cmd/voxi
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    binary: voxi
+    ldflags:
+      - -s -w -X ubunatic.com/voxi.Version={{.Version}}
+
+  - id: voxi-modifierd
+    main: ./cmd/voxi-modifierd
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    binary: voxi-modifierd
+    ldflags:
+      - -s -w -X ubunatic.com/voxi.Version={{.Version}}
+
+archives:
+  - id: default
+    formats:
+      - tar.gz
+    name_template: "voxi-{{ .Version }}-{{ if eq .Arch \"amd64\" }}x86_64{{ else if eq .Arch \"arm64\" }}aarch64{{ else }}{{ .Arch }}{{ end }}-linux"
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: SHA256SUMS
+  algorithm: sha256
