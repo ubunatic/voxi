@@ -22,7 +22,7 @@
     "mic_level": {
       "type": "object",
       "description": "Live mic-level meter capture rate/chunking and VU-meter ballistics.",
-      "required": ["sample_rate_hz", "chunk_ms", "window_ms", "decay_ms"],
+      "required": ["sample_rate_hz", "chunk_ms", "window_ms", "attack_ms", "decay_ms"],
       "properties": {
         "sample_rate_hz": {
           "type": "integer",
@@ -42,11 +42,17 @@
           "maximum": 5000,
           "description": "Rolling-window duration reduced to one target level per update, in milliseconds."
         },
+        "attack_ms": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 5000,
+          "description": "Exponential time constant easing the displayed level up toward a louder target, in milliseconds. Always interpolates -- never jumps straight to the new value."
+        },
         "decay_ms": {
           "type": "number",
           "exclusiveMinimum": 0,
           "maximum": 5000,
-          "description": "Exponential decay time constant for the displayed level's falloff, in milliseconds."
+          "description": "Exponential time constant easing the displayed level down toward a quieter target, in milliseconds."
         }
       },
       "additionalProperties": false

@@ -188,12 +188,82 @@ func TestApplyBallistics_ZeroOrNegativeDT(t *testing.T) {
 	}
 }
 
+func TestApplyBallisticsEased_RiseIsGradualNotInstant(t *testing.T) {
+	attack := 30 * time.Millisecond
+	decay := 150 * time.Millisecond
+	dt := 20 * time.Millisecond
+	got := ApplyBallisticsEased(10.0, 80.0, dt, attack, decay)
+	want := 80.0 + (10.0-80.0)*math.Exp(-dt.Seconds()/attack.Seconds())
+	if math.Abs(got-want) > 1e-6 {
+		t.Errorf("rise: got %v, want %v", got, want)
+	}
+	if got <= 10.0 || got >= 80.0 {
+		t.Fatalf("rise must land strictly between prev and target, got %v (prev=10, target=80)", got)
+	}
+}
+
+func TestApplyBallisticsEased_FallIsGradual(t *testing.T) {
+	attack := 30 * time.Millisecond
+	decay := 150 * time.Millisecond
+	dt := 20 * time.Millisecond
+	got := ApplyBallisticsEased(80.0, 10.0, dt, attack, decay)
+	want := 10.0 + (80.0-10.0)*math.Exp(-dt.Seconds()/decay.Seconds())
+	if math.Abs(got-want) > 1e-6 {
+		t.Errorf("fall: got %v, want %v", got, want)
+	}
+	if got <= 10.0 || got >= 80.0 {
+		t.Fatalf("fall must land strictly between target and prev, got %v (target=10, prev=80)", got)
+	}
+}
+
+func TestApplyBallisticsEased_SnapsToTargetWithinCutoff(t *testing.T) {
+	attack := 30 * time.Millisecond
+	decay := 150 * time.Millisecond
+	// A large dt relative to tau converges essentially to target; must snap
+	// exactly rather than trailing asymptotically forever.
+	if got := ApplyBallisticsEased(50.0, 40.0, 5*time.Second, attack, decay); got != 40.0 {
+		t.Errorf("long dt should snap exactly to target, got %v", got)
+	}
+	if got := ApplyBallisticsEased(40.0, 60.0, 5*time.Second, attack, decay); got != 60.0 {
+		t.Errorf("long dt should snap exactly to target on a rise too, got %v", got)
+	}
+}
+
+func TestApplyBallisticsEased_EqualLevelsNoop(t *testing.T) {
+	if got := ApplyBallisticsEased(50.0, 50.0, 20*time.Millisecond, 30*time.Millisecond, 150*time.Millisecond); got != 50.0 {
+		t.Errorf("equal prev/target: got %v, want 50", got)
+	}
+}
+
+func TestApplyBallisticsEased_DisabledPerDirection(t *testing.T) {
+	dt := 20 * time.Millisecond
+	// attack<=0 disables only the rising direction.
+	if got := ApplyBallisticsEased(10.0, 80.0, dt, 0, 150*time.Millisecond); got != 80.0 {
+		t.Errorf("attack=0 rise: got %v, want instant 80.0", got)
+	}
+	// decay<=0 disables only the falling direction.
+	if got := ApplyBallisticsEased(80.0, 10.0, dt, 30*time.Millisecond, 0); got != 10.0 {
+		t.Errorf("decay=0 fall: got %v, want instant 10.0", got)
+	}
+}
+
+func TestApplyBallisticsEased_ZeroOrNegativeDT(t *testing.T) {
+	attack := 30 * time.Millisecond
+	decay := 150 * time.Millisecond
+	if got := ApplyBallisticsEased(50.0, 80.0, 0, attack, decay); got != 50.0 {
+		t.Errorf("dt=0 got %v, want prev 50.0", got)
+	}
+	if got := ApplyBallisticsEased(50.0, 80.0, -10*time.Millisecond, attack, decay); got != 50.0 {
+		t.Errorf("dt<0 got %v, want prev 50.0", got)
+	}
+}
+
 func TestMeter_Update_WindowMetricsWithoutDecay(t *testing.T) {
 	var m Meter
 	t0 := time.Date(2026, 9, 7, 0, 0, 0, 0, time.UTC)
 	window := 100 * time.Millisecond
 
-	r1 := m.Update(40.0, true, t0, MetricMax, window, 0)
+	r1 := m.Update(40.0, true, t0, MetricMax, window, 0, 0)
 	if !r1.Available || r1.Level != 40.0 {
 		t.Errorf("update speech: got %+v, want {Level: 40, Available: true}", r1)
 	}
@@ -201,32 +271,32 @@ func TestMeter_Update_WindowMetricsWithoutDecay(t *testing.T) {
 		t.Errorf("snapshot mismatch: got %+v, want %+v", snap, r1)
 	}
 
-	r2 := m.Update(20.0, true, t0.Add(20*time.Millisecond), MetricMax, window, 0)
+	r2 := m.Update(20.0, true, t0.Add(20*time.Millisecond), MetricMax, window, 0, 0)
 	if r2.Level != 40.0 {
 		t.Errorf("expected max level 40.0, got %v", r2.Level)
 	}
 
-	rAvg := m.Update(20.0, true, t0.Add(40*time.Millisecond), MetricAvg, window, 0)
+	rAvg := m.Update(20.0, true, t0.Add(40*time.Millisecond), MetricAvg, window, 0, 0)
 	if rAvg.Level < 26.0 || rAvg.Level > 27.0 {
 		t.Errorf("expected avg ~26.66, got %v", rAvg.Level)
 	}
 
-	rMin := m.Update(25.0, true, t0.Add(50*time.Millisecond), MetricMin, window, 0)
+	rMin := m.Update(25.0, true, t0.Add(50*time.Millisecond), MetricMin, window, 0, 0)
 	if rMin.Level != 20.0 {
 		t.Errorf("expected min level 20.0, got %v", rMin.Level)
 	}
 
-	rLive := m.Update(25.0, true, t0.Add(60*time.Millisecond), MetricLive, window, 0)
+	rLive := m.Update(25.0, true, t0.Add(60*time.Millisecond), MetricLive, window, 0, 0)
 	if rLive.Level != 25.0 {
 		t.Errorf("expected live level 25.0, got %v", rLive.Level)
 	}
 
-	rExpired := m.Update(15.0, true, t0.Add(200*time.Millisecond), MetricMax, window, 0)
+	rExpired := m.Update(15.0, true, t0.Add(200*time.Millisecond), MetricMax, window, 0, 0)
 	if rExpired.Level != 15.0 {
 		t.Errorf("expected level 15.0 after window expiry, got %v", rExpired.Level)
 	}
 
-	rUnavail := m.Update(0.0, false, t0.Add(300*time.Millisecond), MetricMax, window, 0)
+	rUnavail := m.Update(0.0, false, t0.Add(300*time.Millisecond), MetricMax, window, 0, 0)
 	if rUnavail.Available || rUnavail.Level != 0.0 {
 		t.Errorf("update unavailable: got %+v, want {Level: 0, Available: false}", rUnavail)
 	}
@@ -236,38 +306,45 @@ func TestMeter_Update_WithDecayBallistics(t *testing.T) {
 	var m Meter
 	t0 := time.Date(2026, 9, 7, 0, 0, 0, 0, time.UTC)
 	window := 50 * time.Millisecond
+	attack := 30 * time.Millisecond
 	decay := 150 * time.Millisecond
 
-	r1 := m.Update(50.0, true, t0, MetricMax, window, decay)
+	r1 := m.Update(50.0, true, t0, MetricMax, window, attack, decay)
 	if r1.Level != 50.0 || !r1.Available {
 		t.Fatalf("initial onset: got %+v, want {Level: 50.0, Available: true}", r1)
 	}
 
 	t1 := t0.Add(50 * time.Millisecond)
-	r2 := m.Update(0.0, true, t1, MetricLive, window, decay)
+	r2 := m.Update(0.0, true, t1, MetricLive, window, attack, decay)
 	want2 := 50.0 * math.Exp(-0.05/0.15)
 	if math.Abs(r2.Level-want2) > 1e-4 {
 		t.Errorf("step 1 decay: got %v, want %v", r2.Level, want2)
 	}
 
 	t2 := t1.Add(50 * time.Millisecond)
-	r3 := m.Update(0.0, true, t2, MetricLive, window, decay)
+	r3 := m.Update(0.0, true, t2, MetricLive, window, attack, decay)
 	want3 := want2 * math.Exp(-0.05/0.15)
 	if math.Abs(r3.Level-want3) > 1e-4 {
 		t.Errorf("step 2 decay: got %v, want %v", r3.Level, want3)
 	}
 
+	// Rises now ease too (via ApplyBallisticsEased), using the attack time
+	// constant instead of snapping straight to the new target.
 	t3 := t2.Add(50 * time.Millisecond)
-	r4 := m.Update(70.0, true, t3, MetricLive, window, decay)
-	if r4.Level != 70.0 {
-		t.Errorf("instant rise: got %v, want 70.0", r4.Level)
+	r4 := m.Update(70.0, true, t3, MetricLive, window, attack, decay)
+	want4 := 70.0 + (r3.Level-70.0)*math.Exp(-0.05/0.03)
+	if math.Abs(r4.Level-want4) > 1e-4 {
+		t.Errorf("eased rise: got %v, want %v", r4.Level, want4)
+	}
+	if r4.Level <= r3.Level || r4.Level >= 70.0 {
+		t.Fatalf("eased rise should land strictly between the previous level and the target: prev=%v got=%v target=70", r3.Level, r4.Level)
 	}
 
-	cur := 70.0
+	cur := r4.Level
 	curTime := t3
 	for i := 0; i < 20; i++ {
 		curTime = curTime.Add(50 * time.Millisecond)
-		r := m.Update(0.0, true, curTime, MetricLive, window, decay)
+		r := m.Update(0.0, true, curTime, MetricLive, window, attack, decay)
 		if r.Level == 0.0 {
 			break
 		}
@@ -281,12 +358,12 @@ func TestMeter_Update_WithDecayBallistics(t *testing.T) {
 		t.Errorf("expected clean snap to 0.0, got %v", rFinal.Level)
 	}
 
-	m.Update(0.0, false, curTime.Add(50*time.Millisecond), MetricLive, window, decay)
+	m.Update(0.0, false, curTime.Add(50*time.Millisecond), MetricLive, window, attack, decay)
 	if snap := m.Snapshot(); snap.Available || snap.Level != 0.0 {
 		t.Errorf("expected unavailable state, got %+v", snap)
 	}
 
-	rRecon := m.Update(45.0, true, curTime.Add(100*time.Millisecond), MetricLive, window, decay)
+	rRecon := m.Update(45.0, true, curTime.Add(100*time.Millisecond), MetricLive, window, attack, decay)
 	if !rRecon.Available || rRecon.Level != 45.0 {
 		t.Errorf("reconnected onset: got %+v, want {Level: 45.0, Available: true}", rRecon)
 	}
@@ -302,23 +379,24 @@ func TestMeter_Tick_AdvancesDecayBetweenUpdates(t *testing.T) {
 	var m Meter
 	t0 := time.Date(2026, 9, 7, 0, 0, 0, 0, time.UTC)
 	window := 50 * time.Millisecond
+	attack := 30 * time.Millisecond
 	decay := 150 * time.Millisecond
 
-	m.Update(80.0, true, t0, MetricMax, window, decay)
-	r1 := m.Update(0.0, true, t0.Add(50*time.Millisecond), MetricLive, window, decay)
+	m.Update(80.0, true, t0, MetricMax, window, attack, decay)
+	r1 := m.Update(0.0, true, t0.Add(50*time.Millisecond), MetricLive, window, attack, decay)
 
 	// Simulate three paint frames landing between this chunk and the next one
 	// (chunk period 50ms, paint period ~15ms) -- each Tick should move the
 	// level further down the same exponential curve, not repeat r1.Level.
-	tick1 := m.Tick(t0.Add(65*time.Millisecond), decay)
+	tick1 := m.Tick(t0.Add(65*time.Millisecond), attack, decay)
 	if tick1.Level >= r1.Level {
 		t.Fatalf("Tick did not advance decay: r1=%v tick1=%v", r1.Level, tick1.Level)
 	}
-	tick2 := m.Tick(t0.Add(80*time.Millisecond), decay)
+	tick2 := m.Tick(t0.Add(80*time.Millisecond), attack, decay)
 	if tick2.Level >= tick1.Level {
 		t.Fatalf("second Tick did not advance decay further: tick1=%v tick2=%v", tick1.Level, tick2.Level)
 	}
-	tick3 := m.Tick(t0.Add(95*time.Millisecond), decay)
+	tick3 := m.Tick(t0.Add(95*time.Millisecond), attack, decay)
 	if tick3.Level >= tick2.Level {
 		t.Fatalf("third Tick did not advance decay further: tick2=%v tick3=%v", tick2.Level, tick3.Level)
 	}
@@ -327,14 +405,14 @@ func TestMeter_Tick_AdvancesDecayBetweenUpdates(t *testing.T) {
 	// Tick's continuous curve already was, not jump back up to r1's stale
 	// value -- confirms Tick and Update share one continuous decay, not two
 	// independent clocks.
-	next := m.Update(0.0, true, t0.Add(100*time.Millisecond), MetricLive, window, decay)
+	next := m.Update(0.0, true, t0.Add(100*time.Millisecond), MetricLive, window, attack, decay)
 	if next.Level >= tick3.Level {
 		t.Fatalf("Update after Tick should continue decaying, not jump back up: tick3=%v next=%v", tick3.Level, next.Level)
 	}
 
 	// A Tick against an unavailable meter is a safe no-op.
 	var unavail Meter
-	if r := unavail.Tick(t0, decay); r.Available {
+	if r := unavail.Tick(t0, attack, decay); r.Available {
 		t.Errorf("Tick on a never-updated Meter should stay unavailable, got %+v", r)
 	}
 }
@@ -459,7 +537,7 @@ func TestRunCapture_ParecAndPwRecordAgree(t *testing.T) {
 	var got []Reading
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	spec := func() (Metric, time.Duration, time.Duration) { return MetricLive, 100 * time.Millisecond, 0 }
+	spec := func() (Metric, time.Duration, time.Duration, time.Duration) { return MetricLive, 100 * time.Millisecond, 0, 0 }
 	RunCapture(ctx, PwRecordCommand(ctx, 0), &m, DefaultChunkBytes, DefaultMinDBFS, spec, func(r Reading) { got = append(got, r) })
 
 	if len(got) != 1 {
@@ -476,7 +554,7 @@ func TestRunCapture_ParecAndPwRecordAgree(t *testing.T) {
 func TestStartManager_NilBuildCmdDegradesGracefully(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	mgr := StartManager(ctx, nil, 0, 0, 0, func() (Metric, time.Duration, time.Duration) { return MetricMax, 0, 0 }, nil)
+	mgr := StartManager(ctx, nil, 0, 0, 0, func() (Metric, time.Duration, time.Duration, time.Duration) { return MetricMax, 0, 0, 0 }, nil)
 	t.Cleanup(mgr.Stop)
 	if got := mgr.Snapshot(); got.Available {
 		t.Errorf("nil buildCmd: got %+v, want Available: false", got)

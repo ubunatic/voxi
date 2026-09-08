@@ -26,6 +26,7 @@ type MicLevelSpec struct {
 	SampleRateHz int     `yaml:"sample_rate_hz"`
 	ChunkMs      float64 `yaml:"chunk_ms"`
 	WindowMs     float64 `yaml:"window_ms"`
+	AttackMs     float64 `yaml:"attack_ms"`
 	DecayMs      float64 `yaml:"decay_ms"`
 }
 
@@ -70,6 +71,9 @@ func parseMonitorSpec(data []byte) (*MonitorSpec, error) {
 	if s.MicLevel.WindowMs <= 0 {
 		return nil, fmt.Errorf("spec: mic_level.window_ms must be positive")
 	}
+	if s.MicLevel.AttackMs <= 0 {
+		return nil, fmt.Errorf("spec: mic_level.attack_ms must be positive")
+	}
 	if s.MicLevel.DecayMs <= 0 {
 		return nil, fmt.Errorf("spec: mic_level.decay_ms must be positive")
 	}
@@ -91,6 +95,11 @@ func (s *MonitorSpec) ChunkBytes() int {
 // Window converts MicLevel.WindowMs to a time.Duration.
 func (s *MonitorSpec) Window() time.Duration {
 	return time.Duration(s.MicLevel.WindowMs * float64(time.Millisecond))
+}
+
+// Attack converts MicLevel.AttackMs to a time.Duration.
+func (s *MonitorSpec) Attack() time.Duration {
+	return time.Duration(s.MicLevel.AttackMs * float64(time.Millisecond))
 }
 
 // Decay converts MicLevel.DecayMs to a time.Duration.

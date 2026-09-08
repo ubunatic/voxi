@@ -238,6 +238,48 @@ func ApplyBallistics(prev, target float64, dt, decayDuration time.Duration) floa
 	return decayed
 }
 
+// ApplyBallisticsEased is like ApplyBallistics but eases *both* directions —
+// rises and falls both interpolate exponentially toward target rather than
+// rises snapping instantly. Meter uses this (not ApplyBallistics) so a
+// redraw loop calling Tick every paint frame always sees the displayed
+// level move through intermediate values, never jump straight from one
+// level to another in a single frame — a real VU meter's instant-attack
+// convention reads as a distracting pop/jump for a compact single-glyph UI
+// status icon, even though it's the physically-accurate choice
+// ApplyBallistics makes for a dedicated meter display.
+//
+//	eased = target + (prev - target) * exp(-dt / tau)
+//	tau   = attack when rising (target > prev), decay when falling
+//
+// This is the standard one-pole low-pass/RC-charge formula, which
+// naturally approaches target from either side without needing separate
+// rising/falling branches. Snapped exactly to target once within
+// DefaultDecayCutoff, so it settles in finite time instead of trailing
+// asymptotically forever. If the selected tau (attack or decay, whichever
+// direction applies) is <= 0, ballistics are disabled for that direction
+// and target is returned immediately, matching ApplyBallistics' disabled
+// convention.
+func ApplyBallisticsEased(prev, target float64, dt, attack, decay time.Duration) float64 {
+	if dt <= 0 {
+		return prev
+	}
+	if target == prev {
+		return prev
+	}
+	tau := decay
+	if target > prev {
+		tau = attack
+	}
+	if tau <= 0 {
+		return target
+	}
+	eased := target + (prev-target)*math.Exp(-dt.Seconds()/tau.Seconds())
+	if math.Abs(eased-target) < DefaultDecayCutoff {
+		return target
+	}
+	return eased
+}
+
 // Reading is one published sample from a Meter: Level is 0-100, and
 // Available reports whether a real reading is currently flowing (false
 // while (re)connecting, permanently false when capture can't work on this
@@ -265,11 +307,14 @@ type Meter struct {
 }
 
 // Update folds one new raw amplitude reading into the meter's rolling
-// window, reduces the window to metric, applies ballistics against the
-// previously displayed level, and returns (and stores) the resulting
+// window, reduces the window to metric, eases the previously displayed
+// level toward it via ApplyBallisticsEased (both attack and decay
+// interpolate — see that function), and returns (and stores) the resulting
 // Reading. Passing available=false resets all rolling state, matching a
-// capture subprocess restart.
-func (m *Meter) Update(rawLevel float64, available bool, now time.Time, metric Metric, window, decay time.Duration) Reading {
+// capture subprocess restart. The very first Update after construction or
+// after a reset (no prior lastUpdate) sets displayedLevel directly instead
+// of easing, since there is no previous displayed state to ease from.
+func (m *Meter) Update(rawLevel float64, available bool, now time.Time, metric Metric, window, attack, decay time.Duration) Reading {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if !available {
@@ -323,11 +368,12 @@ func (m *Meter) Update(rawLevel float64, available bool, now time.Time, metric M
 		}
 	}
 
-	var dt time.Duration
-	if !m.lastUpdate.IsZero() {
-		dt = now.Sub(m.lastUpdate)
+	if m.lastUpdate.IsZero() {
+		m.displayedLevel = targetLevel
+	} else {
+		dt := now.Sub(m.lastUpdate)
+		m.displayedLevel = ApplyBallisticsEased(m.displayedLevel, targetLevel, dt, attack, decay)
 	}
-	m.displayedLevel = ApplyBallistics(m.displayedLevel, targetLevel, dt, decay)
 	m.lastUpdate = now
 	m.lastTarget = targetLevel
 
@@ -342,18 +388,20 @@ func (m *Meter) Snapshot() Reading {
 	return m.reading
 }
 
-// Tick advances ballistics against the most recent target level (the last
-// window-reduced amplitude Update computed) without waiting for a new raw
-// audio sample. Update only runs once per captured chunk (e.g. every 50ms);
-// a redraw loop painting faster than that would otherwise read the exact
-// same Reading for several frames in a row and then see it jump, since
-// nothing advances displayedLevel between chunks. Calling Tick once per
-// paint frame instead continues the same exponential decay curve at the
-// paint cadence, so the displayed motion is smooth rather than
-// stair-stepped. A no-op (returns the current Reading unchanged) while the
-// meter has no available reading yet, or once decay has already resolved
-// exactly to the last target (nothing left to advance).
-func (m *Meter) Tick(now time.Time, decay time.Duration) Reading {
+// Tick advances ballistics (via ApplyBallisticsEased, easing toward the
+// most recent target level in either direction) against the most recent
+// target level (the last window-reduced amplitude Update computed) without
+// waiting for a new raw audio sample. Update only runs once per captured
+// chunk (e.g. every 50ms); a redraw loop painting faster than that would
+// otherwise read the exact same Reading for several frames in a row and
+// then see it jump, since nothing advances displayedLevel between chunks.
+// Calling Tick once per paint frame instead continues the same easing
+// curve at the paint cadence — rising or falling — so the displayed motion
+// always moves through intermediate values rather than jumping. A no-op
+// (returns the current Reading unchanged) while the meter has no available
+// reading yet, or once easing has already resolved exactly to the last
+// target (nothing left to advance).
+func (m *Meter) Tick(now time.Time, attack, decay time.Duration) Reading {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if !m.reading.Available {
@@ -363,7 +411,7 @@ func (m *Meter) Tick(now time.Time, decay time.Duration) Reading {
 		return m.reading
 	}
 	dt := now.Sub(m.lastUpdate)
-	m.displayedLevel = ApplyBallistics(m.displayedLevel, m.lastTarget, dt, decay)
+	m.displayedLevel = ApplyBallisticsEased(m.displayedLevel, m.lastTarget, dt, attack, decay)
 	m.lastUpdate = now
 	m.reading = Reading{Level: m.displayedLevel, Available: true}
 	return m.reading
@@ -374,7 +422,7 @@ func (m *Meter) Tick(now time.Time, decay time.Duration) Reading {
 // than fixed values so a caller backed by live-reloadable configuration
 // (e.g. harnez's YAML spec system) can change these between samples
 // without restarting capture.
-type Spec func() (metric Metric, window, decay time.Duration)
+type Spec func() (metric Metric, window, attack, decay time.Duration)
 
 // RunCapture starts cmd (already configured to stream raw PCM16LE mono
 // samples on stdout, e.g. via ParecCommand/PwRecordCommand) and drives the
@@ -405,8 +453,8 @@ func RunCapture(ctx context.Context, cmd *exec.Cmd, m *Meter, chunkBytes int, mi
 		n, err := io.ReadFull(stdout, buf)
 		if n > 0 {
 			level := AmplitudeFromPCM16LE(buf[:n], minDBFS)
-			metric, window, decay := spec()
-			reading := m.Update(level, true, time.Now(), metric, window, decay)
+			metric, window, attack, decay := spec()
+			reading := m.Update(level, true, time.Now(), metric, window, attack, decay)
 			if onSample != nil {
 				onSample(reading)
 			}
@@ -457,8 +505,8 @@ func runManager(ctx context.Context, m *Meter, buildCmd func(context.Context) *e
 		if ctx.Err() != nil {
 			return
 		}
-		metric, window, decay := spec()
-		m.Update(0, false, time.Now(), metric, window, decay)
+		metric, window, attack, decay := spec()
+		m.Update(0, false, time.Now(), metric, window, attack, decay)
 		if onSample != nil {
 			onSample(Reading{Available: false})
 		}
@@ -497,9 +545,9 @@ func (m *Manager) Snapshot() Reading {
 // Meter.Tick. Call this once per redraw instead of Snapshot when painting
 // faster than the capture chunk rate, so motion between chunks is smooth
 // rather than held static. Safe on nil.
-func (m *Manager) Tick(now time.Time, decay time.Duration) Reading {
+func (m *Manager) Tick(now time.Time, attack, decay time.Duration) Reading {
 	if m == nil {
 		return Reading{}
 	}
-	return m.meter.Tick(now, decay)
+	return m.meter.Tick(now, attack, decay)
 }

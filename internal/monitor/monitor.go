@@ -41,11 +41,13 @@ var loadedMonitorSpec = sync.OnceValue(func() *spec.MonitorSpec {
 
 // micLevelSpec tunes the live mic-level meter for the monitor TUI per
 // spec/monitor.yaml's mic_level settings: a short window smooths jitter between
-// individual audio chunks without lagging noticeably behind speech onset, and a quick
-// decay keeps the bar responsive as speech pauses.
-func micLevelSpec() (metric audiolevel.Metric, window, decay time.Duration) {
+// individual audio chunks without lagging noticeably behind speech onset, and
+// attack/decay ease the displayed level toward each new target in both
+// directions (see audiolevel.ApplyBallisticsEased) — it never jumps straight to
+// a new value in a single frame.
+func micLevelSpec() (metric audiolevel.Metric, window, attack, decay time.Duration) {
 	m := loadedMonitorSpec()
-	return audiolevel.MetricMax, m.Window(), m.Decay()
+	return audiolevel.MetricMax, m.Window(), m.Attack(), m.Decay()
 }
 
 // buildMicCaptureCmd picks parec (preferred: tags the stream so desktop mic-in-use
@@ -267,8 +269,8 @@ func RunWatchResources(ctx context.Context, d deps.Dependencies, interval time.D
 		cacheLock.Lock()
 		report := cachedReport
 		cacheLock.Unlock()
-		_, _, decay := micLevelSpec()
-		mic := micMgr.Tick(time.Now(), decay)
+		_, _, attack, decay := micLevelSpec()
+		mic := micMgr.Tick(time.Now(), attack, decay)
 		report.MicLevel = mic.Level
 		report.MicAvailable = mic.Available
 

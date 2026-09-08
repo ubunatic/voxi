@@ -37,15 +37,17 @@ func TestMonitorDerivedValues(t *testing.T) {
 func TestParseMonitorSpecRejectsNonPositiveValues(t *testing.T) {
 	cases := []string{
 		`paint: {fps: 0}
-mic_level: {sample_rate_hz: 8000, chunk_ms: 50, window_ms: 150, decay_ms: 250}`,
+mic_level: {sample_rate_hz: 8000, chunk_ms: 50, window_ms: 150, attack_ms: 30, decay_ms: 250}`,
 		`paint: {fps: 12.5}
-mic_level: {sample_rate_hz: 0, chunk_ms: 50, window_ms: 150, decay_ms: 250}`,
+mic_level: {sample_rate_hz: 0, chunk_ms: 50, window_ms: 150, attack_ms: 30, decay_ms: 250}`,
 		`paint: {fps: 12.5}
-mic_level: {sample_rate_hz: 8000, chunk_ms: 0, window_ms: 150, decay_ms: 250}`,
+mic_level: {sample_rate_hz: 8000, chunk_ms: 0, window_ms: 150, attack_ms: 30, decay_ms: 250}`,
 		`paint: {fps: 12.5}
-mic_level: {sample_rate_hz: 8000, chunk_ms: 50, window_ms: 0, decay_ms: 250}`,
+mic_level: {sample_rate_hz: 8000, chunk_ms: 50, window_ms: 0, attack_ms: 30, decay_ms: 250}`,
 		`paint: {fps: 12.5}
-mic_level: {sample_rate_hz: 8000, chunk_ms: 50, window_ms: 150, decay_ms: 0}`,
+mic_level: {sample_rate_hz: 8000, chunk_ms: 50, window_ms: 150, attack_ms: 0, decay_ms: 250}`,
+		`paint: {fps: 12.5}
+mic_level: {sample_rate_hz: 8000, chunk_ms: 50, window_ms: 150, attack_ms: 30, decay_ms: 0}`,
 	}
 	for _, doc := range cases {
 		if _, err := parseMonitorSpec([]byte(doc)); err == nil {

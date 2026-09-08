@@ -29,9 +29,15 @@ mic_level:
   # target level per update — smooths jitter between individual chunks
   # without lagging noticeably behind speech onset.
   window_ms: 50
-  # Exponential decay time constant applied when the target level falls,
-  # giving the displayed bar a VU-meter-style falloff instead of snapping
-  # straight to the new (quieter) reading.
+  # Exponential time constant easing the displayed level UP toward a
+  # louder target. Both attack and decay always interpolate (see
+  # audiolevel.ApplyBallisticsEased) — the displayed level never jumps
+  # straight to a new value in a single frame, even on a sudden loud
+  # sound; it always passes through intermediate values first.
+  attack_ms: 60
+  # Exponential time constant easing the displayed level DOWN toward a
+  # quieter target, giving the bar a VU-meter-style falloff instead of
+  # snapping straight to the new (quieter) reading.
   decay_ms: 100
 
 # The status line's leading icon (see internal/monitor/render.go's
