@@ -126,6 +126,25 @@ func RunWatchResources(ctx context.Context, d deps.Dependencies, interval time.D
 	var secLock sync.Mutex
 	sec := initialSec
 
+	// Cache the terminal width and only refresh it on an actual resize
+	// (SIGWINCH) instead of PrintVoiceResourceReport re-querying it via a
+	// `stty` subprocess on every paint frame -- at 30fps that subprocess
+	// spawn was measured costing more CPU than the mic-level meter itself.
+	cachedTerminalWidth.Store(int32(getTerminalWidth()))
+	winch := make(chan os.Signal, 1)
+	signal.Notify(winch, syscall.SIGWINCH)
+	defer signal.Stop(winch)
+	go func() {
+		for {
+			select {
+			case <-sigCtx.Done():
+				return
+			case <-winch:
+				cachedTerminalWidth.Store(int32(getTerminalWidth()))
+			}
+		}
+	}()
+
 	redrawChan := make(chan struct{}, 1)
 	requestRedraw := func() {
 		select {
