@@ -66,3 +66,4 @@
 | 082 | [archive/082-deterministic-post-transcription-vocabulary-replacements-for-cohere.md](archive/082-deterministic-post-transcription-vocabulary-replacements-for-cohere.md) | Deterministic Post-Transcription Vocabulary Replacements for Cohere | Closed — resolved in 93140f6 |
 | 083 | [083-prevent-runaway-repeated-dotool-desktop-injection.md](083-prevent-runaway-repeated-dotool-desktop-injection.md) | Reject Pathological Repetitive ASR Output Before Desktop Injection | In Progress |
 | 084 | [084-add-live-mic-input-level-meter-and-volume-display-to-voxi-monitor.md](084-add-live-mic-input-level-meter-and-volume-display-to-voxi-monitor.md) | 084: Add Live Mic Input-Level Meter and Volume Display to `voxi monitor` | Open |
+| 085 | [085-onboard-voxi-to-harnez-release-pipeline.md](085-onboard-voxi-to-harnez-release-pipeline.md) | 085: Onboard voxi to harnez release pipeline | Closed — onboarded and verified live (v0.1.1 released) |
