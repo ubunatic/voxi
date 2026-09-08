@@ -1,6 +1,6 @@
 # 084: Add Live Mic Input-Level Meter and Volume Display to `voxi monitor`
 
-**Status**: Open
+**Status**: Closed — shipped 2026-09-08, see docs/LiveMicMeter.md
 **Priority**: P3 (Low)
 **Severity**: Enhancement
 **Category**: Enhancement
@@ -160,7 +160,45 @@ part of implementation — this ticket intentionally does not decide it.
 - Not committing to a specific scale/unit or capture backend — see
   Proposed Approach and Open Questions above.
 
-## 7. Background
+## 7. Resolution — 2026-09-08
+
+Shipped as a new `audiolevel` package (`ubunatic.com/voxi/audiolevel`) plus
+wiring into `internal/monitor`. Full design/pitfalls writeup:
+**[docs/LiveMicMeter.md](../docs/LiveMicMeter.md)**. Answering this
+ticket's Open Questions:
+
+- **Scale unit**: hybrid, not strictly A or B — reused voxi's existing
+  `audio.ComputeAudioRMS`, but adopted harnez's dBFS scaling
+  (`DefaultMinDBFS = -60`) rather than the `sparklineFloorRMS`/
+  `sparklineCeilingRMS` linear calibration, since the two aren't drop-in
+  compatible and dBFS was the better-evidenced choice from harnez's prior
+  canary work.
+- **Capture backend**: `ParecCommand`/`PwRecordCommand` in
+  `audiolevel/audiolevel.go`, `parec` preferred, `pw-record` fallback —
+  ported from harnez's `mic.go` pattern.
+- **Configured (static) system input volume/gain**: **not implemented** —
+  out of scope for what shipped. Only the live real-time signal level is
+  shown; harnez's "two values side by side" design was not carried over.
+  Worth a follow-up ticket if still wanted.
+- **Redraw cadence**: decoupled — `spec/monitor.yaml`'s `paint.fps`
+  (default 30) drives the redraw ticker independently of the slower
+  `--interval`-paced CPU/GPU/process collection and of the mic capture's
+  own chunk rate. See docs/LiveMicMeter.md §"Decoupled Redraw".
+- **Privacy-indicator suppression**: implemented
+  (`application.id=org.gnome.VolumeControl` + `node.virtual=true` on both
+  `parec` and `pw-record`), but GNOME-side effectiveness is only
+  source-verified, not yet confirmed via a live visual canary on this
+  machine's actual GNOME Shell version — tracked separately in
+  [087](087-voxi-monitor-lights-up-gnome-mic-in-use-indicator-even-while-idle-suppression-tags-don-t-work-unimplemented.md).
+  KDE's `node.virtual=true` exemption remains unconfirmed (inherited from
+  harnez, never independently canaried by either project).
+- **Box placement**: folded into the existing `[s] voice & speed` box's
+  status icon (not a new 5th `ResourceSections` box) — the icon itself
+  becomes the live loudness glyph while recording, and optionally always
+  (`spec/monitor.yaml`'s `status_icon.always_show_loudness`, closed via
+  [086](086-detailed-view-always-show-live-mic-loudness-even-when-not-recording.md)).
+
+## 8. Background
 
 Raised 2026-09-08 by the user as a forward-looking pointer ("see ../harnez
 for how we aim to capture the audio level — volume slider and actual
