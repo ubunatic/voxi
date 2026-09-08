@@ -68,6 +68,18 @@ code {
   border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
+/* Inline-code styling above is for prose mentions (e.g. <code>voxi eager</code>).
+   <pre><code> blocks are full multi-line terminal/synopsis output -- without this
+   reset, `code`'s inline pill background/padding/border-radius applies per
+   line (since <code> is inline by default), making each line look like its
+   own separate chip instead of one seamless block. */
+pre code {
+  background: none;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  font-size: 1em;
+}
 
 /* -- Header & Nav -- */
 
@@ -276,9 +288,49 @@ h1 .name {
   border-radius: 6px;
 }
 
+/* -- How-It-Works Steps (hero) -- */
+
+.hero-steps {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 1.6rem 1.7rem;
+}
+.hero-steps h2 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 0 0 1.1rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.hero-steps ol {
+  margin: 0;
+  padding-left: 1.3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+.hero-steps li {
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+.hero-steps li b {
+  color: var(--ink);
+}
+.hero-shot {
+  margin-top: 1.3rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--panel-2);
+}
+
 /* -- Terminal & Pre Mockups -- */
 
-.terminal-mockup, .monitor-terminal {
+.monitor-terminal {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -317,23 +369,6 @@ h1 .name {
   background: rgba(255, 255, 255, 0.15);
   border-color: var(--accent-2);
 }
-
-.terminal-body {
-  margin: 0;
-  padding: 1.1rem 1.2rem;
-  font-family: var(--mono);
-  font-size: 0.84rem;
-  line-height: 1.65;
-  white-space: pre-wrap;
-  overflow-x: auto;
-}
-
-.ln-listen { color: var(--accent); }
-.ln-info { color: var(--muted); }
-.ln-type { color: var(--accent-3); font-weight: 600; }
-.ln-gate { color: var(--accent-2); }
-.ln-metric { color: var(--accent-cyan); }
-.ln-sum { color: var(--accent-green); font-weight: 600; }
 
 /* -- Section Wrappers & Headings -- */
 
@@ -418,6 +453,16 @@ h1 .name {
   margin: 0 auto;
 }
 
+/* -- Spec-Driven Architecture -- */
+
+.spec-tree-wrap {
+  max-width: 42rem;
+  margin: 0 auto;
+}
+.spec-tree-wrap .code-block pre {
+  line-height: 1.7;
+}
+
 .monitor-tag {
   font-family: var(--mono);
   font-size: 0.72rem;
@@ -429,22 +474,12 @@ h1 .name {
   font-weight: 700;
 }
 
-.monitor-body {
-  margin: 0;
-  padding: 1.2rem;
-  font-family: var(--mono);
-  font-size: 0.84rem;
-  line-height: 1.5;
-  white-space: pre;
-  overflow-x: auto;
+.monitor-screenshot {
+  display: block;
+  width: 100%;
+  height: auto;
   background: var(--panel);
 }
-
-.t-green { color: var(--accent-green); font-weight: 700; }
-.t-white { color: #ffffff; font-weight: 700; }
-.t-cyan { color: var(--accent-cyan); }
-.t-violet { color: var(--accent); }
-.t-teal { color: var(--accent-2); }
 
 /* -- Steps & Quickstart -- */
 
@@ -463,6 +498,21 @@ h1 .name {
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 1.4rem 1.6rem;
+}
+
+.screenshot-row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 0.9rem;
+}
+.screenshot-row img {
+  flex: 1 1 260px;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
 }
 @media (max-width: 640px) {
   .step-card {
@@ -560,7 +610,7 @@ h1 .name {
   background: rgba(255, 255, 255, 0.02);
 }
 
-/* -- GNOME Extension Box -- */
+/* -- Callout Box -- */
 
 .gnome-box {
   background: var(--panel);
@@ -569,26 +619,6 @@ h1 .name {
   padding: 2rem;
   max-width: 58rem;
   margin: 0 auto;
-}
-
-.check-list {
-  list-style: none;
-  padding: 0;
-  margin: 0 0 1.5rem;
-}
-.check-list li {
-  position: relative;
-  padding-left: 1.8rem;
-  margin-bottom: 0.8rem;
-  color: var(--ink);
-  font-size: 0.95rem;
-}
-.check-list li::before {
-  content: "✓";
-  position: absolute;
-  left: 0;
-  color: var(--accent-2);
-  font-weight: 700;
 }
 
 /* -- Manpage -- */
