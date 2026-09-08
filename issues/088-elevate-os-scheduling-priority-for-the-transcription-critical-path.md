@@ -1,6 +1,6 @@
 # 088 — Elevate OS scheduling priority for the transcription-critical path
 
-**Status**: In Progress
+**Status**: Open
 **Priority**: P3 (Low)
 **Severity**: Enhancement
 **Category**: Enhancement
