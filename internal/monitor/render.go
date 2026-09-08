@@ -83,14 +83,36 @@ func RenderLevelChar(level float64) string {
 		idx = len(levelChars) - 1
 	}
 
-	color := "\x1b[32m"
-	if level >= 90 {
-		color = "\x1b[31m"
-	} else if level >= 65 {
-		color = "\x1b[33m"
-	}
+	return levelColor(level) + string(levelChars[idx]) + "\x1b[0m"
+}
 
-	return color + string(levelChars[idx]) + "\x1b[0m"
+// levelColor maps a 0-100 loudness level to a 24-bit ANSI truecolor escape, smoothly
+// interpolating green -> yellow -> red rather than jumping between a handful of fixed
+// color bands. A single terminal cell only has levelChars' 8 discrete height steps to
+// show motion with; a continuous color gradient on top gives near-per-percent visual
+// resolution, so small level changes stay visible instead of looking frozen within a
+// wide fixed-color band (observed live: a 3-band scheme could hold the same color for
+// over a second of continuously-changing audio, reading as "laggy" even though the
+// underlying signal was updating correctly).
+func levelColor(level float64) string {
+	if level < 0 {
+		level = 0
+	}
+	if level > 100 {
+		level = 100
+	}
+	var r, g int
+	const b = 0
+	if level <= 50 {
+		t := level / 50.0
+		r = int(220 * t)
+		g = 190
+	} else {
+		t := (level - 50) / 50.0
+		r = 220
+		g = int(190 * (1 - t))
+	}
+	return fmt.Sprintf("\x1b[38;2;%d;%d;%dm", r, g, b)
 }
 
 // FormatBytes formats byte sizes into human-readable strings.
