@@ -12,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"ubunatic.com/voxi"
+	"ubunatic.com/voxi/audiolevel"
 	"ubunatic.com/voxi/internal/agent"
 	"ubunatic.com/voxi/internal/bench"
 	"ubunatic.com/voxi/internal/chunks"
@@ -162,7 +163,7 @@ func main() {
 			if watch {
 				return monitor.RunWatchResources(ctx, d, time.Duration(intervalSec)*time.Second, sections)
 			}
-			report := monitor.CollectVoiceResources(ctx, d)
+			report := monitor.CollectVoiceResources(ctx, d, audiolevel.Reading{})
 			monitor.PrintVoiceResourceReport(d.Stdout, report, sections)
 			return nil
 		},

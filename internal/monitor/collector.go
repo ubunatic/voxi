@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"ubunatic.com/voxi/audiolevel"
 	"ubunatic.com/voxi/internal/deps"
 	"ubunatic.com/voxi/internal/eager"
 	"ubunatic.com/voxi/internal/mode"
@@ -48,6 +49,8 @@ type VoiceResourceReport struct {
 	GPUAccel       string
 	ActiveModel    string
 	ModifierStatus string
+	MicLevel       float64
+	MicAvailable   bool
 	Processes      []ProcessResource
 	EagerMetrics   *eager.EagerMetrics
 	ZombieWarnings []string
@@ -62,7 +65,10 @@ var (
 )
 
 // CollectVoiceResources gathers live process, service, and GPU metrics for voice input.
-func CollectVoiceResources(ctx context.Context, d deps.Dependencies) VoiceResourceReport {
+// mic is the most recent live mic-level reading (e.g. from an audiolevel.Manager the
+// caller keeps running for the life of the monitor session); pass audiolevel.Reading{}
+// when no live capture is running (one-shot, non-watch invocations).
+func CollectVoiceResources(ctx context.Context, d deps.Dependencies, mic audiolevel.Reading) VoiceResourceReport {
 	m := mode.CurrentVoiceInputMode(ctx, d)
 	recStatus, _ := record.GetRecordingStatus(ctx, d)
 
@@ -71,6 +77,8 @@ func CollectVoiceResources(ctx context.Context, d deps.Dependencies) VoiceResour
 		RecordStatus: recStatus,
 		GPUAccel:     detectGPUStatus(),
 		ActiveModel:  detectActiveModel(d),
+		MicLevel:     mic.Level,
+		MicAvailable: mic.Available,
 	}
 
 	modReader := modifiers.NewModifierReader("")

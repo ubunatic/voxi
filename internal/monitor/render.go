@@ -67,6 +67,32 @@ func RenderSpeedGauge(rtf float64) string {
 	return sb.String()
 }
 
+// levelChars are the single-glyph loudness steps RenderLevelChar picks from, lowest to
+// highest, matching the block-height styling of the sparkline runes used elsewhere.
+var levelChars = []rune{'▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'}
+
+// RenderLevelChar renders live mic input level (0-100) as a single colored glyph whose
+// height/color track loudness, e.g. for use as a live-updating status icon in place of a
+// static ●.
+func RenderLevelChar(level float64) string {
+	idx := int(level / 100.0 * float64(len(levelChars)-1))
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= len(levelChars) {
+		idx = len(levelChars) - 1
+	}
+
+	color := "\x1b[32m"
+	if level >= 90 {
+		color = "\x1b[31m"
+	} else if level >= 65 {
+		color = "\x1b[33m"
+	}
+
+	return color + string(levelChars[idx]) + "\x1b[0m"
+}
+
 // FormatBytes formats byte sizes into human-readable strings.
 func FormatBytes(bytes int64) string {
 	if bytes <= 0 {
@@ -339,7 +365,7 @@ func PrintVoiceResourceReport(w io.Writer, r VoiceResourceReport, sec ResourceSe
 		modStr = "\x1b[90moff\x1b[0m"
 	}
 	speedLines := []string{
-		fmt.Sprintf("status:  %s (%s / %s)", formatRecordState(r.RecordStatus), r.Mode, r.ActiveModel),
+		fmt.Sprintf("status:  %s (%s / %s)", formatRecordState(r.RecordStatus, r.MicLevel, r.MicAvailable), r.Mode, r.ActiveModel),
 		fmt.Sprintf("engine:  \x1b[32m%s\x1b[0m  ·  mods: %s", r.GPUAccel, modStr),
 	}
 	if r.EagerMetrics != nil && r.EagerMetrics.TotalChunks > 0 {
@@ -399,19 +425,19 @@ func PrintVoiceResourceReport(w io.Writer, r VoiceResourceReport, sec ResourceSe
 	}
 
 	if sec.Speed && sec.Hardware {
-		boxSpeed := BoxSpec{Title: "\x1b[1m[s] voice & speed\x1b[0m", Lines: speedLines, Width: colWidthLeft}
-		boxHW := BoxSpec{Title: "\x1b[1m[h] hardware load\x1b[0m", Lines: hwLines, Width: colWidthRight}
+		boxSpeed := BoxSpec{Title: actionBoxTitle("speed"), Lines: speedLines, Width: colWidthLeft}
+		boxHW := BoxSpec{Title: actionBoxTitle("hardware"), Lines: hwLines, Width: colWidthRight}
 		rendered := CombineSideBySide(RenderBoxLines(boxSpeed), RenderBoxLines(boxHW))
 		for _, line := range rendered {
 			fmt.Fprintln(w, line)
 		}
 	} else if sec.Speed {
-		boxSpeed := BoxSpec{Title: "\x1b[1m[s] voice & speed\x1b[0m", Lines: speedLines, Width: totalWidth}
+		boxSpeed := BoxSpec{Title: actionBoxTitle("speed"), Lines: speedLines, Width: totalWidth}
 		for _, line := range RenderBoxLines(boxSpeed) {
 			fmt.Fprintln(w, line)
 		}
 	} else if sec.Hardware {
-		boxHW := BoxSpec{Title: "\x1b[1m[h] hardware load\x1b[0m", Lines: hwLines, Width: totalWidth}
+		boxHW := BoxSpec{Title: actionBoxTitle("hardware"), Lines: hwLines, Width: totalWidth}
 		for _, line := range RenderBoxLines(boxHW) {
 			fmt.Fprintln(w, line)
 		}
@@ -437,7 +463,7 @@ func PrintVoiceResourceReport(w io.Writer, r VoiceResourceReport, sec ResourceSe
 		} else {
 			transLines = append(transLines, "\x1b[90m(no transcriptions yet - speak with Super+X to dictate)\x1b[0m")
 		}
-		boxTrans := BoxSpec{Title: "\x1b[1m[t] transcript feed\x1b[0m", Lines: transLines, Width: totalWidth}
+		boxTrans := BoxSpec{Title: actionBoxTitle("transcript"), Lines: transLines, Width: totalWidth}
 		for _, line := range RenderBoxLines(boxTrans) {
 			fmt.Fprintln(w, line)
 		}
@@ -458,30 +484,63 @@ func PrintVoiceResourceReport(w io.Writer, r VoiceResourceReport, sec ResourceSe
 			}
 			daemonLines = append(daemonLines, fmt.Sprintf("%s  ·  %s", strings.Join(procSummaries, "  ·  "), healthBadge))
 		}
-		boxDaemons := BoxSpec{Title: "\x1b[1m[d] active daemons & health\x1b[0m", Lines: daemonLines, Width: totalWidth}
+		boxDaemons := BoxSpec{Title: actionBoxTitle("daemons"), Lines: daemonLines, Width: totalWidth}
 		for _, line := range RenderBoxLines(boxDaemons) {
 			fmt.Fprintln(w, line)
 		}
 	}
 
-	fmt.Fprintf(w, " %s  %s  %s  %s  \x1b[90m│\x1b[0m  \x1b[1m[a]ll\x1b[0m  \x1b[1m[q]uit\x1b[0m\n",
-		formatLetterBadge("s", "speed", sec.Speed),
-		formatLetterBadge("h", "hardware", sec.Hardware),
-		formatLetterBadge("t", "transcript", sec.Transcript),
-		formatLetterBadge("d", "daemons", sec.Daemons))
+	fmt.Fprintf(w, " %s  %s  %s  %s  \x1b[90m│\x1b[0m  %s  %s\n",
+		formatActionBadge("speed", sec.Speed),
+		formatActionBadge("hardware", sec.Hardware),
+		formatActionBadge("transcript", sec.Transcript),
+		formatActionBadge("daemons", sec.Daemons),
+		formatActionLabel("all"),
+		formatActionLabel("quit"))
 }
 
-func formatLetterBadge(key, name string, active bool) string {
-	if active {
-		return fmt.Sprintf("\x1b[1m[%s]\x1b[0m%s \x1b[32;1m●\x1b[0m", key, name[1:])
+// actionKeyAndLabel resolves an action's canonical display key (its first configured
+// key in spec/actions.yaml) and short label, so box titles and footer badges can never
+// drift out of sync with the spec that defines those hotkeys.
+func actionKeyAndLabel(id string) (key, short string) {
+	a := loadedActions().Actions[id]
+	key = "?"
+	if len(a.Keys) > 0 {
+		key = a.Keys[0]
 	}
-	return fmt.Sprintf("\x1b[90m[%s]%s ○\x1b[0m", key, name[1:])
+	return key, a.Short
 }
 
-func formatRecordState(status string) string {
+func actionBoxTitle(id string) string {
+	key, _ := actionKeyAndLabel(id)
+	return fmt.Sprintf("\x1b[1m[%s] %s\x1b[0m", key, loadedActions().Actions[id].Title)
+}
+
+func formatActionBadge(id string, active bool) string {
+	key, short := actionKeyAndLabel(id)
+	if active {
+		return fmt.Sprintf("\x1b[1m[%s]\x1b[0m%s \x1b[32;1m●\x1b[0m", key, short[1:])
+	}
+	return fmt.Sprintf("\x1b[90m[%s]%s ○\x1b[0m", key, short[1:])
+}
+
+func formatActionLabel(id string) string {
+	key, short := actionKeyAndLabel(id)
+	return fmt.Sprintf("\x1b[1m[%s]%s\x1b[0m", key, short[1:])
+}
+
+// formatRecordState renders the daemon's recording status alongside its icon. While
+// recording, the icon is replaced by the live mic loudness glyph itself (in place of a
+// static ●), so the status line doubles as the level meter instead of carrying a
+// separate level: row.
+func formatRecordState(status string, micLevel float64, micAvailable bool) string {
 	switch strings.ToLower(status) {
 	case "recording":
-		return "\x1b[31;1m● recording\x1b[0m"
+		icon := "\x1b[31;1m●\x1b[0m"
+		if micAvailable {
+			icon = RenderLevelChar(micLevel)
+		}
+		return icon + " \x1b[31;1mrec\x1b[0m"
 	case "transcribing":
 		return "\x1b[33;1m⏳ transcribing\x1b[0m"
 	case "idle":
