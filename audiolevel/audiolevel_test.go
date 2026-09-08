@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -331,6 +332,38 @@ func TestIsGenuineRecording(t *testing.T) {
 				t.Errorf("IsGenuineRecording(%q) = %v, want %v", tt.name, got, tt.want)
 			}
 		})
+	}
+}
+
+// TestPwRecordCommandCarriesSuppressionTags is voxi issue 087's fix: unlike
+// ParecCommand, PwRecordCommand previously set no indicator-suppression
+// properties at all, so the pw-record fallback path (no parec/pactl on
+// PATH) always lit GNOME Shell's mic-in-use indicator regardless of whether
+// the tag mechanism works. Confirmed live on pw-record 1.6.2 (via pw-dump)
+// that -P/--properties actually lands these values on the resulting
+// PipeWire node; this test only pins the CLI args, not the runtime effect.
+func TestPwRecordCommandCarriesSuppressionTags(t *testing.T) {
+	cmd := PwRecordCommand(context.Background(), 0)
+	args := cmd.Args
+	found := false
+	for i, a := range args {
+		if a != "-P" {
+			continue
+		}
+		if i+1 >= len(args) {
+			t.Fatalf("PwRecordCommand args: -P with no following value: %v", args)
+		}
+		props := args[i+1]
+		if !strings.Contains(props, `application.id = "`+SuppressApplicationID+`"`) {
+			t.Errorf("PwRecordCommand -P value %q missing application.id=%s", props, SuppressApplicationID)
+		}
+		if !strings.Contains(props, "node.virtual = true") {
+			t.Errorf("PwRecordCommand -P value %q missing node.virtual = true", props)
+		}
+		found = true
+	}
+	if !found {
+		t.Fatalf("PwRecordCommand args missing -P/--properties: %v", args)
 	}
 }
 

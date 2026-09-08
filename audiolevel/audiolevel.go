@@ -14,6 +14,7 @@ package audiolevel
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"math"
 	"os/exec"
@@ -102,9 +103,13 @@ func ParecCommand(ctx context.Context, sampleRate int) *exec.Cmd {
 // missing the `pulseaudio-utils` compat package (no `pactl`/`parec` on
 // PATH). `--target` is left at its default ("auto"), which tracks the
 // currently-configured default capture source the same way `parec -d
-// @DEFAULT_SOURCE@` does. Unlike ParecCommand, no indicator-suppression
-// tags are applied here: harnez's research did not confirm an equivalent
-// property mechanism for pw-record's compact CLI.
+// @DEFAULT_SOURCE@` does. `-P`/`--properties` (confirmed present on
+// pw-record 1.6.2, and confirmed live via `pw-dump` to actually land on the
+// resulting PipeWire node) carries the same indicator-suppression tags as
+// ParecCommand — GNOME Shell's InputStreamSlider._maybeShowInput()
+// (js/ui/status/volume.js) exempts application.id=org.gnome.VolumeControl
+// from its recording-indicator check by name, confirmed directly against
+// gnome-shell's current source (see voxi issue 087).
 func PwRecordCommand(ctx context.Context, sampleRate int) *exec.Cmd {
 	if sampleRate <= 0 {
 		sampleRate = DefaultSampleRate
@@ -114,14 +119,16 @@ func PwRecordCommand(ctx context.Context, sampleRate int) *exec.Cmd {
 		"--format=s16",
 		"--rate="+strconv.Itoa(sampleRate),
 		"--channels=1",
+		"-P", fmt.Sprintf(`{ application.id = "%s" node.virtual = true }`, SuppressApplicationID),
 		"-",
 	)
 }
 
 // IsGenuineRecording reports whether the long-form output of `pactl list
 // source-outputs` contains at least one source-output that is NOT one of
-// this package's own exempted meter streams (ParecCommand's tags) or
-// GNOME's own volume-control/pavucontrol utilities — i.e. whether some
+// this package's own exempted meter streams (ParecCommand's and
+// PwRecordCommand's tags) or GNOME's own volume-control/pavucontrol
+// utilities — i.e. whether some
 // other, real application is actually capturing audio right now. Callers
 // must pass the long form (`pactl list source-outputs`), not `list short`:
 // only the long form prints the application.id/media.name properties this

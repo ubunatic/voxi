@@ -148,3 +148,43 @@ genuine concurrent recording app starts) before being marked resolved — a
 passing `go test ./...` alone is not sufficient evidence per this project's
 `AgenticLoop.md` "Unit-Test-Only Confidence for Hook/Environment Features"
 anti-pattern.
+
+## 7. Update — 2026-09-08: item 3 done, item 2 corroborated, item 1 still open
+
+- **Item 2 corroborated independently**: fetched
+  `https://gitlab.gnome.org/GNOME/gnome-shell/-/raw/main/js/ui/status/volume.js`
+  directly (not the Ubuntu-patched local resource bundle, but current
+  upstream `main`). `InputStreamSlider._maybeShowInput()` still contains
+  exactly the `skippedApps` allowlist described in §2/§3 above:
+  `org.gnome.VolumeControl` and `org.PulseAudio.pavucontrol`, matched
+  against `application.id` only. So the tag strategy itself remains valid
+  upstream; whether Ubuntu 26.04's shell patches on this specific machine
+  preserve it unmodified is still unconfirmed (would need the local
+  `/usr/share/gnome-shell` resource bundle diffed against this, not done).
+- **Item 3 done**: `PwRecordCommand` (`audiolevel/audiolevel.go`) now passes
+  `-P '{ application.id = "org.gnome.VolumeControl" node.virtual = true }'`
+  — `pw-record` 1.6.2 supports `-P`/`--properties` (confirmed via
+  `pw-record --help` on this machine), closing the "untagged pw-record
+  fallback" gap that was the concretely-confirmed cause of the leak here.
+  New test: `TestPwRecordCommandCarriesSuppressionTags`
+  (`audiolevel/audiolevel_test.go`).
+- **Live-verified at the PipeWire level** (not yet at the GNOME-indicator
+  level — see below): built and ran the actual `voxi monitor -w` binary on
+  this machine (only `pw-record` on PATH, confirming the previously-broken
+  path is the one actually exercised here) and inspected the running
+  capture node via `pw-dump`:
+  ```
+  node.name: pw-record
+  application.id: org.gnome.VolumeControl
+  node.virtual: True
+  media.class: Stream/Input/Audio
+  ```
+  Confirms the properties genuinely land on the live PipeWire node, not
+  just that the CLI args are well-formed.
+- **Item 1 (full GNOME-session visual canary) still not done** — this
+  session has no access to observe the actual GNOME Shell top-bar UI, so
+  "does the indicator actually stay dark now" remains unverified per this
+  ticket's own §6 standard. Do not close this ticket on the strength of the
+  `pw-dump` evidence alone; a human needs to actually watch the top bar
+  while `voxi monitor -w` runs (idle) and confirm no privacy dot appears,
+  then confirm it *does* appear during genuine dictation.
