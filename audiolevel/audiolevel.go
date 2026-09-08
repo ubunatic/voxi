@@ -260,6 +260,7 @@ type Meter struct {
 	reading        Reading
 	samples        []sample
 	lastUpdate     time.Time
+	lastTarget     float64
 	displayedLevel float64
 }
 
@@ -328,6 +329,7 @@ func (m *Meter) Update(rawLevel float64, available bool, now time.Time, metric M
 	}
 	m.displayedLevel = ApplyBallistics(m.displayedLevel, targetLevel, dt, decay)
 	m.lastUpdate = now
+	m.lastTarget = targetLevel
 
 	m.reading = Reading{Level: m.displayedLevel, Available: true}
 	return m.reading
@@ -337,6 +339,33 @@ func (m *Meter) Update(rawLevel float64, available bool, now time.Time, metric M
 func (m *Meter) Snapshot() Reading {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	return m.reading
+}
+
+// Tick advances ballistics against the most recent target level (the last
+// window-reduced amplitude Update computed) without waiting for a new raw
+// audio sample. Update only runs once per captured chunk (e.g. every 50ms);
+// a redraw loop painting faster than that would otherwise read the exact
+// same Reading for several frames in a row and then see it jump, since
+// nothing advances displayedLevel between chunks. Calling Tick once per
+// paint frame instead continues the same exponential decay curve at the
+// paint cadence, so the displayed motion is smooth rather than
+// stair-stepped. A no-op (returns the current Reading unchanged) while the
+// meter has no available reading yet, or once decay has already resolved
+// exactly to the last target (nothing left to advance).
+func (m *Meter) Tick(now time.Time, decay time.Duration) Reading {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.reading.Available {
+		return m.reading
+	}
+	if m.lastUpdate.IsZero() || m.displayedLevel == m.lastTarget {
+		return m.reading
+	}
+	dt := now.Sub(m.lastUpdate)
+	m.displayedLevel = ApplyBallistics(m.displayedLevel, m.lastTarget, dt, decay)
+	m.lastUpdate = now
+	m.reading = Reading{Level: m.displayedLevel, Available: true}
 	return m.reading
 }
 
@@ -462,4 +491,15 @@ func (m *Manager) Snapshot() Reading {
 		return Reading{}
 	}
 	return m.meter.Snapshot()
+}
+
+// Tick advances the meter's decay ballistics against wall-clock time — see
+// Meter.Tick. Call this once per redraw instead of Snapshot when painting
+// faster than the capture chunk rate, so motion between chunks is smooth
+// rather than held static. Safe on nil.
+func (m *Manager) Tick(now time.Time, decay time.Duration) Reading {
+	if m == nil {
+		return Reading{}
+	}
+	return m.meter.Tick(now, decay)
 }

@@ -267,7 +267,8 @@ func RunWatchResources(ctx context.Context, d deps.Dependencies, interval time.D
 		cacheLock.Lock()
 		report := cachedReport
 		cacheLock.Unlock()
-		mic := micMgr.Snapshot()
+		_, _, decay := micLevelSpec()
+		mic := micMgr.Tick(time.Now(), decay)
 		report.MicLevel = mic.Level
 		report.MicAvailable = mic.Available
 

@@ -292,6 +292,53 @@ func TestMeter_Update_WithDecayBallistics(t *testing.T) {
 	}
 }
 
+// TestMeter_Tick_AdvancesDecayBetweenUpdates is the fix for the perceived
+// "laggy"/stair-stepped meter: a redraw loop painting faster than the audio
+// chunk rate previously read the exact same Reading from Snapshot for
+// several frames in a row (Update only advances displayedLevel once per
+// chunk). Tick must continue the same decay curve at whatever cadence it is
+// called, converging on the same target Update would.
+func TestMeter_Tick_AdvancesDecayBetweenUpdates(t *testing.T) {
+	var m Meter
+	t0 := time.Date(2026, 9, 7, 0, 0, 0, 0, time.UTC)
+	window := 50 * time.Millisecond
+	decay := 150 * time.Millisecond
+
+	m.Update(80.0, true, t0, MetricMax, window, decay)
+	r1 := m.Update(0.0, true, t0.Add(50*time.Millisecond), MetricLive, window, decay)
+
+	// Simulate three paint frames landing between this chunk and the next one
+	// (chunk period 50ms, paint period ~15ms) -- each Tick should move the
+	// level further down the same exponential curve, not repeat r1.Level.
+	tick1 := m.Tick(t0.Add(65*time.Millisecond), decay)
+	if tick1.Level >= r1.Level {
+		t.Fatalf("Tick did not advance decay: r1=%v tick1=%v", r1.Level, tick1.Level)
+	}
+	tick2 := m.Tick(t0.Add(80*time.Millisecond), decay)
+	if tick2.Level >= tick1.Level {
+		t.Fatalf("second Tick did not advance decay further: tick1=%v tick2=%v", tick1.Level, tick2.Level)
+	}
+	tick3 := m.Tick(t0.Add(95*time.Millisecond), decay)
+	if tick3.Level >= tick2.Level {
+		t.Fatalf("third Tick did not advance decay further: tick2=%v tick3=%v", tick2.Level, tick3.Level)
+	}
+
+	// The next real chunk arriving at t0+100ms should land close to where
+	// Tick's continuous curve already was, not jump back up to r1's stale
+	// value -- confirms Tick and Update share one continuous decay, not two
+	// independent clocks.
+	next := m.Update(0.0, true, t0.Add(100*time.Millisecond), MetricLive, window, decay)
+	if next.Level >= tick3.Level {
+		t.Fatalf("Update after Tick should continue decaying, not jump back up: tick3=%v next=%v", tick3.Level, next.Level)
+	}
+
+	// A Tick against an unavailable meter is a safe no-op.
+	var unavail Meter
+	if r := unavail.Tick(t0, decay); r.Available {
+		t.Errorf("Tick on a never-updated Meter should stay unavailable, got %+v", r)
+	}
+}
+
 func TestIsGenuineRecording(t *testing.T) {
 	tests := []struct {
 		name string
