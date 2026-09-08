@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -344,6 +345,109 @@ func TestStopCancelsInflightTranscriptionBeforeInjection(t *testing.T) {
 	}
 	if got := injections.Load(); got != 0 {
 		t.Fatalf("captured %d injector calls after stop", got)
+	}
+}
+
+// TestStopFlushesTrailingUtteranceForTranscriptionAndTyping guards against a
+// regression where stopping recording (Super-X in normal use) mid-utterance --
+// after the user finished speaking but before the VAD's own silence timeout
+// finalized it -- silently dropped that trailing speech. runEagerCaptureSession
+// relies on segmenter.Flush() to recover exactly this buffered-but-not-yet-
+// finalized audio once capture stops; the flushed job must still transcribe
+// and type even though the session's own ctx is already canceled by then. See
+// TestStopCancelsInflightTranscriptionBeforeInjection for the complementary
+// guarantee: an utterance that was already mid-transcription (not merely
+// buffered) when stop arrives must still abort and never type.
+func TestStopFlushesTrailingUtteranceForTranscriptionAndTyping(t *testing.T) {
+	tmp := t.TempDir()
+	fifoPath := filepath.Join(tmp, "audio.fifo")
+	if err := syscall.Mkfifo(fifoPath, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	frame := make([]byte, 640)
+	for i := 0; i < len(frame); i += 2 {
+		binary.LittleEndian.PutUint16(frame[i:i+2], 1000)
+	}
+	written := make(chan struct{})
+	go func() {
+		f, err := os.OpenFile(fifoPath, os.O_WRONLY, 0)
+		if err != nil {
+			return
+		}
+		defer f.Close()
+		// 10 frames (200ms) of continuous "speech" -- above both MinSpeechMs
+		// (40ms) and the segmenter's default MinVoicedFrames (160ms) acoustic
+		// plausibility floor -- but with no trailing silence, so the segmenter
+		// never finalizes this utterance on its own; it stays buffered until
+		// Flush() on stop.
+		for range 10 {
+			if _, err := f.Write(frame); err != nil {
+				return
+			}
+		}
+		close(written)
+		// Keep the writer open (and cat blocked waiting for more input)
+		// until the test tears down, so capture only ends via ctx cancel.
+		<-t.Context().Done()
+	}()
+
+	transcriber := filepath.Join(tmp, "fake-voxtype")
+	script := "#!/bin/sh\nprintf '%s\\n' 'this is chunk three'\n"
+	if err := os.WriteFile(transcriber, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	var injections atomic.Int32
+	var typed string
+	d := deps.Dependencies{
+		Getenv: func(key string) string {
+			if key == "HOME" || key == "XDG_RUNTIME_DIR" {
+				return tmp
+			}
+			return ""
+		},
+		LookPath: func(name string) (string, error) {
+			if name == "voxtype" {
+				return transcriber, nil
+			}
+			return name, nil
+		},
+		RunStdin: func(_ context.Context, stdin, _ string, _ ...string) error {
+			injections.Add(1)
+			typed = stdin
+			return nil
+		},
+		Stdout: io.Discard,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	opts := EagerOptions{ThresholdRMS: 500, SilenceMs: 60, PreRollMs: 40, MinSpeechMs: 40, MaxWindowMs: 1000, TypeOutput: true, Model: "small.en"}
+	go func() {
+		done <- runEagerCaptureSession(ctx, d, opts, tmp, "cat", []string{fifoPath}, true, "flushed-session", nil, nil)
+	}()
+
+	select {
+	case <-written:
+	case <-time.After(2 * time.Second):
+		t.Fatal("writer did not finish feeding the buffered utterance")
+	}
+	time.Sleep(50 * time.Millisecond) // let the capture loop actually read the frames
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("session did not shut down promptly")
+	}
+
+	if got := injections.Load(); got != 1 {
+		t.Fatalf("captured %d injector calls, want exactly 1 for the flushed trailing utterance", got)
+	}
+	if !strings.Contains(typed, "this is chunk three") {
+		t.Fatalf("typed content = %q, want it to contain the flushed transcript", typed)
 	}
 }
 

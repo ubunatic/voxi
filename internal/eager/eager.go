@@ -331,6 +331,16 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 		Stats           audio.AudioStats
 		Plausible       bool
 		RejectionReason string
+		// Final marks the trailing utterance flushed from the segmenter once
+		// capture has stopped (see segmenter.Flush below) -- audio the user
+		// had already finished speaking before/at the moment recording was
+		// stopped, which the session's own ctx is always already canceled by
+		// the time this job is queued. Unlike jobs still mid-transcription
+		// when stop arrives (which must abort promptly and never reach
+		// typing -- see TestStopCancelsInflightTranscriptionBeforeInjection),
+		// this one and only job is deliberately allowed to finish
+		// transcribing and typing on a detached context.
+		Final bool
 	}
 
 	modelSpec, err := spec.LoadModels()
@@ -472,7 +482,14 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 
 			writeVoxtypeState("transcribing")
 			cmdArgs := buildTranscribeArgs(wavPath)
-			transcribeCtx, cancelTranscribe := context.WithTimeout(ctx, transcribeTimeout)
+			transcribeParent := ctx
+			if job.Final {
+				// The session ctx is already canceled by the time a Final job is
+				// queued (see TranscribeJob.Final) -- deriving from it would abort
+				// this transcription before it starts.
+				transcribeParent = context.Background()
+			}
+			transcribeCtx, cancelTranscribe := context.WithTimeout(transcribeParent, transcribeTimeout)
 			cmd := exec.CommandContext(transcribeCtx, transcribeBinPath, cmdArgs...)
 			cmd.Env = append(os.Environ(), "NO_COLOR=1", "RUST_LOG=error")
 			var outBuf bytes.Buffer
@@ -492,7 +509,6 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 			accepted := acceptTranscript(err, text, stopWords, silenceArtifacts)
 			safety := asr.CheckTranscriptSafety(text, modelSpec.TranscriptSafety)
 			if safety.Reason != "" { accepted = false }
-			if ctx.Err() != nil { accepted = false }
 			wordCount := len(strings.Fields(text))
 			transSuccess := err == nil
 			transError := ""
@@ -504,7 +520,6 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 			if !accepted {
 				rejReason = rejectionReason(err, rawText, text, stopWords, silenceArtifacts)
 				if safety.Reason != "" { rejReason = safety.Reason }
-				if ctx.Err() != nil { rejReason = "session_stopped" }
 			}
 
 			rtf := 0.0
@@ -549,7 +564,7 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 			_, _ = chunkBuf.AddExistingWAV(chunkMeta, wavPath, true)
 			_ = os.Remove(wavPath) // Ensure removal if AddExistingWAV didn't move it
 
-			if accepted && ctx.Err() == nil {
+			if accepted {
 				transLock.Lock()
 				if fullTranscript.Len() > 0 {
 					fullTranscript.WriteString(" ")
@@ -565,7 +580,11 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 				if opts.TypeOutput {
 					typeStart := time.Now()
 					_ = recorder.Record(telemetry.Event{Event: telemetry.TypingStarted, Timestamp: typeStart, SessionID: sessionID, ChunkID: chunkID, ChunkIndex: job.Index})
-					typeErr := typing.TypeText(ctx, d, text+" ")
+					typeCtx := ctx
+					if job.Final {
+						typeCtx = context.Background()
+					}
+					typeErr := typing.TypeText(typeCtx, d, text+" ")
 					typeEnd := time.Now()
 					typeSuccess := typeErr == nil
 					typeError := ""
@@ -687,7 +706,7 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 	signalCaptureStopped()
 
 	// Flush remaining speech upon exit
-	if finalCandidate := segmenter.Flush(); ctx.Err() == nil && len(finalCandidate.Audio) > 0 {
+	if finalCandidate := segmenter.Flush(); len(finalCandidate.Audio) > 0 {
 		utteranceCount++
 		finalizedAt := time.Now()
 		audioDur := float64(len(finalCandidate.Audio)) / float64(bytesPerSec)
@@ -702,6 +721,7 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 			Stats:           finalCandidate.Stats,
 			Plausible:       finalCandidate.Plausible,
 			RejectionReason: finalCandidate.RejectionReason,
+			Final:           true,
 		}
 	}
 
