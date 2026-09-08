@@ -91,10 +91,14 @@ func main() {
 	if startTrim > 0 {
 		ffmpegArgs = append(ffmpegArgs, "-ss", fmtSecs(startTrim))
 	}
-	ffmpegArgs = append(ffmpegArgs, "-i", input)
 	if startTrim > 0 || endTrim > 0 {
+		// -t here is an INPUT option (it precedes -i), limiting how much of
+		// the source is read to just the trimmed segment. Placed as an
+		// output option instead, it would cap the final encoded duration
+		// *after* filters -- clipping off any tpad padding added below.
 		ffmpegArgs = append(ffmpegArgs, "-t", fmtSecs(encodeDuration))
 	}
+	ffmpegArgs = append(ffmpegArgs, "-i", input)
 	ffmpegArgs = append(ffmpegArgs, "-vf", videoFilter,
 		"-c:v", "libx264", "-crf", "28", "-preset", "veryslow", "-pix_fmt", "yuv420p",
 		"-movflags", "+faststart")
