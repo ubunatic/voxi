@@ -91,7 +91,7 @@
             <span class="terminal-title">voxi eager --type --history</span>
             <button class="copy-term-btn" data-copy="voxi eager --type --history" title="Copy command">copy</button>
           </div>
-          <img class="monitor-screenshot" src="voxi-eager.png" width="898" height="418"
+          <img class="monitor-screenshot" src="voxi-eager.png" width="898" height="413"
                alt="voxi eager --type --history startup banner: audio source, RMS threshold, silence cutoff, pre-roll buffer, and instructions, followed by 'Listening for voice activity...' and 'Speaking... buffering'">
         </div>
       </section>
@@ -288,7 +288,12 @@
           <div class="step-num">1</div>
           <div class="step-content">
             <h3>Clone and Install</h3>
-            <p>Compile user binaries and install systemd user service units:</p>
+            <p>
+              Compile user binaries and install systemd user service units. No Go toolchain?
+              Grab a prebuilt binary from the
+              <a href="https://codeberg.org/ubunatic/voxi/releases/latest" rel="noopener" target="_blank">latest release</a>
+              instead &mdash; the systemd unit files below still come from the repo checkout.
+            </p>
             <div class="code-block">
               <button class="copy-code-btn" title="Copy code">copy</button>
               <pre><code><span class="prompt">$</span> git clone https://codeberg.org/ubunatic/voxi.git
@@ -361,7 +366,9 @@
           <tbody>
             <tr>
               <td><strong>Go 1.22+</strong></td>
-              <td>Compilation of <code>voxi</code> CLI, agent, and daemons</td>
+              <td>Only needed to build from source (developers/contributors). Most users can
+                skip this and download a prebuilt binary from the
+                <a href="https://codeberg.org/ubunatic/voxi/releases/latest" rel="noopener" target="_blank">latest release</a> instead.</td>
               <td><code>golang</code> / <code>go</code></td>
             </tr>
             <tr>
@@ -545,7 +552,6 @@
       </div>
       <div class="foot-links">
         <a href="https://codeberg.org/ubunatic/voxi" rel="noopener" target="_blank">Codeberg Repository</a>
-        <a href="https://github.com/ubunatic/voxi" rel="noopener" target="_blank">GitHub Mirror</a>
         <a href="#top">Back to top ↑</a>
       </div>
     </div>
