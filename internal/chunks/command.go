@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"ubunatic.com/voxi/internal/deps"
+	"ubunatic.com/voxi/internal/listing"
 )
 
 // NewCommand creates the `voxi chunks` command hierarchy.
@@ -29,8 +30,8 @@ func NewCommand(d deps.Dependencies, buf *Buffer) *cobra.Command {
 		Short: "List recent recorded chunks and their transcription outcomes",
 		Args:  cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			if !isValidColorMode(colorMode) {
-				return fmt.Errorf("invalid --color value %q: must be one of %s", colorMode, strings.Join(validColorModes, ", "))
+			if !listing.IsValidColorMode(colorMode) {
+				return fmt.Errorf("invalid --color value %q: must be one of %s", colorMode, strings.Join(listing.ValidColorModes, ", "))
 			}
 			chunks, err := buf.List(reverse)
 			if err != nil {
@@ -51,10 +52,19 @@ func NewCommand(d deps.Dependencies, buf *Buffer) *cobra.Command {
 			if d.Getenv != nil {
 				noColorEnv = d.Getenv("NO_COLOR")
 			}
-			useColor := shouldUseColor(colorMode, noColorEnv, stdoutIsTerminal(d.Stdout))
+			useColor := listing.ShouldUseColor(colorMode, noColorEnv, listing.StdoutIsTerminal(d.Stdout))
 
-			fmt.Fprintf(d.Stdout, "%-6s  %-19s  %-7s  %-5s  %5s  %-12s  %-10s  %s\n",
-				"INDEX", "TIMESTAMP", "AUDIO", "RTF", "RMS", "LEVEL", "STATUS", "TRANSCRIPT")
+			cols := []listing.Column{
+				{Header: "INDEX", Width: 6},
+				{Header: "TIMESTAMP", Width: 19},
+				{Header: "AUDIO", Width: 6},
+				{Header: "RTF", Width: 5},
+				{Header: "RMS", Width: 5, Right: true},
+				{Header: "LEVEL", Width: 12},
+				{Header: "STATUS", Width: 10},
+				{Header: "TRANSCRIPT", Width: 0},
+			}
+			rows := make([][]string, 0, len(chunks))
 			for _, c := range chunks {
 				status := "accepted"
 				if !c.Accepted {
@@ -76,23 +86,28 @@ func NewCommand(d deps.Dependencies, buf *Buffer) *cobra.Command {
 				// than a stray glyph string floating in whitespace, and so a
 				// missing/empty sparkline (chunks recorded before this field
 				// existed) still shows a visible "[]" rather than nothing.
-				// Pad to the column's fixed width *before* colorizing --
-				// colorizeSparkline only ever adds invisible ANSI bytes
-				// after this point, so it can never disturb alignment with
-				// the columns that follow (see color.go).
-				level := fmt.Sprintf("%-12s", "["+c.VolumeSparkline+"]")
-				if useColor {
-					level = colorizeSparkline(level)
-				}
-				fmt.Fprintf(d.Stdout, "#%-5d  %-19s  %5.1fs  %5.2f  %5d  %s  %-10s  %s\n",
-					c.Index, ts, c.AudioDurationSecs, c.RTF, c.MeanRMS, level, status, text)
+				// FormatSparklineCell pads to the column's fixed width
+				// *before* colorizing -- see listing.ColorizeSparkline's doc
+				// comment for why the order matters.
+				level := listing.FormatSparklineCell(c.VolumeSparkline, 12, useColor)
+				rows = append(rows, []string{
+					fmt.Sprintf("#%d", c.Index),
+					ts,
+					fmt.Sprintf("%.1fs", c.AudioDurationSecs),
+					fmt.Sprintf("%.2f", c.RTF),
+					fmt.Sprintf("%d", c.MeanRMS),
+					level,
+					status,
+					text,
+				})
 			}
+			listing.WriteTable(d.Stdout, cols, rows)
 			return nil
 		},
 	}
 	listCmd.Flags().BoolVarP(&reverse, "reverse", "r", false, "list newest chunks first")
 	listCmd.Flags().StringVar(&listFormat, "format", "text", "output format (text or json)")
-	listCmd.Flags().StringVar(&colorMode, "color", colorAuto, "colorize the LEVEL sparkline by loudness: auto, always, or never")
+	listCmd.Flags().StringVar(&colorMode, "color", listing.ColorAuto, "colorize the LEVEL sparkline by loudness: auto, always, or never")
 
 	var showFormat string
 	showCmd := &cobra.Command{

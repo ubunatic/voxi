@@ -9,6 +9,7 @@ import (
 	"ubunatic.com/voxi/internal/chunks"
 	"ubunatic.com/voxi/internal/deps"
 	"ubunatic.com/voxi/internal/devsample"
+	"ubunatic.com/voxi/internal/listing"
 	"ubunatic.com/voxi/internal/speechcontext"
 	"ubunatic.com/voxi/spec"
 )
@@ -20,7 +21,12 @@ import (
 // the `sample` subcommands, which need real microphone capture / audio
 // playback and stdin prompting; the rest of this command tree stays
 // deps-free by design.
-func NewCommand(out io.Writer, home string, builtins []spec.StopWord, maxVocabularyTermChars int, staticVocabularyTerms []string, d deps.Dependencies) *cobra.Command {
+// sampleTranscribe transcribes samples for `sample list --process` (issue
+// 098). It is passed in explicitly (rather than imported directly from
+// internal/eager) to avoid an import cycle: internal/eager already imports
+// internal/feedback. A nil value disables --process with a clear error
+// rather than a panic.
+func NewCommand(out io.Writer, home string, builtins []spec.StopWord, maxVocabularyTermChars int, staticVocabularyTerms []string, d deps.Dependencies, sampleTranscribe SampleTranscribeFunc) *cobra.Command {
 	path := Path(home)
 	load := func() (Overrides, error) { return Load(path) }
 	cmd := &cobra.Command{Use: "feedback", Short: "Manage local dictation feedback"}
@@ -265,27 +271,38 @@ func NewCommand(out io.Writer, home string, builtins []spec.StopWord, maxVocabul
 		},
 	}
 	recordCmd.Flags().Bool("force", false, "overwrite an existing sample without confirmation")
+	listCmd := &cobra.Command{
+		Use:   "list",
+		Short: "List recorded dev samples (private, and public/promoted with --all)",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			all, _ := cmd.Flags().GetBool("all")
+			full, _ := cmd.Flags().GetBool("full")
+			short, _ := cmd.Flags().GetBool("short")
+			process, _ := cmd.Flags().GetBool("process")
+			color, _ := cmd.Flags().GetString("color")
+			if short && full {
+				return fmt.Errorf("--full and --short are mutually exclusive")
+			}
+			if short {
+				full = false
+			}
+			return runSampleList(cmd.Context(), out, d, home, sampleListOptions{
+				All:     all,
+				Full:    full,
+				Process: process,
+				Color:   color,
+			}, sampleTranscribe)
+		},
+	}
+	listCmd.Flags().Bool("all", false, "include the public/promoted corpus (testdata/noise-samples) alongside the private one")
+	listCmd.Flags().Bool("full", false, "show a richer, chunks-list-style table (timestamp, on-the-fly duration/RMS/sparkline, full transcript)")
+	listCmd.Flags().Bool("short", false, "show the compact table (default; explicit form of the default)")
+	listCmd.Flags().Bool("process", false, "also run each listed sample through the cohere-transcribe engine and show the fresh transcript next to the stored ground truth (requires --full)")
+	listCmd.Flags().String("color", listing.ColorAuto, "colorize the LEVEL sparkline by loudness in --full output: auto, always, or never")
 	sample.AddCommand(
 		recordCmd,
-		&cobra.Command{
-			Use:   "list",
-			Short: "List recorded dev samples",
-			Args:  cobra.NoArgs,
-			RunE: func(_ *cobra.Command, _ []string) error {
-				samples, err := devsample.LoadManifest(home)
-				if err != nil {
-					return err
-				}
-				if len(samples) == 0 {
-					fmt.Fprintln(out, "No dev samples recorded yet. Record one with: voxi feedback sample record <name>")
-					return nil
-				}
-				for _, s := range samples {
-					fmt.Fprintf(out, "%s\t%s\t%s\n", s.Name, s.Timestamp.Local().Format("2006-01-02 15:04:05"), s.Preview(60))
-				}
-				return nil
-			},
-		},
+		listCmd,
 		&cobra.Command{
 			Use:   "play NAME",
 			Short: "Replay a recorded dev sample",

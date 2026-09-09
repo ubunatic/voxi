@@ -90,7 +90,7 @@ func TestLiteralPatternsAndCommand(t *testing.T) {
 		t.Fatalf("pattern %q did not quote literal", p)
 	}
 	var out bytes.Buffer
-	cmd := NewCommand(&out, t.TempDir(), rules, 64, nil, deps.Dependencies{})
+	cmd := NewCommand(&out, t.TempDir(), rules, 64, nil, deps.Dependencies{}, nil)
 	cmd.SetArgs([]string{"stop-word", "add", "bye"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
@@ -115,7 +115,7 @@ func TestLiteralPatternsAndCommand(t *testing.T) {
 
 func TestSilenceArtifactCommandAndPersistence(t *testing.T) {
 	var out bytes.Buffer
-	cmd := NewCommand(&out, t.TempDir(), rules, 64, nil, deps.Dependencies{})
+	cmd := NewCommand(&out, t.TempDir(), rules, 64, nil, deps.Dependencies{}, nil)
 	cmd.SetArgs([]string{"silence-artifact", "add", " bye! "})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
@@ -178,7 +178,7 @@ func TestVocabularyCommandAddListRemove(t *testing.T) {
 	var out bytes.Buffer
 
 	run := func(args ...string) error {
-		cmd := NewCommand(&out, home, rules, 64, nil, deps.Dependencies{})
+		cmd := NewCommand(&out, home, rules, 64, nil, deps.Dependencies{}, nil)
 		cmd.SetArgs(args)
 		return cmd.Execute()
 	}
@@ -255,7 +255,7 @@ func TestSampleSaveLast(t *testing.T) {
 		},
 	}
 
-	cmd := NewCommand(&out, home, rules, 64, nil, d)
+	cmd := NewCommand(&out, home, rules, 64, nil, d, nil)
 	cmd.SetArgs([]string{"sample", "save-last", "test-sample"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("sample save-last failed: %v", err)
@@ -333,7 +333,7 @@ func TestSampleSaveChunk(t *testing.T) {
 	{
 		var out bytes.Buffer
 		d := depsFor("\n\n", &out)
-		cmd := NewCommand(&out, home, rules, 64, nil, d)
+		cmd := NewCommand(&out, home, rules, 64, nil, d, nil)
 		cmd.SetArgs([]string{"sample", "save-chunk", "1", "sample-chunk-1"})
 		if err := cmd.Execute(); err != nil {
 			t.Fatalf("save-chunk 1 sample-chunk-1 failed: %v", err)
@@ -357,7 +357,7 @@ func TestSampleSaveChunk(t *testing.T) {
 	{
 		var out bytes.Buffer
 		d := depsFor("\n\n", &out)
-		cmd := NewCommand(&out, home, rules, 64, nil, d)
+		cmd := NewCommand(&out, home, rules, 64, nil, d, nil)
 		cmd.SetArgs([]string{"sample", "save-chunk", "sample-chunk-last"})
 		if err := cmd.Execute(); err != nil {
 			t.Fatalf("save-chunk sample-chunk-last failed: %v", err)
@@ -381,7 +381,7 @@ func TestSampleSaveChunk(t *testing.T) {
 	{
 		var out bytes.Buffer
 		d := depsFor("\n\n", &out)
-		cmd := NewCommand(&out, home, rules, 64, nil, d)
+		cmd := NewCommand(&out, home, rules, 64, nil, d, nil)
 		cmd.SetArgs([]string{"sample", "save-chunk", "last", "sample-chunk-last-explicit"})
 		if err := cmd.Execute(); err != nil {
 			t.Fatalf("save-chunk last sample-chunk-last-explicit failed: %v", err)
@@ -400,7 +400,7 @@ func TestSampleSaveChunk(t *testing.T) {
 	{
 		var out bytes.Buffer
 		d := depsFor("\n\n", &out)
-		cmd := NewCommand(&out, home, rules, 64, nil, d)
+		cmd := NewCommand(&out, home, rules, 64, nil, d, nil)
 		cmd.SetArgs([]string{"sample", "save-chunk", "99", "nonexistent"})
 		err := cmd.Execute()
 		if err == nil {
@@ -411,4 +411,3 @@ func TestSampleSaveChunk(t *testing.T) {
 		}
 	}
 }
-

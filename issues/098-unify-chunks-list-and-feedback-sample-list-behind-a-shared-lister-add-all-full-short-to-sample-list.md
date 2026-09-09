@@ -1,6 +1,6 @@
 # 098 — Unify chunks list and feedback sample list Behind a Shared Lister; Add --all/--full/--short to sample list
 
-**Status**: Open
+**Status**: Closed — shared internal/listing lister, --all/--full/--short/--process on sample list; see §5 implementation note
 **Priority**: P3 (Low)
 **Severity**: Enhancement
 **Category**: Dev Tooling / CLI UX
@@ -138,3 +138,55 @@ implementation, not a prescribed design:
   (starting point: cohere-transcribe) and surfaces the fresh transcript next to the stored
   ground-truth text — exact scope (which engine(s), diff/WER display) left to the open questions
   in §3.
+
+## 5. Implementation Note (2026-09-09)
+
+Implemented. Open questions resolved as follows:
+
+- **Shared lister location**: new package `internal/listing` (`color.go` moved verbatim from
+  `internal/chunks/color.go` with exported names; `table.go` adds a small generic
+  `Column`/`WriteTable`/`FormatSparklineCell`). `internal/chunks/command.go`'s `list` now builds
+  `[]listing.Column` + `[][]string` rows and calls `listing.WriteTable` instead of hand-rolled
+  `Printf` alignment; `chunks list`'s columns, sparkline bracketing/coloring, and `--color`
+  semantics are unchanged (verified live and via `TestChunksListColorFlag`/`TestChunksCommandListAndShow`,
+  which assert on content rather than byte-exact column widths — the two never were byte-identical
+  to begin with, e.g. the AUDIO header's width never matched its row cells' width).
+- **`--all`**: merges the private (`devsample.SamplesDir`) and public/promoted
+  (`devsample.PublicSamplesDir`) corpora, sorted private-then-public, alphabetically within each;
+  a `SOURCE` column (`private`/`public`) appears only when `--all` is passed, keeping the default
+  listing exactly as compact as before.
+- **`--full`/`--short`**: both are explicit boolean flags (`--short` is the default and mostly
+  exists for scripting clarity); `--full` adds `DURATION`/`RMS`/`LEVEL` (sparkline) columns
+  computed on the fly (see below) and shows the full transcript instead of a 60-char preview.
+  `--format text|json` was intentionally *not* added to `sample list` in this pass — out of scope,
+  left for a future ticket if wanted.
+- **On-the-fly stats**: `internal/devsample/audiofile.go` (`ReadPCM`) decodes a sample's WAV
+  directly or FLAC via a shelled-out `ffmpeg` (duplicating `scripts/clack_features`'s
+  `parseWAVBytes`, including its 0xFFFFFFFF-unknown-size-chunk fix, since that script is a
+  throwaway `package main`, not importable). `internal/feedback/samplelist.go` feeds the decoded
+  PCM through the existing `internal/audio.AnalyzePCM`/`RenderVolumeSparkline` — no new fields on
+  `Sample`.
+- **`--process`**: implemented for real, not stubbed. `internal/eager/transcribe_sample.go` adds
+  an exported `TranscribeCohereWAV(ctx, d, wavPath)` that reuses `requireEngineBinary` +
+  `crispASRTranscribeArgs` (the same resolution the live dictation pipeline uses) as a standalone
+  entry point; it does not touch `RunEagerDictation`/`runEagerDaemon`. Because `internal/eager`
+  already imports `internal/feedback` (for stop-word overrides), `internal/feedback` cannot import
+  `internal/eager` back without a cycle — resolved via dependency injection: `feedback.NewCommand`
+  takes a new `sampleTranscribe SampleTranscribeFunc` parameter, wired to `eager.TranscribeCohereWAV`
+  only in `cmd/voxi/main.go`. `--process` requires `--full` (rejected otherwise with a clear error)
+  and requires a non-nil transcribe func (clear error if not wired, rather than a panic — matters
+  for tests). **Scoped down** per the ticket's explicit allowance: single engine
+  (cohere-transcribe) only; no WER/diff display, just the fresh transcript next to stored ground
+  truth; the returned text is only ANSI-stripped/trimmed, not run through
+  `asr.CleanWhisperTranscript`'s full stop-word/hallucination pipeline (that needs live feedback
+  overrides + spec model resolution the continuous dictation path already carries) — good enough
+  for an eyeball spot check, not a claim of dictation-identical cleaning. A future pass could wire
+  full cleaning, multiple engines, or a WER/diff column if wanted.
+
+Verified: `go build ./...`, `go vet ./...`, `gofmt -l` (clean modulo two pre-existing unrelated
+files), `go test ./...` all pass. Manually run against the real corpora
+(`~/.config/voxi/samples`, 8 samples; `testdata/noise-samples`, 24 samples) for
+`list`/`--all`/`--full`/`--all --full`/`--short --process` (rejected as designed)/`--full
+--process` (ran real `crispasr`, correctly surfaced a real mismatch: sample `short-nah`'s ground
+truth "Nah." vs. cohere-transcribe's fresh "Now."). `chunks list`/`chunks list -r` manually
+re-verified unchanged in shape/columns/coloring against real ring-buffer chunks.

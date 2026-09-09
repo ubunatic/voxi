@@ -41,7 +41,7 @@ func TestReplacementPersistenceValidationAndCommands(t *testing.T) {
 	path := ReplacementPath(home)
 	var out bytes.Buffer
 	run := func(args ...string) error {
-		cmd := NewCommand(&out, home, rules, 64, nil, deps.Dependencies{})
+		cmd := NewCommand(&out, home, rules, 64, nil, deps.Dependencies{}, nil)
 		cmd.SetArgs(args)
 		return cmd.Execute()
 	}

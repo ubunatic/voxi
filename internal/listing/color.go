@@ -1,4 +1,11 @@
-package chunks
+// Package listing holds table-rendering and sparkline-colorizing code
+// shared by `voxi chunks list` and `voxi feedback sample list` (issue 098).
+// Both commands list recorded/stored audio items with transcripts and a
+// Braille loudness sparkline; this package factors that shared rendering
+// out of internal/chunks (its original, chunks-list-specific home) so both
+// callers use one implementation instead of growing independent
+// reimplementations.
+package listing
 
 import (
 	"io"
@@ -17,17 +24,17 @@ import (
 // Flag.Changed, which is more surprising to callers than a tri-state string
 // virtually every color-capable CLI already trains users on.
 const (
-	colorAuto   = "auto"
-	colorAlways = "always"
-	colorNever  = "never"
+	ColorAuto   = "auto"
+	ColorAlways = "always"
+	ColorNever  = "never"
 )
 
-// validColorModes lists the values --color accepts.
-var validColorModes = []string{colorAuto, colorAlways, colorNever}
+// ValidColorModes lists the values --color accepts.
+var ValidColorModes = []string{ColorAuto, ColorAlways, ColorNever}
 
-// isValidColorMode reports whether mode is one of validColorModes.
-func isValidColorMode(mode string) bool {
-	for _, m := range validColorModes {
+// IsValidColorMode reports whether mode is one of ValidColorModes.
+func IsValidColorMode(mode string) bool {
+	for _, m := range ValidColorModes {
 		if mode == m {
 			return true
 		}
@@ -35,7 +42,7 @@ func isValidColorMode(mode string) bool {
 	return false
 }
 
-// stdoutIsTerminal reports whether w is a real interactive terminal worth
+// StdoutIsTerminal reports whether w is a real interactive terminal worth
 // colorizing for. Mirrors internal/devsample/lineedit.go's stdinIsTerminal
 // but checks stdout instead of stdin: deps.Dependencies.Stdout is a plain
 // io.Writer (a *bytes.Buffer in tests, a pipe when the caller redirects
@@ -43,12 +50,12 @@ func isValidColorMode(mode string) bool {
 // else (including a piped/redirected *os.File, which IsTerminal correctly
 // reports as false) is treated as non-interactive, which is exactly the
 // right behavior for "auto".
-func stdoutIsTerminal(w io.Writer) bool {
+func StdoutIsTerminal(w io.Writer) bool {
 	f, ok := w.(*os.File)
 	return ok && term.IsTerminal(int(f.Fd()))
 }
 
-// shouldUseColor resolves the effective color-enabled decision from the
+// ShouldUseColor resolves the effective color-enabled decision from the
 // --color flag value, the NO_COLOR env var, and whether stdout is a real
 // terminal (consulted only for "auto").
 //
@@ -60,16 +67,16 @@ func stdoutIsTerminal(w io.Writer) bool {
 // opt-out the user (or their terminal/CI environment) sets once, so honoring
 // it unconditionally is safer than letting a leftover --color=always in a
 // script or alias silently defeat it.
-func shouldUseColor(mode string, noColorEnv string, isTerminal bool) bool {
+func ShouldUseColor(mode string, noColorEnv string, isTerminal bool) bool {
 	if noColorEnv != "" {
 		return false
 	}
 	switch mode {
-	case colorAlways:
+	case ColorAlways:
 		return true
-	case colorNever:
+	case ColorNever:
 		return false
-	default: // "auto" (and any value isValidColorMode already rejected)
+	default: // "auto" (and any value IsValidColorMode already rejected)
 		return isTerminal
 	}
 }
@@ -126,7 +133,7 @@ var sparklineRightDotsToLevel = map[byte]int{0x80: 1, 0xA0: 2, 0xB0: 3, 0xB8: 4}
 // audio.RenderVolumeSparkline) back into its independent left/right
 // sub-levels. ok is false for anything outside the Braille Patterns block
 // (U+2800-U+28FF) -- including the "no data" space glyph and the
-// surrounding brackets -- so colorizeSparkline leaves those untouched, the
+// surrounding brackets -- so ColorizeSparkline leaves those untouched, the
 // same fail-safe behavior the old closed rune map had for anything it
 // didn't recognize.
 func decodeSparklineGlyph(r rune) (left, right int, ok bool) {
@@ -139,21 +146,22 @@ func decodeSparklineGlyph(r rune) (left, right int, ok bool) {
 	return left, right, true
 }
 
-// colorizeSparkline wraps each recognized loudness glyph in s with its ANSI
+// ColorizeSparkline wraps each recognized loudness glyph in s with its ANSI
 // color code, leaving brackets, the "no data" space glyph, and any padding
 // spaces uncolored (and thus untouched in byte length beyond the added
 // codes).
 //
 // s must already be at its final display width (i.e. already
-// fixed-width-padded via fmt's "%-Ns") before calling this: fmt measures a
-// string's padding width by rune count, so colorizing before padding would
-// make the invisible ANSI escape runes count as visible columns and break
-// alignment with the other table columns. Padding first and colorizing
-// second (rather than writing an ANSI-aware padder like
-// internal/monitor/render.go's TruncateLineANSI) keeps this feature's
-// footprint to a single small helper, since --color only ever touches one
-// already-fixed-width column.
-func colorizeSparkline(s string) string {
+// fixed-width-padded) before calling this: fmt measures a string's padding
+// width by rune count, so colorizing before padding would make the
+// invisible ANSI escape runes count as visible columns and break alignment
+// with the other table columns. Padding first and colorizing second (rather
+// than writing an ANSI-aware padder like internal/monitor/render.go's
+// TruncateLineANSI) keeps this feature's footprint to a single small
+// helper, since --color only ever touches one already-fixed-width column.
+// FormatSparklineCell in table.go does the padding-then-colorizing for
+// callers.
+func ColorizeSparkline(s string) string {
 	var sb strings.Builder
 	for _, r := range s {
 		left, right, ok := decodeSparklineGlyph(r)
