@@ -1,6 +1,6 @@
 # 087 — `voxi monitor` lights up GNOME mic-in-use indicator even while idle (suppression tags don't work / unimplemented)
 
-**Status**: Open
+**Status**: Closed — Root cause (PwRecordCommand missing GNOME suppression tags) fixed in 82b0ee6 after filing; re-verified as resolved
 **Priority**: P2 (Medium)
 **Severity**: Bug (privacy-indicator leak)
 **Category**: Bug / Privacy
