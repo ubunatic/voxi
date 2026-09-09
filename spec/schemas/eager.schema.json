@@ -8,7 +8,7 @@
     "modifier_gate": {
       "type": "object",
       "description": "Buffering/staleness tuning for the modifier-release typing race.",
-      "required": ["timeout_ms", "start_grace_ms"],
+      "required": ["timeout_ms", "start_grace_ms", "notify_delay_ms"],
       "properties": {
         "timeout_ms": {
           "type": "integer",
@@ -21,6 +21,12 @@
           "minimum": 0,
           "maximum": 10000,
           "description": "Modifier presses observed within this many milliseconds of a recording session starting are ignored, since the start hotkey itself is typically a gating-modifier press."
+        },
+        "notify_delay_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5000,
+          "description": "Delay before playing the typing-paused notification after entering buffering; canceled if the session flushes before this elapses."
         }
       },
       "additionalProperties": false

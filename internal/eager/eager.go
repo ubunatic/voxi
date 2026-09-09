@@ -358,6 +358,7 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 		return fmt.Errorf("eager: load eager spec: %w", err)
 	}
 	modifierTimeout := eagerSpec.ModifierTimeout()
+	modifierNotifyDelay := eagerSpec.ModifierNotifyDelay()
 	modelName := opts.Model
 	if modelName == "" {
 		modelName = modelSpec.DefaultModel
@@ -606,17 +607,7 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 					if buffer, justEntered := eagerBuf.EnterIfNeeded(sessions, modifierTimeout); buffer {
 						eagerBuf.Append(text + " ")
 						if justEntered {
-							go func() {
-								if err := notify.PlayTypingPaused(context.Background(), d); err != nil {
-									// Buffering itself still protects against
-									// injection with no player available; log so
-									// the missing cue is discoverable (journalctl
-									// --user -u voxi-agent.service) instead of a
-									// silent dead-end with no hint to press
-									// Super+X.
-									fmt.Fprintf(d.Stdout, "Warning: cannot play typing-paused notification: %v\n", err)
-								}
-							}()
+							eagerBuf.ScheduleNotify(d, modifierNotifyDelay)
 						}
 					} else {
 						typeStart := time.Now()
@@ -1023,6 +1014,9 @@ func (m *eagerSessionManager) ModifierPressedWithin(timeout time.Duration) bool 
 type modifierBuffer struct {
 	buffering bool
 	pending   strings.Builder
+	// cancelNotify cancels a scheduled-but-not-yet-played notification (see
+	// ScheduleNotify/Flush below); nil once played or canceled.
+	cancelNotify context.CancelFunc
 }
 
 // EnterIfNeeded reports whether eager output should be buffered rather than
@@ -1054,11 +1048,46 @@ func (b *modifierBuffer) Append(s string) {
 	b.pending.WriteString(s)
 }
 
+// ScheduleNotify plays the typing-paused notification after delay, unless
+// canceled first (see Flush). Delaying rather than playing immediately
+// avoids an unnecessary audible interruption when the session's flush
+// trigger (Stop, e.g. pressing Super+X right after the last chunk) fires
+// almost immediately after entering buffering: nothing was actually left
+// for the user to be told to do, since the flush already typed it
+// (confirmed live -- issue 101: speaking a sentence and immediately
+// pressing Super+X lost nothing, yet still played the notification
+// pointlessly after the session had already closed).
+func (b *modifierBuffer) ScheduleNotify(d deps.Dependencies, delay time.Duration) {
+	ctx, cancel := context.WithCancel(context.Background())
+	b.cancelNotify = cancel
+	go func() {
+		select {
+		case <-ctx.Done():
+			return // canceled by Flush before the delay elapsed
+		case <-time.After(delay):
+		}
+		if err := notify.PlayTypingPaused(context.Background(), d); err != nil {
+			// Buffering itself still protects against injection with no
+			// player available; log so the missing cue is discoverable
+			// (journalctl --user -u voxi-agent.service) instead of a
+			// silent dead-end with no hint to press Super+X.
+			fmt.Fprintf(d.Stdout, "Warning: cannot play typing-paused notification: %v\n", err)
+		}
+	}()
+}
+
 // Flush returns and clears any buffered output, along with whether
 // buffering was active. Intended to be called once, after this session's
 // transcription worker has fully drained (see runEagerCaptureSession) --
 // calling it while more chunks may still be queued would flush prematurely.
+// Also cancels any notification scheduled but not yet played (see
+// ScheduleNotify): reaching Flush means the session is already done, so
+// there is nothing left to tell the user to finish.
 func (b *modifierBuffer) Flush() (text string, wasBuffering bool) {
+	if b.cancelNotify != nil {
+		b.cancelNotify()
+		b.cancelNotify = nil
+	}
 	text = b.pending.String()
 	wasBuffering = b.buffering
 	b.pending.Reset()

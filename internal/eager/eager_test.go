@@ -1040,3 +1040,58 @@ func TestEagerSessionManagerIgnoresStartHotkeyModifierPress(t *testing.T) {
 	mgr.Stop()
 	mgr.Wait()
 }
+
+// TestModifierBufferFlushCancelsPendingNotification is the live-bug
+// regression test for issue 101: entering buffering scheduled the "Typing
+// paused" notification to play immediately, so speaking a sentence and
+// pressing the flush trigger (Stop, e.g. Super+X) right after it -- losing
+// nothing, since buffering correctly held the text and the flush correctly
+// typed it -- still played the notification pointlessly after the session
+// had already closed. ScheduleNotify delays playback; Flush must cancel it
+// if called first.
+func TestModifierBufferFlushCancelsPendingNotification(t *testing.T) {
+	var played atomic.Bool
+	d := deps.Dependencies{
+		LookPath: func(string) (string, error) { return "aplay", nil },
+		Run: func(context.Context, string, ...string) error {
+			played.Store(true)
+			return nil
+		},
+		Stdout: io.Discard,
+	}
+
+	var buf modifierBuffer
+	buf.ScheduleNotify(d, 100*time.Millisecond)
+	// Flush immediately, well before the delay elapses -- must cancel.
+	buf.Flush()
+
+	time.Sleep(200 * time.Millisecond) // longer than the scheduled delay
+	if played.Load() {
+		t.Fatal("notification played after Flush canceled it before the delay elapsed")
+	}
+}
+
+// TestModifierBufferScheduleNotifyPlaysWithoutFlush verifies the other half:
+// with no Flush (or stop) in between, the delayed notification still plays.
+func TestModifierBufferScheduleNotifyPlaysWithoutFlush(t *testing.T) {
+	var played atomic.Bool
+	d := deps.Dependencies{
+		LookPath: func(string) (string, error) { return "aplay", nil },
+		Run: func(context.Context, string, ...string) error {
+			played.Store(true)
+			return nil
+		},
+		Stdout: io.Discard,
+	}
+
+	var buf modifierBuffer
+	buf.ScheduleNotify(d, 20*time.Millisecond)
+
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for !played.Load() && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if !played.Load() {
+		t.Fatal("notification did not play within the deadline when nothing canceled it")
+	}
+}

@@ -24,3 +24,13 @@ modifier_gate:
   # (confirmed live: starting a recording immediately triggered "Typing
   # paused" on the first chunk with no other modifier ever touched).
   start_grace_ms: 750
+  # Notify delay: how long to wait before actually playing the "Typing
+  # paused" clip after entering buffering. If the session's flush trigger
+  # (Stop, e.g. pressing Super+X right after the last chunk) fires before
+  # this delay elapses, the notification is canceled and never played --
+  # buffering itself still correctly held the text and the flush still
+  # correctly types it, but there is nothing left for the user to be told
+  # to do (confirmed live: speaking a sentence and immediately pressing
+  # Super+X lost nothing, yet still played "Typing paused" pointlessly
+  # after the session had already closed and flushed).
+  notify_delay_ms: 500
