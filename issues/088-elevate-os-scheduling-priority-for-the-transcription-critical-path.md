@@ -4,7 +4,7 @@
 **Priority**: P3 (Low)
 **Severity**: Enhancement
 **Category**: Enhancement
-**Related**: [internal/eager/eager.go](../internal/eager/eager.go), [systemd/voxi-agent.service](../systemd/voxi-agent.service), [084 Add Live Mic Input-Level Meter and Volume Display to `voxi monitor`](084-add-live-mic-input-level-meter-and-volume-display-to-voxi-monitor.md)
+**Related**: [internal/eager/eager.go](../internal/eager/eager.go), [systemd/voxi-agent.service](../systemd/voxi-agent.service), [084 Add Live Mic Input-Level Meter and Volume Display to `voxi monitor`](084-add-live-mic-input-level-meter-and-volume-display-to-voxi-monitor.md), [052 CPU/GPU priority research (closed, folded in here)](052-cpu-gpu-priority-under-load.md)
 
 ---
 
@@ -99,3 +99,60 @@ negative `Nice=`).
   gap).
 - Not claiming a measured performance regression — the motivating report
   is anecdotal, felt latency during one specific recording session.
+
+## 7. Investigation section (folded in from closed issue 052)
+
+052 asked the same underlying question — CPU/GPU scheduling priority for
+responsive dictation under load — against the same launch path
+(`voxi-agent.service`), before this ticket's more concrete, incident-driven
+framing existed. Closed as a duplicate track rather than run in parallel;
+its research questions and probes are preserved here as the investigation
+material for §4/§5 above, still undecided/not started.
+
+### 7.1 CPU priority & scheduling
+- systemd user-service directives: `Nice=-10`/`-5` (needs `LimitNICE`/PAM
+  permission in the user session), `CPUSchedulingPolicy=rr|fifo` vs
+  `batch|other`, `LimitNICE=`. Check permission limits for unprivileged
+  user services under standard systemd (Ubuntu/Fedora default
+  `/etc/security/limits.conf` or polkit).
+- Process inheritance: does `exec.CommandContext`'s child (`voxtype`/
+  `crispasr` and its OpenMP/pthread pool) cleanly inherit nice/scheduling
+  class? Can Go set `SysProcAttr` or call `syscall.Setpriority` explicitly
+  before exec?
+- cgroups v2: does the systemd user slice support `CPUWeight=`/
+  `StartupCPUWeight=` for a proportional CPU-share guarantee under
+  contention?
+
+### 7.2 GPU priority & compute preemption
+- Vulkan/RADV (AMD, the host GPU's compute path): `VK_EXT_global_priority`/
+  `VK_EXT_global_priority_query` (`HIGH`/`REALTIME` queue priority;
+  `REALTIME` typically needs `CAP_SYS_NICE` or DRM permissions `HIGH` may
+  not). Check Mesa/RADV env vars or DRI render-node scheduling controls.
+- DRM/kernel GPU scheduling: `amdgpu_sched`'s priority rings (low/normal/
+  high/real-time) — can an unprivileged client request a high-priority DRM
+  context?
+- Does upstream `whisper.cpp`/`voxtype`/`crispasr` expose any queue-priority
+  or compute-stream configuration? Does a resident warm-model context (050/
+  051) reduce GPU bus contention/pipeline stalls from buffer reloads under
+  memory-bandwidth pressure, independent of scheduling priority?
+
+### 7.3 Audio capture priority (PipeWire/ALSA)
+- Under high CPU load, capture-side xruns can drop audio before
+  transcription even starts. Does Voxi's capture path get real-time
+  priority via `rtkit`? `PIPEWIRE_LATENCY` tuning? How to verify the
+  capture path is protected against xruns under load, independent of the
+  transcription-process priority this ticket otherwise targets.
+
+### 7.4 Canary probes carried over
+- `Nice=-5`/`-10` in `voxi-agent.service`, `systemctl --user daemon-reload`,
+  check journal for permission errors; verify child nice levels via
+  `ps -eo pid,ni,comm | grep -E 'voxi|voxtype|crispasr'`.
+- Synthetic load benchmark: `stress-ng --cpu 8 --io 4` (or a GPU compute
+  loop) concurrent with `voxi feedback sample play`/transcribe on a fixed
+  corpus (e.g. `kt-sentences-plus-silence`); compare RTF/latency at default
+  vs. elevated priority — this is the measurement §5's default-vs-opt-in
+  decision should be gated on, not a felt-latency report.
+- `vulkaninfo | grep VK_EXT_global_priority` on the host GPU; check whether
+  an unprivileged process can actually open a high-priority context.
+- Document any required `/etc/security/limits.d/` ceiling if `LimitNICE`
+  needs raising beyond the default.

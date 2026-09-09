@@ -38,6 +38,7 @@ This umbrella improvement ticket tracks four focused initiatives:
 - Introduce mock/synthetic audio buffer tests for `internal/audio/` and `internal/asr/` to lift overall project test coverage above 25%.
 
 ### Work Item 3: GNOME Shell Extension Modularization (Deprioritized — P4)
+- **Parked (2026-09-09 roadmap pass)**: no work planned until GNOME Shell extension usage resumes; not part of the item's own scope, revisit only if that changes.
 - User does not currently use the GNOME Shell extension; the built-in OS recording indicator is sufficient. Defer until extension usage resumes.
 - Split `contrib/gnome-shell-extension/extension.js` into modular GJS files:
   - `client.js`: D-Bus / IPC messaging with the daemon.
