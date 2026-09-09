@@ -1,6 +1,6 @@
 # 040: Grammar-Constrained Decoding (GBNF) for Exact Technical Terms
 
-**Status**: Blocked — Grammar Flag Not Available
+**Status**: Closed — Doubly blocked: no grammar flag in installed voxtype, and Cohere Transcribe (the default backend per spec/models.yaml) doesn't accept prompt/hotword biasing at all — no productive path left on either backend
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Feature

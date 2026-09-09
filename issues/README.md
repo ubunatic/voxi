@@ -21,7 +21,7 @@
 | 037 | [037-code-quality-and-test-coverage-roadmap.md](037-code-quality-and-test-coverage-roadmap.md) | 037: Comprehensive Code Quality, Test Coverage, and Modularization Plan | Open |
 | 038 | [038-vocabulary-feedback-command.md](038-vocabulary-feedback-command.md) | 038: Vocabulary Feedback Command | Closed — resolved in cb8b214 |
 | 039 | [039-oss-stt-landscape-and-custom-vocabulary-research.md](039-oss-stt-landscape-and-custom-vocabulary-research.md) | 039: OSS/Source-Available STT Landscape and Custom-Vocabulary Handling Research | Research Complete |
-| 040 | [040-whisper-cpp-grammar-constrained-vocabulary.md](040-whisper-cpp-grammar-constrained-vocabulary.md) | 040: Grammar-Constrained Decoding (GBNF) for Exact Technical Terms | Blocked — Grammar Flag Not Available |
+| 040 | [040-whisper-cpp-grammar-constrained-vocabulary.md](040-whisper-cpp-grammar-constrained-vocabulary.md) | 040: Grammar-Constrained Decoding (GBNF) for Exact Technical Terms | Closed — Doubly blocked: no grammar flag in installed voxtype, and Cohere Transcribe (the default backend per spec/models.yaml) doesn't accept prompt/hotword biasing at all — no productive path left on either backend |
 | 041 | [041-sherpa-onnx-hotwords-canary.md](041-sherpa-onnx-hotwords-canary.md) | 041: sherpa-onnx Hotwords Canary (Contingent Engine Alternative) | Canary Complete — Recommend Reject |
 | 042 | [042-private-dev-sample-recorder.md](042-private-dev-sample-recorder.md) | 042: Private Development Sample Recorder (Named Utterance + Corrected Text) | Implemented |
 | 043 | [043-assistive-config-summary-command.md](043-assistive-config-summary-command.md) | 043: Combined Assistive-Feedback Config Summary Command | Implemented |
