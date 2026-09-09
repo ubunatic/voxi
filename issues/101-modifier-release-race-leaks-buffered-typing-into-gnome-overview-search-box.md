@@ -1,6 +1,6 @@
 # 101 — Modifier-Release Race Leaks Buffered Typing Into GNOME Overview Search Box
 
-**Status**: Open
+**Status**: In Progress — Option B + Option C implemented (commit `2e818f0`), pending live verification
 **Priority**: P1 (High)
 **Severity**: Major
 **Category**: Spec/Design
@@ -215,3 +215,32 @@ rather than actively streaming. Candidates, all open and unevaluated:
 - No code changes.
 - No decision on which option ships — the user intends to prototype
   multiple variants directly.
+
+## 6. Implementation (commit `2e818f0`)
+
+Option B (buffered/batch mode, sticky, flushed on explicit `Stop()`) and
+Option C's non-injection notification (single embedded English WAV via
+RHVoice, played through the existing `chunks.PlayerCommand` picker) were
+implemented together, scoped to the daemon path only. `spec/eager.yaml`
+adds the `modifier_gate.timeout_ms` tunable (default 10000ms).
+
+A cross-session buffer bleed was caught in independent review before
+commit: `eagerSessionManager` is a single long-lived object, and a rapid
+Stop-then-Start can leave a superseded session's trailing chunk still
+transcribing after the manager has already reset for a new session —
+storing buffered text as manager fields let that leftover text bleed
+into (or get flushed by) the new session. Fixed by making the buffer
+(`modifierBuffer`) local to each `runEagerCaptureSession` call instead
+of manager state; only the read-only `lastModifierPressAt` timestamp
+stays on the shared manager, which is safe since it's fed by a single
+daemon-wide poller and only read for staleness.
+
+Verified: `go build/vet/test ./...` (whole repo), `go test -race` on
+the affected packages, and a live `make restart-service` confirming
+`voxi-agent.service` restarts cleanly under the new code.
+
+**Not yet done — needs a human at the keyboard**: the actual race
+(hold Super, dictate, release Super into the GNOME overview, confirm
+text buffers instead of leaking in and the notification is heard) has
+not been reproduced live. This ticket should not close until that
+check has been done.
