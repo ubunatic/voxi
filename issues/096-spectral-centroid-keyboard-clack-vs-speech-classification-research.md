@@ -206,6 +206,45 @@ features (centroid, ZCR) don't do that regardless of the noise source. Strengthe
 §6's pivot to transient-shape features, since those target the mechanism common to all of these
 noise sources (a sharp mechanical impact) rather than any one device's spectral signature.
 
+## 3e. Findings (sustained non-percussive noise: outdoor gardening-vehicle motor + kitchen noise)
+
+Recorded 2 more chunks (`bgnoise-motor-kitchen-1517/1518`) of a loud outdoor gardening-vehicle
+motor plus kitchen noise, both audible together. Unlike every sample so far, this is *sustained*
+ambient noise, not a percussive transient (no keyboard/mouse/click involved at all). Relevant
+excerpt from the 28-sample corpus:
+
+```
+NAME                          ZCR    CENTROID  FRAMES
+short-uh                   0.0833    1165.7Hz      16
+short-nah                  0.1616    1707.4Hz      21
+short-one-two              0.1704    1596.7Hz      39
+bgnoise-motor-kitchen-1517 0.1993    2001.8Hz     581
+short-no-no-yes            0.2021    1775.8Hz      48
+bgnoise-motor-kitchen-1518 0.2100    2098.4Hz     311
+short-eh                   0.2168    1869.2Hz      14
+mouse-noise-1515           0.2391    2231.6Hz     302
+mouse-noise-1514           0.2397    2373.9Hz     362
+short-three                0.2637    2080.3Hz      19
+short-abc                  0.3189    2488.5Hz      50
+short-yes                  0.4426    2664.8Hz      20
+```
+
+Both bg-noise samples (well-sampled: 581/311 frames) land directly inside the speech cluster,
+between `short-no-no-yes` and `short-eh`. **This changes the working theory from §3d**: since
+this noise has no percussive attack at all (a continuous motor hum + kitchen ambience, not a
+click), its overlap with speech means the problem isn't specifically about transient *shape*
+either — a sustained non-speech sound can land in exactly the same centroid/ZCR range as a
+sustained speech sound. Attack-sharpness/spectral-flux (§6, aimed at percussive onsets) would not
+be expected to help distinguish *this* kind of noise from speech, even if it turns out to help
+with clacks/clicks specifically.
+
+The property most of these non-speech sounds still lack, that voiced speech has, is **harmonicity
+(a periodic fundamental frequency / pitch)**: keyboard clacks, mouse clicks, and motor/kitchen
+noise are all acoustically closer to broadband or quasi-periodic-but-inharmonic noise, whereas
+voiced speech (vowels in particular) has a clear pitch period. A harmonic-to-noise ratio or
+autocorrelation-based pitch-salience feature is now a stronger candidate than transient shape for
+covering the full range of noise types tested so far — added to §6.
+
 ## 4. Known limitation in the sample corpus
 
 `voxi feedback sample save-chunk`'s interactive prompt has no way to save a literal empty ground
@@ -238,16 +277,23 @@ accuracy scoring without either a real non-speech convention or a `--text` overr
   as currently scoped.** A quiet flat-keyboard clack and a real short speech utterance can share
   the same centroid range, so a threshold here would trade false-accepted clacks for
   false-rejected speech (the exact failure class issue 094 already burned us on).
-- Investigate features that target the *transient shape* rather than the steady-state spectrum,
-  since that's the more fundamental acoustic difference between a percussive clack and voiced
-  speech regardless of keyboard: attack sharpness/rise-time, spectral flux (frame-to-frame
-  spectral change, high at a clack's onset), or onset-to-decay energy ratio. These need a
-  per-frame or per-onset analysis, not the current whole-chunk energy-weighted average.
+- Investigate transient-shape features (attack sharpness/rise-time, spectral flux, onset-to-decay
+  energy ratio) for *percussive* noise sources specifically (keyboard clacks, mouse
+  clicks/lift-off) — these need a per-frame/per-onset analysis, not the current whole-chunk
+  energy-weighted average. Per §3e, this hypothesis should NOT be expected to also cover sustained
+  non-percussive noise (motor/kitchen ambience) — that needs a different feature, see next.
+- **New primary candidate per §3e: harmonicity / pitch salience** (harmonic-to-noise ratio, or an
+  autocorrelation-based pitch-detection confidence score). Unlike centroid/ZCR/transient-shape,
+  this targets a property that should hold across *all* noise types tested so far (percussive and
+  sustained alike): voiced speech has a periodic fundamental, keyboard/mouse/motor/kitchen noise
+  does not. This is the most promising untested direction as of 2026-09-09.
 - Record 1-2 more keyboards (especially another flat/chiclet or laptop-style one, to see if
-  keyboard-clack-flat's low centroid is that whole *class* of keyboard or an outlier) before
-  drawing conclusions about which feature(s) might work.
+  keyboard-clack-flat's low centroid is that whole *class* of keyboard or an outlier), and more
+  non-keyboard/non-percussive noise sources (fans, traffic, other ambient hums) to stress-test the
+  harmonicity hypothesis the same way centroid/ZCR were stress-tested.
 - Given single-feature thresholds keep breaking as the sample set grows, revisit whether a
   trained classifier is still overkill (previously ruled out for a 13-sample, one-edge-case
-  problem — see chat discussion 2026-09-09) now that it's a 21-sample, three-keyboard problem with
-  two falsified single-feature hypotheses. Still likely premature at n=21, but the bar for
-  "hand-crafted features are good enough" is looking higher than initially assumed.
+  problem — see chat discussion 2026-09-09) now that it's a 28-sample, multi-source noise problem
+  with three falsified single-feature hypotheses (centroid, ZCR, and — pending confirmation —
+  transient shape's inapplicability to sustained noise). Still worth trying harmonicity first,
+  but the bar for "hand-crafted features are good enough" keeps rising.
