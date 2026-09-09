@@ -1,6 +1,6 @@
 # 093 — Collapse an immediately-repeated trailing sentence/clause in eager transcripts
 
-**Status**: Open
+**Status**: Closed — Implemented by codex (gpt-5.6-luna) — CollapseRepeatedTrailingClause in internal/asr/asr.go, wired into CleanWhisperTranscript; go vet/go test verified independently. Commit ba815ba
 **Priority**: P3 (Low)
 **Severity**: Bug (occasional hallucination artifact, not safety-critical)
 **Category**: ASR Quality
