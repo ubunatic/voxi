@@ -1,6 +1,6 @@
 # 094 — `CollapseRepeatedTrailingClause` wrongly deletes a legitimate short answer that matches the question's last word
 
-**Status**: Closed — Fixed: require 2-word suffix in CollapseRepeatedTrailingClause
+**Status**: Closed — Narrowed `CollapseRepeatedTrailingClause` to require a 2-word suffix (dropped
 the 1-word case entirely), removing the false positive while preserving 093's original motivating
 case. Added regression test for `"Was your answer no? No"`. `go test ./internal/asr/...` passes.
 The two lower-severity follow-ups in §2 (multiline call-site gap, punctuation/Unicode edge cases)

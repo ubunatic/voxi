@@ -168,6 +168,11 @@ func TestCollapseRepeatedTrailingClause(t *testing.T) {
 			input: "It was very very good",
 			want:  "It was very very good",
 		},
+		{
+			name:  "one-word suffix left as legitimate short answer",
+			input: "Was your answer no? No",
+			want:  "Was your answer no? No",
+		},
 	}
 
 	for _, tc := range cases {

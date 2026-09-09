@@ -102,11 +102,13 @@ func StripLeadingHallucinations(text string, stopWords []string) string {
 	return strings.TrimSpace(clean)
 }
 
-// CollapseRepeatedTrailingClause removes a one- or two-word suffix repeated
+// CollapseRepeatedTrailingClause removes a two-word suffix repeated
 // immediately after terminal punctuation, e.g. "Let's get started. get
 // started" becomes "Let's get started.". Repetition without a punctuation
 // boundary is left untouched so intentional emphasis such as "very very good"
-// is preserved.
+// is preserved. A one-word suffix is never collapsed: it is indistinguishable
+// from a legitimate short answer that happens to restate the question's last
+// word, e.g. "Was your answer no? No" (see issue 094).
 func CollapseRepeatedTrailingClause(text string) string {
 	runes := []rune(text)
 	for i := len(runes) - 1; i >= 0; i-- {
@@ -122,7 +124,7 @@ func CollapseRepeatedTrailingClause(text string) string {
 		suffix = strings.TrimSuffix(suffix, "!")
 		suffix = strings.TrimSuffix(suffix, "?")
 		suffixWords := strings.Fields(suffix)
-		if len(suffixWords) < 1 || len(suffixWords) > 2 || !allWords(suffixWords) {
+		if len(suffixWords) != 2 || !allWords(suffixWords) {
 			continue
 		}
 
