@@ -113,6 +113,33 @@ if the user never sends the flush trigger, and whether buffering should
 also suppress normal (non-modifier-triggered) eager typing or only the
 release-edge case.
 
+**Refinement, added during design discussion — gate the pause on
+staleness, not just presence, of a modifier press.** The scenario that
+actually needs catching: the user finishes speaking, believes dictation
+is effectively done, and switches apps/hits a hotkey combo (a modifier
+press) *before* the last eager chunk has finished transcribing. That
+trailing chunk then "sneaks in" and gets typed into whatever now has
+focus. But a modifier press from minutes earlier in the same session
+(unrelated hotkey use, nothing to do with dictation) should **not**
+retroactively arm the pause/notify path for some later chunk — that
+would false-positive on ordinary keyboard use.
+
+Concretely: only pause typing and play the notification clip when
+**both** conditions hold —
+1. there is pending eager output actually queued to type, **and**
+2. the most recent gating-modifier press was "recent" — within a
+   **configurable modifier timeout** of the chunk becoming ready to
+   type. Outside that window, treat the modifier press as stale and
+   type normally; blocking indefinitely on a stale press is not needed
+   and would be a regression (silently-dropped-forever typing, the
+   exact failure mode 083 §8 already had to fix once for a different
+   trigger).
+
+Suggested default is **10 seconds** — the implementer's judgment call
+to revisit once this is prototyped against real dictation timing; the
+value should live in `spec/` alongside voxi's other tunables per
+`docs/Spec.md`, not be hardcoded in Go.
+
 ### Option C — User feedback while buffering/stopped
 
 However buffering is signaled, the user needs to know typing is paused
