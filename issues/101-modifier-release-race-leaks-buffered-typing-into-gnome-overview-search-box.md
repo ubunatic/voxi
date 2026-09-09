@@ -140,7 +140,15 @@ to revisit once this is prototyped against real dictation timing; the
 value should live in `spec/` alongside voxi's other tunables per
 `docs/Spec.md`, not be hardcoded in Go.
 
-### Option C — User feedback while buffering/stopped
+**Scope requirement: the "last modifier press" tracked for staleness
+must be per-recording-session state, not persisted across sessions.**
+Stopping the current recording or starting a new one must reset it, so
+a modifier press from a prior session can never arm the pause/notify
+path for a later one. Flagged explicitly because nothing here is
+implemented yet — there is no existing code path to point to that
+already guarantees this, so the implementer must build the reset in
+deliberately (e.g. tied to whatever already marks a new eager session
+boundary in `internal/eager`) rather than assume it falls out for free.
 
 However buffering is signaled, the user needs to know typing is paused
 rather than actively streaming. Candidates, all open and unevaluated:
