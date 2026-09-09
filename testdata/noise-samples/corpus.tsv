@@ -2,6 +2,10 @@
 # Private local dev samples recorded via `voxi feedback sample record`.
 # corpus.tsv-compatible: point scripts/speech_context_bench -corpus at this
 # directory to include these real recordings in accuracy canaries.
+#ts bg-voice-aye-you-did-that 2026-09-09T13:01:07Z
+bg-voice-aye-you-did-that	bg-voice-aye-you-did-that.flac	[background voice, distant/unintelligible]	
+#ts bg-voice-hospital-hallucination 2026-09-09T13:01:07Z
+bg-voice-hospital-hallucination	bg-voice-hospital-hallucination.flac	[background voice, distant/unintelligible]	
 #ts bgnoise-motor-kitchen-1517 2026-09-09T10:50:09Z
 bgnoise-motor-kitchen-1517	bgnoise-motor-kitchen-1517.flac	[background noise: motor+kitchen]	
 #ts bgnoise-motor-kitchen-1518 2026-09-09T10:50:09Z
