@@ -32,16 +32,38 @@ const manifestFile = "corpus.tsv"
 // SamplesDir is the private per-user directory holding recorded dev samples
 // and their manifest. Its contents are sensitive (private speech + manually
 // typed text) and must never be swept into any Voxi-owned sync/backup
-// tooling; see docs/DevSamples.md.
+// tooling; see docs/DevSamples.md. A sample containing no real speech (pure
+// noise: keyboard/mouse/ambient recordings) may be deliberately promoted out
+// of this private store into a public, git-tracked corpus via Promote — see
+// PublicSamplesDir.
 func SamplesDir(home string) string {
 	return filepath.Join(home, ".config", "voxi", "samples")
 }
 
-// ManifestPath is the corpus.tsv-compatible manifest listing every sample.
-func ManifestPath(home string) string { return filepath.Join(SamplesDir(home), manifestFile) }
+// PublicSamplesDir is the git-tracked, non-private corpus of promoted dev
+// samples: recordings confirmed to contain no real speech (keyboard clacks,
+// mouse noise, ambient/background noise) so they're safe to commit and share
+// as noise-vs-speech classification fixtures. Relative to repoRoot (pass ""
+// for the current working directory, i.e. run from the repo root as with
+// other project tooling).
+func PublicSamplesDir(repoRoot string) string {
+	return filepath.Join(repoRoot, "testdata", "noise-samples")
+}
+
+// ManifestPath is the corpus.tsv-compatible manifest listing every private
+// sample.
+func ManifestPath(home string) string { return ManifestPathIn(SamplesDir(home)) }
 
 // WAVPath is the private per-sample recording.
-func WAVPath(home, name string) string { return filepath.Join(SamplesDir(home), name+".wav") }
+func WAVPath(home, name string) string { return WAVPathIn(SamplesDir(home), name) }
+
+// ManifestPathIn is the corpus.tsv-compatible manifest inside an arbitrary
+// samples directory (private or public).
+func ManifestPathIn(dir string) string { return filepath.Join(dir, manifestFile) }
+
+// WAVPathIn is a sample's WAV recording inside an arbitrary samples
+// directory (private or public).
+func WAVPathIn(dir, name string) string { return filepath.Join(dir, name+".wav") }
 
 // Sample is one recorded dev sample: a WAV recording paired with a manually
 // corrected ground-truth transcript.
@@ -156,10 +178,14 @@ func sanitizeText(text string) string {
 	return strings.TrimSpace(text)
 }
 
-// LoadManifest reads the manifest, treating a missing file as an empty
-// sample set.
-func LoadManifest(home string) ([]Sample, error) {
-	data, err := os.ReadFile(ManifestPath(home))
+// LoadManifest reads the private manifest, treating a missing file as an
+// empty sample set.
+func LoadManifest(home string) ([]Sample, error) { return LoadManifestIn(SamplesDir(home)) }
+
+// LoadManifestIn reads the manifest inside an arbitrary samples directory
+// (private or public), treating a missing file as an empty sample set.
+func LoadManifestIn(dir string) ([]Sample, error) {
+	data, err := os.ReadFile(ManifestPathIn(dir))
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
@@ -169,13 +195,24 @@ func LoadManifest(home string) ([]Sample, error) {
 	return ParseManifest(data)
 }
 
-// SaveManifest atomically writes the manifest with private permissions.
+// SaveManifest atomically writes the private manifest with private
+// (owner-only) permissions.
 func SaveManifest(home string, samples []Sample) error {
-	dir := SamplesDir(home)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	return saveManifestIn(SamplesDir(home), samples, 0o700, 0o600)
+}
+
+// SaveManifestIn atomically writes the manifest inside an arbitrary public
+// samples directory with normal (world-readable) permissions, suitable for a
+// git-tracked corpus. Never use this for the private SamplesDir.
+func SaveManifestIn(dir string, samples []Sample) error {
+	return saveManifestIn(dir, samples, 0o755, 0o644)
+}
+
+func saveManifestIn(dir string, samples []Sample, dirMode, fileMode os.FileMode) error {
+	if err := os.MkdirAll(dir, dirMode); err != nil {
 		return fmt.Errorf("create samples directory: %w", err)
 	}
-	if err := os.Chmod(dir, 0o700); err != nil {
+	if err := os.Chmod(dir, dirMode); err != nil {
 		return fmt.Errorf("secure samples directory: %w", err)
 	}
 	f, err := os.CreateTemp(dir, ".corpus-*")
@@ -184,7 +221,7 @@ func SaveManifest(home string, samples []Sample) error {
 	}
 	tmp := f.Name()
 	defer os.Remove(tmp)
-	if err := f.Chmod(0o600); err == nil {
+	if err := f.Chmod(fileMode); err == nil {
 		_, err = f.Write(FormatManifest(samples))
 	}
 	if closeErr := f.Close(); err == nil {
@@ -193,11 +230,11 @@ func SaveManifest(home string, samples []Sample) error {
 	if err != nil {
 		return fmt.Errorf("write sample manifest file: %w", err)
 	}
-	path := ManifestPath(home)
+	path := ManifestPathIn(dir)
 	if err := os.Rename(tmp, path); err != nil {
 		return fmt.Errorf("replace sample manifest file: %w", err)
 	}
-	return os.Chmod(path, 0o600)
+	return os.Chmod(path, fileMode)
 }
 
 // Find returns the sample named name, if present.

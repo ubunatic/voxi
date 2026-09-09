@@ -352,6 +352,26 @@ func NewCommand(out io.Writer, home string, builtins []spec.StopWord, maxVocabul
 			return saveLastCmd
 		}(),
 	)
+
+	promoteCmd := &cobra.Command{
+		Use:   "promote NAME",
+		Short: "Move a noise-only private sample into the public, git-tracked corpus (testdata/noise-samples)",
+		Long: "Move a private dev sample into the public, git-tracked corpus at testdata/noise-samples,\n" +
+			"FLAC-encoding its audio for git-lfs. Only promote samples confirmed to contain no real\n" +
+			"speech (keyboard/mouse/ambient noise) -- this command does not and cannot verify that.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, a []string) error {
+			publicDir, _ := cmd.Flags().GetString("to")
+			if err := devsample.Promote(cmd.Context(), home, publicDir, a[0]); err != nil {
+				return err
+			}
+			fmt.Fprintf(out, "Promoted sample %q to %s\n", a[0], publicDir)
+			return nil
+		},
+	}
+	promoteCmd.Flags().String("to", devsample.PublicSamplesDir(""), "public samples directory to promote into (run from the repo root)")
+	sample.AddCommand(promoteCmd)
+
 	cmd.AddCommand(sample)
 
 	return cmd

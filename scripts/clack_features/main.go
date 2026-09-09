@@ -9,11 +9,17 @@
 //
 // Usage:
 //
-//	go run ./scripts/clack_features [-dir DIR]
+//	go run ./scripts/clack_features [-private DIR] [-public DIR]
 //
-// DIR defaults to the dev-sample directory (~/.config/voxi/samples) and is
-// expected to hold a corpus.tsv manifest (see internal/devsample) whose
-// first field is the sample name and second field the WAV filename.
+// -private defaults to the private dev-sample directory
+// (~/.config/voxi/samples); -public defaults to the git-tracked public
+// corpus (testdata/noise-samples, relative to the repo root -- run this from
+// the repo root). Either may be empty/missing (skipped silently) so this
+// works whether the corpus is entirely private, entirely promoted, or split
+// across both. Each is expected to hold a corpus.tsv manifest (see
+// internal/devsample) whose first field is the sample name and second field
+// the audio filename (.wav or .flac -- .flac is decoded via a shelled-out
+// `ffmpeg`, since promoted public samples are FLAC-encoded for git-lfs).
 package main
 
 import (
@@ -24,6 +30,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -41,22 +48,31 @@ const (
 type sample struct {
 	name string
 	wav  string
+	dir  string
 }
 
 func main() {
 	home, _ := os.UserHomeDir()
-	defaultDir := filepath.Join(home, ".config", "voxi", "samples")
+	defaultPrivate := filepath.Join(home, ".config", "voxi", "samples")
 
-	dir := flag.String("dir", defaultDir, "directory holding corpus.tsv and its WAV files")
+	private := flag.String("private", defaultPrivate, "private samples directory holding corpus.tsv and its WAV files")
+	public := flag.String("public", filepath.Join("testdata", "noise-samples"), "public (git-tracked) samples directory holding corpus.tsv and its FLAC files")
 	flag.Parse()
 
-	samples, err := loadManifest(filepath.Join(*dir, "corpus.tsv"))
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "load manifest: %v\n", err)
-		os.Exit(1)
+	var samples []sample
+	for _, dir := range []string{*private, *public} {
+		s, err := loadManifest(filepath.Join(dir, "corpus.tsv"))
+		if err != nil && !os.IsNotExist(err) {
+			fmt.Fprintf(os.Stderr, "load manifest %s: %v\n", dir, err)
+			continue
+		}
+		for i := range s {
+			s[i].dir = dir
+		}
+		samples = append(samples, s...)
 	}
 	if len(samples) == 0 {
-		fmt.Fprintf(os.Stderr, "no samples found in %s\n", *dir)
+		fmt.Fprintf(os.Stderr, "no samples found in %s or %s\n", *private, *public)
 		os.Exit(1)
 	}
 
@@ -68,7 +84,7 @@ func main() {
 	}
 	var rows []row
 	for _, s := range samples {
-		pcm, rate, err := readWAVPCM(filepath.Join(*dir, s.wav))
+		pcm, rate, err := readAudioPCM(filepath.Join(s.dir, s.wav))
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%s: %v\n", s.name, err)
 			continue
@@ -79,9 +95,9 @@ func main() {
 
 	sort.Slice(rows, func(i, j int) bool { return rows[i].zcr < rows[j].zcr })
 
-	fmt.Printf("%-20s  %8s  %10s  %6s\n", "NAME", "ZCR", "CENTROID", "FRAMES")
+	fmt.Printf("%-26s  %8s  %10s  %6s\n", "NAME", "ZCR", "CENTROID", "FRAMES")
 	for _, r := range rows {
-		fmt.Printf("%-20s  %8.4f  %8.1fHz  %6d\n", r.name, r.zcr, r.centroid, r.framesUsed)
+		fmt.Printf("%-26s  %8.4f  %8.1fHz  %6d\n", r.name, r.zcr, r.centroid, r.framesUsed)
 	}
 }
 
@@ -111,6 +127,25 @@ func loadManifest(path string) ([]sample, error) {
 	return samples, scanner.Err()
 }
 
+// readAudioPCM reads mono 16-bit PCM samples and the sample rate from either
+// a WAV file directly, or a FLAC file decoded through a shelled-out ffmpeg
+// (avoids adding a FLAC-decoding Go dependency for a throwaway analysis
+// tool; promoted public samples are FLAC-encoded for git-lfs, see
+// internal/devsample.Promote).
+func readAudioPCM(path string) ([]int16, int, error) {
+	if !strings.HasSuffix(strings.ToLower(path), ".flac") {
+		return readWAVPCM(path)
+	}
+	cmd := exec.Command("ffmpeg", "-y", "-i", path, "-f", "wav", "-acodec", "pcm_s16le", "-")
+	var out, stderr bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return nil, 0, fmt.Errorf("ffmpeg decode %s: %w\n%s", path, err, stderr.String())
+	}
+	return parseWAVBytes(out.Bytes())
+}
+
 // readWAVPCM extracts mono 16-bit PCM samples and the sample rate from a
 // WAV file's fmt/data chunks, without assuming a fixed header size.
 func readWAVPCM(path string) ([]int16, int, error) {
@@ -118,6 +153,13 @@ func readWAVPCM(path string) ([]int16, int, error) {
 	if err != nil {
 		return nil, 0, err
 	}
+	return parseWAVBytes(data)
+}
+
+// parseWAVBytes is readWAVPCM's format parser, factored out so
+// readAudioPCM can feed it ffmpeg's decoded-to-WAV stdout for FLAC input
+// too.
+func parseWAVBytes(data []byte) ([]int16, int, error) {
 	if len(data) < 12 || string(data[0:4]) != "RIFF" || string(data[8:12]) != "WAVE" {
 		return nil, 0, fmt.Errorf("not a RIFF/WAVE file")
 	}
@@ -127,8 +169,16 @@ func readWAVPCM(path string) ([]int16, int, error) {
 	pos := 12
 	for pos+8 <= len(data) {
 		chunkID := string(data[pos : pos+4])
-		chunkSize := int(binary.LittleEndian.Uint32(data[pos+4 : pos+8]))
+		rawChunkSize := binary.LittleEndian.Uint32(data[pos+4 : pos+8])
+		chunkSize := int(rawChunkSize)
 		body := pos + 8
+		// A WAV muxed to a non-seekable pipe (e.g. ffmpeg decoding FLAC to
+		// stdout) can't back-patch the data chunk's real size once
+		// streaming is done, so it writes 0xFFFFFFFF ("unknown") instead:
+		// treat that as "rest of file" rather than bailing out.
+		if chunkID == "data" && rawChunkSize == 0xFFFFFFFF {
+			chunkSize = len(data) - body
+		}
 		if body+chunkSize > len(data) {
 			break
 		}

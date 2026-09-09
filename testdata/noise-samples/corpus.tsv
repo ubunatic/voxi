@@ -1,0 +1,54 @@
+# id	wav file	expected transcript	keyterms separated by |
+# Private local dev samples recorded via `voxi feedback sample record`.
+# corpus.tsv-compatible: point scripts/speech_context_bench -corpus at this
+# directory to include these real recordings in accuracy canaries.
+#ts bgnoise-motor-kitchen-1517 2026-09-09T10:50:09Z
+bgnoise-motor-kitchen-1517	bgnoise-motor-kitchen-1517.flac	[background noise: motor+kitchen]	
+#ts bgnoise-motor-kitchen-1518 2026-09-09T10:50:09Z
+bgnoise-motor-kitchen-1518	bgnoise-motor-kitchen-1518.flac	[background noise: motor+kitchen]	
+#ts keyboard-clack-1477 2026-09-09T09:37:41Z
+keyboard-clack-1477	keyboard-clack-1477.flac	[keyboard noise]	
+#ts keyboard-clack-1478 2026-09-09T09:37:41Z
+keyboard-clack-1478	keyboard-clack-1478.flac	[keyboard noise]	
+#ts keyboard-clack-1479 2026-09-09T09:37:41Z
+keyboard-clack-1479	keyboard-clack-1479.flac	[keyboard noise]	
+#ts keyboard-clack-1481 2026-09-09T09:37:41Z
+keyboard-clack-1481	keyboard-clack-1481.flac	[keyboard noise]	
+#ts keyboard-clack-1482 2026-09-09T09:37:41Z
+keyboard-clack-1482	keyboard-clack-1482.flac	[keyboard noise]	
+#ts keyboard-clack-cherry-1511 2026-09-09T10:44:15Z
+keyboard-clack-cherry-1511	keyboard-clack-cherry-1511.flac	[keyboard noise]	
+#ts keyboard-clack-cherry-1512 2026-09-09T10:44:15Z
+keyboard-clack-cherry-1512	keyboard-clack-cherry-1512.flac	[keyboard noise]	
+#ts keyboard-clack-cherry-1513 2026-09-09T10:44:15Z
+keyboard-clack-cherry-1513	keyboard-clack-cherry-1513.flac	[keyboard noise]	
+#ts keyboard-clack-flat-1508 2026-09-09T10:41:07Z
+keyboard-clack-flat-1508	keyboard-clack-flat-1508.flac	[keyboard noise]	
+#ts keyboard-clack-flat-1509 2026-09-09T10:41:07Z
+keyboard-clack-flat-1509	keyboard-clack-flat-1509.flac	[keyboard noise]	
+#ts keyboard-clack-flat-1510 2026-09-09T10:41:07Z
+keyboard-clack-flat-1510	keyboard-clack-flat-1510.flac	[keyboard noise]	
+#ts keyboard-clack-logi-1503 2026-09-09T10:39:29Z
+keyboard-clack-logi-1503	keyboard-clack-logi-1503.flac	[keyboard noise]	
+#ts keyboard-clack-logi-1504 2026-09-09T10:39:29Z
+keyboard-clack-logi-1504	keyboard-clack-logi-1504.flac	[keyboard noise]	
+#ts keyboard-clack-logi-1505 2026-09-09T10:39:29Z
+keyboard-clack-logi-1505	keyboard-clack-logi-1505.flac	[keyboard noise]	
+#ts keyboard-clack-logi-1506 2026-09-09T10:39:29Z
+keyboard-clack-logi-1506	keyboard-clack-logi-1506.flac	[keyboard noise]	
+#ts keyboard-clack-logi-1507 2026-09-09T10:39:29Z
+keyboard-clack-logi-1507	keyboard-clack-logi-1507.flac	[keyboard noise]	
+#ts mouse-noise-1514 2026-09-09T10:46:48Z
+mouse-noise-1514	mouse-noise-1514.flac	[mouse noise]	
+#ts mouse-noise-1515 2026-09-09T10:46:48Z
+mouse-noise-1515	mouse-noise-1515.flac	[mouse noise]	
+#ts mouse-noise-cherry-1520 2026-09-09T10:53:41Z
+mouse-noise-cherry-1520	mouse-noise-cherry-1520.flac	[mouse noise]	
+#ts mouse-noise-cherry-1521 2026-09-09T10:53:41Z
+mouse-noise-cherry-1521	mouse-noise-cherry-1521.flac	[mouse noise]	
+#ts mouse-noise-cherry-1522 2026-09-09T10:53:41Z
+mouse-noise-cherry-1522	mouse-noise-cherry-1522.flac	[mouse noise]	
+#ts mouse-noise-cherry-1523 2026-09-09T10:53:41Z
+mouse-noise-cherry-1523	mouse-noise-cherry-1523.flac	[mouse noise]	
+#ts mouse-noise-cherry-1524 2026-09-09T10:53:41Z
+mouse-noise-cherry-1524	mouse-noise-cherry-1524.flac	[mouse noise]	

@@ -5,11 +5,13 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"ubunatic.com/voxi/internal/audio"
 	"ubunatic.com/voxi/internal/deps"
 )
 
@@ -349,5 +351,58 @@ func TestPathsAreUnderConfigVoxiSamples(t *testing.T) {
 	want := filepath.Join(home, ".config", "voxi", "samples")
 	if SamplesDir(home) != want {
 		t.Errorf("SamplesDir = %q, want %q", SamplesDir(home), want)
+	}
+}
+
+func TestPromoteMovesSampleToPublicCorpusAsFLAC(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg not available")
+	}
+
+	home := t.TempDir()
+	publicDir := filepath.Join(t.TempDir(), "noise-samples")
+
+	if err := os.MkdirAll(SamplesDir(home), 0o700); err != nil {
+		t.Fatalf("create private samples dir: %v", err)
+	}
+	if err := audio.WriteWAVAudio(WAVPath(home, "clack-1"), bytes.Repeat([]byte{0, 1}, 8000), 16000); err != nil {
+		t.Fatalf("write fixture wav: %v", err)
+	}
+	original := Sample{Name: "clack-1", WAVFile: "clack-1.wav", Text: "[keyboard noise]", Timestamp: time.Now()}
+	if err := SaveManifest(home, []Sample{original}); err != nil {
+		t.Fatalf("save private manifest: %v", err)
+	}
+
+	if err := Promote(context.Background(), home, publicDir, "clack-1"); err != nil {
+		t.Fatalf("Promote: %v", err)
+	}
+
+	if _, err := os.Stat(WAVPath(home, "clack-1")); !os.IsNotExist(err) {
+		t.Errorf("private wav still present after promote (err=%v)", err)
+	}
+	private, err := LoadManifest(home)
+	if err != nil {
+		t.Fatalf("LoadManifest: %v", err)
+	}
+	if _, ok := Find(private, "clack-1"); ok {
+		t.Error("promoted sample still present in private manifest")
+	}
+
+	public, err := LoadManifestIn(publicDir)
+	if err != nil {
+		t.Fatalf("LoadManifestIn(public): %v", err)
+	}
+	s, ok := Find(public, "clack-1")
+	if !ok {
+		t.Fatal("promoted sample missing from public manifest")
+	}
+	if s.WAVFile != "clack-1.flac" {
+		t.Errorf("public WAVFile = %q, want clack-1.flac", s.WAVFile)
+	}
+	if s.Text != "[keyboard noise]" {
+		t.Errorf("public Text = %q, want original text preserved", s.Text)
+	}
+	if _, err := os.Stat(filepath.Join(publicDir, "clack-1.flac")); err != nil {
+		t.Errorf("public flac file missing: %v", err)
 	}
 }

@@ -5,7 +5,7 @@ now confirmed broader than keyboards (mouse noise overlaps too, see §3d); pivot
 transient-shape features, see §6
 **Priority**: P2 (Medium)
 **Category**: ASR Quality / Acoustic Gating
-**Related**: [internal/audio/audio.go](../internal/audio/audio.go) (`CheckCandidateAcoustics`), [093](093-collapse-an-immediately-repeated-trailing-sentence-clause-in-eager-transcripts.md)/[094](094-collapserepeatedtrailingclause-wrongly-deletes-a-legitimate-short-answer-that-matches-the-question-s-last-word.md) (adjacent hallucination-filtering work), `scripts/clack_features` (new analysis tool), `~/.config/voxi/samples` (private dev-sample corpus, not in git)
+**Related**: [internal/audio/audio.go](../internal/audio/audio.go) (`CheckCandidateAcoustics`), [093](093-collapse-an-immediately-repeated-trailing-sentence-clause-in-eager-transcripts.md)/[094](094-collapserepeatedtrailingclause-wrongly-deletes-a-legitimate-short-answer-that-matches-the-question-s-last-word.md) (adjacent hallucination-filtering work), `scripts/clack_features` (analysis tool, reads both corpora below), `~/.config/voxi/samples` (private dev-sample corpus, real speech, not in git), [testdata/noise-samples](../testdata/noise-samples/) (public, git-lfs-tracked, FLAC-encoded — all clack/mouse/bg-noise samples below were promoted here via `voxi feedback sample promote`, since none contain real speech)
 
 ---
 
