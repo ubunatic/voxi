@@ -1,7 +1,8 @@
 # 096 — Spectral-centroid keyboard-clack vs. speech classification (research)
 
-**Status**: Research In Progress — spectral centroid and ZCR both falsified across 4 keyboards
-(full interleaving, no separable threshold); pivoting to transient-shape features, see §3c/§6
+**Status**: Research In Progress — spectral centroid and ZCR both falsified, and the problem is
+now confirmed broader than keyboards (mouse noise overlaps too, see §3d); pivoting to
+transient-shape features, see §6
 **Priority**: P2 (Medium)
 **Category**: ASR Quality / Acoustic Gating
 **Related**: [internal/audio/audio.go](../internal/audio/audio.go) (`CheckCandidateAcoustics`), [093](093-collapse-an-immediately-repeated-trailing-sentence-clause-in-eager-transcripts.md)/[094](094-collapserepeatedtrailingclause-wrongly-deletes-a-legitimate-short-answer-that-matches-the-question-s-last-word.md) (adjacent hallucination-filtering work), `scripts/clack_features` (new analysis tool), `~/.config/voxi/samples` (private dev-sample corpus, not in git)
@@ -177,6 +178,33 @@ This is a stronger, unambiguous confirmation of §3b's falsification, not just a
 2 keyboards the gap only narrowed; with 4 keyboards there is no ordering of the samples by either
 feature that separates the two classes at all. §6's redirection toward transient-shape features
 stands, and is now the primary hypothesis rather than one option among several.
+
+## 3d. Findings (non-keyboard noise: mouse clicks/movement/lift-off on a wooden desk)
+
+Recorded 2 more noise chunks (`mouse-noise-1514/1515`) — mouse clicks, movement, and lifting a
+Lenovo vertical mouse and setting it back down on a wooden desk, not keyboard-related at all.
+Re-ran `scripts/clack_features` over the combined 26-sample corpus (relevant excerpt):
+
+```
+NAME                          ZCR    CENTROID  FRAMES
+short-eh                   0.2168    1869.2Hz      14
+mouse-noise-1515           0.2391    2231.6Hz     302
+mouse-noise-1514           0.2397    2373.9Hz     362
+keyboard-clack-cherry-1513 0.2405    2857.1Hz     162
+keyboard-clack-flat-1509   0.2509    2446.7Hz     276
+...
+short-three                0.2637    2080.3Hz      19
+...
+short-abc                  0.3189    2488.5Hz      50
+```
+
+Both mouse-noise samples (well-sampled, 302/362 frames) land squarely between `short-eh` and the
+flat-keyboard clacks — indistinguishable from speech by centroid or ZCR, same as every keyboard
+tested so far. This reframes the problem: it isn't "detect keyboard clacks specifically," it's
+"distinguish any percussive/transient non-speech noise from short speech," and spectral-content
+features (centroid, ZCR) don't do that regardless of the noise source. Strengthens the case for
+§6's pivot to transient-shape features, since those target the mechanism common to all of these
+noise sources (a sharp mechanical impact) rather than any one device's spectral signature.
 
 ## 4. Known limitation in the sample corpus
 
