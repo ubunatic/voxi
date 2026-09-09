@@ -244,3 +244,24 @@ the affected packages, and a live `make restart-service` confirming
 text buffers instead of leaking in and the notification is heard) has
 not been reproduced live. This ticket should not close until that
 check has been done.
+
+## 7. Live-verification bug found and fixed (commit `f9274f5`)
+
+Live testing surfaced a real bug in the §6 implementation: the
+recording-start hotkey (Super+X) is itself a gating-modifier press, and
+the poller observed it right around `Start()` — every session's first
+chunk saw that press as "recent" and wrongly entered buffering, firing
+the "Typing paused" notice on every recording start with no other
+modifier ever touched. Fixed with `modifier_gate.start_grace_ms`
+(default 750ms, `spec/eager.yaml`): `NoteModifierPress` now drops
+presses observed within this window of `Start()`. Live-verified via
+`make restart-service`; the user reports the notification now fires
+correctly only once the first chunk after a genuine mid-dictation
+modifier press completes, and the buffered flush on stop works as
+expected.
+
+Still open: reproducing the original overview-leak scenario itself
+(hold Super, dictate, release into the overview) has not been
+explicitly confirmed word-for-word by the user in this session, though
+their description of the fixed behavior implies the underlying
+mechanism now works end to end. Confirm explicitly before closing.
