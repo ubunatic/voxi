@@ -1,6 +1,6 @@
 # 101 — Modifier-Release Race Leaks Buffered Typing Into GNOME Overview Search Box
 
-**Status**: In Progress — Option B + Option C implemented (commit `2e818f0`), pending live verification
+**Status**: Closed — implemented and live-verified across three fix rounds; overview leak fixed, dotool feedback loop fixed, notification delay/cancel fixed
 **Priority**: P1 (High)
 **Severity**: Major
 **Category**: Spec/Design
@@ -260,8 +260,46 @@ correctly only once the first chunk after a genuine mid-dictation
 modifier press completes, and the buffered flush on stop works as
 expected.
 
-Still open: reproducing the original overview-leak scenario itself
-(hold Super, dictate, release into the overview) has not been
-explicitly confirmed word-for-word by the user in this session, though
-their description of the fixed behavior implies the underlying
-mechanism now works end to end. Confirm explicitly before closing.
+The user confirmed live: "the overview bug is gone" -- the original
+leak (hold Super, dictate, release into the GNOME overview) is fixed.
+
+## 8. Second live-verification bug: dotool's own typing fed back into gating (commit `111e749`)
+
+Live testing surfaced a second, more fundamental bug: `voxi-modifierd`'s
+`FindPhysicalKeyboards` (`internal/modifiers/modifiers.go`) watched
+*any* evdev device that looked keyboard-shaped, including dotool's own
+synthetic virtual keyboard (`/dev/input/event18 "dotool keyboard"`,
+confirmed via `systemctl status voxi-modifierd.service`'s own device
+list). dotool's Shift-down/up events for typed capitals/symbols read
+back as a fresh physical modifier press -- a feedback loop where
+voxi's own typed output triggered this ticket's buffering guard on the
+*next* chunk, with no physical key ever touched ("Typing paused"
+firing after every chunk containing a capital letter). Fixed by
+excluding devices whose name matches "dotool" (case-insensitive) from
+`FindPhysicalKeyboards`. Since `voxi-modifierd` is a separate root
+system service (see issue 089), this required `sudo make
+install-modifierd && sudo systemctl restart voxi-modifierd.service` to
+take effect -- not covered by `make restart-service`. Live-verified:
+device count dropped from 6 to 5 monitored keyboards after restart.
+
+This also incidentally reveals that "physical" modifier gating
+(089's headline safety feature) was never actually excluding
+voxi-driven synthetic input -- worth a note in 089 or a follow-up if
+other synthetic-device leaks are suspected elsewhere.
+
+## 9. Third live-verification bug: notification played after an already-flushed session (commit `6e315b8`)
+
+Live testing surfaced a UX bug: entering buffering played "Typing
+paused" immediately. Speaking a sentence and pressing the flush
+trigger (Super+X) right after it lost nothing -- buffering correctly
+held the text and the flush correctly typed it -- but the notification
+still played pointlessly after the session had already closed. Fixed
+by delaying playback (`modifier_gate.notify_delay_ms`, default 500ms)
+and canceling it in `Flush()` if the session ends before the delay
+elapses.
+
+## 10. Final live verification
+
+User confirmed the full flow works end to end: "This is a recording.
+This is the second chunk. and the last chunk when I press Super X."
+typed correctly with no spurious pause and no lost text. Closing.
