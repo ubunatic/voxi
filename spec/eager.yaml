@@ -16,3 +16,11 @@ modifier_gate:
   # normally -- blocking indefinitely on a stale press would silently drop
   # output, the same class of regression issue 083 section 8 fixed once already.
   timeout_ms: 10000
+  # Start grace: modifier presses observed within this many milliseconds of
+  # a recording session starting are ignored for staleness purposes. The
+  # recording-start hotkey itself (e.g. Super+X) is a gating-modifier press
+  # -- without this, the very press that starts the session would look
+  # "recent" to the first chunk and wrongly enter buffering every time
+  # (confirmed live: starting a recording immediately triggered "Typing
+  # paused" on the first chunk with no other modifier ever touched).
+  start_grace_ms: 750

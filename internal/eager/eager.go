@@ -874,6 +874,9 @@ type eagerSessionManager struct {
 	run      func(sessCtx context.Context, sessionID string, onCaptureStopped func())
 	recorder *telemetry.Recorder
 	now      func() time.Time
+	// modifierStartGrace: see ignorePressesBefore below. Zero (the default
+	// for tests that don't set it) disables the grace window entirely.
+	modifierStartGrace time.Duration
 
 	mu                  sync.Mutex
 	activeCancel        context.CancelFunc
@@ -882,6 +885,7 @@ type eagerSessionManager struct {
 	isRecording         bool
 	sessWg              sync.WaitGroup
 	lastModifierPressAt time.Time // zero value = no gating-modifier press seen yet this session; reset on Start/Stop
+	ignorePressesBefore time.Time // NoteModifierPress drops presses before this (issue 101 start-grace fix); set in Start
 }
 
 func newEagerSessionManager(ctx context.Context, recorder *telemetry.Recorder, run func(context.Context, string, func())) *eagerSessionManager {
@@ -908,6 +912,7 @@ func (m *eagerSessionManager) Stop() {
 	m.activeSessionID = ""
 	m.isRecording = false
 	m.lastModifierPressAt = time.Time{}
+	m.ignorePressesBefore = time.Time{}
 	m.mu.Unlock()
 
 	if cancel != nil {
@@ -932,6 +937,11 @@ func (m *eagerSessionManager) Start() {
 	m.activeStopped = stopped
 	m.activeSessionID = sessionID
 	m.isRecording = true
+	// The start hotkey (e.g. Super+X) is itself a gating-modifier press --
+	// without this grace window, the very press that starts the session
+	// looks "recent" to the first chunk and wrongly enters buffering every
+	// time (issue 101, confirmed live).
+	m.ignorePressesBefore = activatedAt.Add(m.modifierStartGrace)
 	m.sessWg.Add(1)
 	m.mu.Unlock()
 	_ = m.recorder.Record(telemetry.Event{Event: telemetry.MicActivated, Timestamp: activatedAt, SessionID: sessionID})
@@ -978,8 +988,13 @@ func (m *eagerSessionManager) Recording() bool {
 // Session-scoped: reset on every Start/Stop (issue 101).
 func (m *eagerSessionManager) NoteModifierPress(t time.Time) {
 	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.ignorePressesBefore.IsZero() && t.Before(m.ignorePressesBefore) {
+		// Within the post-Start grace window: almost certainly the start
+		// hotkey's own press, not a genuine mid-dictation modifier use.
+		return
+	}
 	m.lastModifierPressAt = t
-	m.mu.Unlock()
 }
 
 // ModifierPressedWithin reports whether the most recent gating-modifier
@@ -1101,6 +1116,11 @@ func runEagerDaemon(ctx context.Context, d deps.Dependencies, opts EagerOptions)
 	writeVoxtypeState("idle")
 	defer writeVoxtypeState("inactive")
 
+	eagerSpec, err := spec.LoadEager()
+	if err != nil {
+		return fmt.Errorf("eager: load eager spec: %w", err)
+	}
+
 	recorder := telemetry.NewRecorder(telemetry.Path(d.Getenv("XDG_DATA_HOME"), d.Getenv("HOME")))
 	var sessions *eagerSessionManager
 	sessions = newEagerSessionManager(ctx, recorder, func(sessCtx context.Context, sessionID string, onCaptureStopped func()) {
@@ -1129,6 +1149,7 @@ func runEagerDaemon(ctx context.Context, d deps.Dependencies, opts EagerOptions)
 			onCaptureStopped()
 		}, sessions)
 	})
+	sessions.modifierStartGrace = eagerSpec.ModifierStartGrace()
 
 	// Modifier-release race guard (issue 101): a lightweight poller feeds
 	// eagerSessionManager.NoteModifierPress whenever any watched physical

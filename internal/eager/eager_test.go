@@ -1003,3 +1003,40 @@ func TestModifierBufferDoesNotLeakAcrossSessions(t *testing.T) {
 		t.Fatalf("session B Flush() = (%q, %v), want (\"\", false) -- B never buffered, so nothing should be pending", pendingB, wasBufferingB)
 	}
 }
+
+// TestEagerSessionManagerIgnoresStartHotkeyModifierPress is the live-bug
+// regression test for issue 101: the recording-start hotkey (e.g. Super+X)
+// is itself a gating-modifier press, and NoteModifierPress fed by the
+// daemon's poller observes it around the moment Start() runs. Without a
+// grace window, the very first chunk of every session would see that press
+// as "recent" and wrongly enter buffering -- confirmed live (starting a
+// recording immediately triggered the "Typing paused" notice with no other
+// modifier ever touched). NoteModifierPress must drop presses observed
+// within modifierStartGrace of Start(), while still honoring a genuine
+// later press within the same session.
+func TestEagerSessionManagerIgnoresStartHotkeyModifierPress(t *testing.T) {
+	mgr := newEagerSessionManager(context.Background(), nil, func(ctx context.Context, sessionID string, onCaptureStopped func()) {
+		<-ctx.Done()
+		onCaptureStopped()
+	})
+	mgr.modifierStartGrace = 750 * time.Millisecond
+	base := time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC)
+	mgr.now = func() time.Time { return base }
+
+	mgr.Start()
+	// The start hotkey's own press, observed by the poller moments after
+	// Start() -- must be ignored.
+	mgr.NoteModifierPress(base.Add(50 * time.Millisecond))
+	if mgr.ModifierPressedWithin(time.Hour) {
+		t.Fatal("ModifierPressedWithin() = true for a press within the start-grace window, want false")
+	}
+
+	// A genuine press well after the grace window must still be honored.
+	mgr.NoteModifierPress(base.Add(2 * time.Second))
+	if !mgr.ModifierPressedWithin(time.Hour) {
+		t.Fatal("ModifierPressedWithin() = false for a press after the start-grace window, want true")
+	}
+
+	mgr.Stop()
+	mgr.Wait()
+}

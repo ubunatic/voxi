@@ -21,7 +21,8 @@ var eagerYAML []byte
 // typed immediately, since the release that ends gating can simultaneously
 // trigger unrelated WM/DE behavior that steals focus.
 type ModifierGateSpec struct {
-	TimeoutMs int `yaml:"timeout_ms"`
+	TimeoutMs    int `yaml:"timeout_ms"`
+	StartGraceMs int `yaml:"start_grace_ms"`
 }
 
 // EagerSpec is the parsed contents of spec/eager.yaml.
@@ -45,10 +46,18 @@ func parseEagerSpec(data []byte) (*EagerSpec, error) {
 	if s.ModifierGate.TimeoutMs <= 0 {
 		return nil, fmt.Errorf("spec: modifier_gate.timeout_ms must be positive")
 	}
+	if s.ModifierGate.StartGraceMs < 0 {
+		return nil, fmt.Errorf("spec: modifier_gate.start_grace_ms must not be negative")
+	}
 	return &s, nil
 }
 
 // ModifierTimeout converts ModifierGate.TimeoutMs to a time.Duration.
 func (s *EagerSpec) ModifierTimeout() time.Duration {
 	return time.Duration(s.ModifierGate.TimeoutMs) * time.Millisecond
+}
+
+// ModifierStartGrace converts ModifierGate.StartGraceMs to a time.Duration.
+func (s *EagerSpec) ModifierStartGrace() time.Duration {
+	return time.Duration(s.ModifierGate.StartGraceMs) * time.Millisecond
 }
