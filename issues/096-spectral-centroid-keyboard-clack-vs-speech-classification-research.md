@@ -1,6 +1,6 @@
 # 096 — Spectral-centroid keyboard-clack vs. speech classification (research)
 
-**Status**: Research In Progress — first-keyboard result promising, more keyboards pending
+**Status**: Research In Progress — threshold holds across 2 of N planned keyboards, more pending
 **Priority**: P2 (Medium)
 **Category**: ASR Quality / Acoustic Gating
 **Related**: [internal/audio/audio.go](../internal/audio/audio.go) (`CheckCandidateAcoustics`), [093](093-collapse-an-immediately-repeated-trailing-sentence-clause-in-eager-transcripts.md)/[094](094-collapserepeatedtrailingclause-wrongly-deletes-a-legitimate-short-answer-that-matches-the-question-s-last-word.md) (adjacent hallucination-filtering work), `scripts/clack_features` (new analysis tool), `~/.config/voxi/samples` (private dev-sample corpus, not in git)
@@ -66,6 +66,42 @@ short-yes                 0.4426    2664.8Hz      20
   ≤2664.8Hz, every clack sample is ≥3032.4Hz — a ~370Hz gap, zero overlap across all 13 samples. A
   threshold around 2850Hz would classify all 13 correctly.
 
+## 3a. Findings (second keyboard: Logitech MX Keys)
+
+Recorded 5 more clack chunks (`keyboard-clack-logi-1503/1504/1505/1506/1507`) on a Logitech MX
+Keys (first keyboard was mechanical). Re-ran `scripts/clack_features` over the combined 18-sample
+corpus:
+
+```
+NAME                          ZCR    CENTROID  FRAMES
+short-uh                   0.0833    1165.7Hz      16
+short-nah                  0.1616    1707.4Hz      21
+short-one-two              0.1704    1596.7Hz      39
+short-no-no-yes            0.2021    1775.8Hz      48
+short-eh                   0.2168    1869.2Hz      14
+short-three                0.2637    2080.3Hz      19
+short-abc                  0.3189    2488.5Hz      50
+keyboard-clack-1478        0.3421    3038.2Hz      84
+keyboard-clack-1477        0.3452    3043.9Hz     145
+keyboard-clack-logi-1506   0.3477    3291.0Hz       7
+keyboard-clack-1479        0.3485    3032.4Hz      63
+keyboard-clack-logi-1507   0.3525    2976.8Hz       3
+keyboard-clack-logi-1503   0.3538    3198.4Hz     246
+keyboard-clack-1481        0.3693    3222.3Hz      28
+keyboard-clack-logi-1505   0.3738    3296.5Hz     151
+keyboard-clack-1482        0.3980    3195.4Hz      21
+keyboard-clack-logi-1504   0.4150    3495.7Hz      32
+short-yes                  0.4426    2664.8Hz      20
+```
+
+The threshold holds: still zero overlap across both keyboards, but the gap narrows to
+~312Hz (2664.8Hz `short-yes` to 2976.8Hz `keyboard-clack-logi-1507`, down from ~370Hz with one
+keyboard). Note `keyboard-clack-logi-1507` used only 3 non-silent frames — a very short/quiet
+clack — so that centroid estimate is noisier than the others; more Logi samples would firm it up.
+A ~2850Hz threshold still classifies all 18 samples correctly, but the shrinking margin as more
+keyboards are added is exactly the risk flagged in §5 — worth tracking whether it keeps narrowing
+or stabilizes.
+
 ## 4. Known limitation in the sample corpus
 
 `voxi feedback sample save-chunk`'s interactive prompt has no way to save a literal empty ground
@@ -90,9 +126,9 @@ accuracy scoring without either a real non-speech convention or a `--text` overr
 
 ## 6. Next steps
 
-- Record dev-sample sets on 2-3 more physical keyboards (in progress — user recording more) to
-  test whether the ~2850Hz threshold (or spectral centroid as a feature at all) holds up across
-  keyboards, or whether it's specific to this one's spectral signature.
+- Record dev-sample sets on 1-2 more physical keyboards (2 of N done: mechanical, Logitech MX
+  Keys — in progress, user recording more) to test whether the ~2850Hz threshold (or spectral
+  centroid as a feature at all) keeps holding, or whether the margin keeps shrinking toward zero.
 - If it holds: wire spectral centroid into `CheckCandidateAcoustics` as an additional rejection
   reason (e.g. `high_spectral_centroid`), gated so it only fires on chunks already borderline on
   the existing RMS/voiced-ratio checks — not as a blanket replacement for them.
