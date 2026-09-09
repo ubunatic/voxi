@@ -1,7 +1,7 @@
 # 096 — Spectral-centroid keyboard-clack vs. speech classification (research)
 
-**Status**: Research In Progress — spectral centroid alone falsified on a 3rd keyboard (flat/chiclet
-keys); needs a second feature or different approach, see §3b
+**Status**: Research In Progress — spectral centroid and ZCR both falsified across 4 keyboards
+(full interleaving, no separable threshold); pivoting to transient-shape features, see §3c/§6
 **Priority**: P2 (Medium)
 **Category**: ASR Quality / Acoustic Gating
 **Related**: [internal/audio/audio.go](../internal/audio/audio.go) (`CheckCandidateAcoustics`), [093](093-collapse-an-immediately-repeated-trailing-sentence-clause-in-eager-transcripts.md)/[094](094-collapserepeatedtrailingclause-wrongly-deletes-a-legitimate-short-answer-that-matches-the-question-s-last-word.md) (adjacent hallucination-filtering work), `scripts/clack_features` (new analysis tool), `~/.config/voxi/samples` (private dev-sample corpus, not in git)
@@ -144,6 +144,39 @@ from — essentially silent, likely already caught by the existing `low_energy_t
 This falsifies §3/§3a's working hypothesis that spectral centroid alone is sufficient. §5/§6
 updated accordingly — a single-feature threshold on centroid is not a viable general solution;
 either a second feature is needed alongside it, or a different approach entirely.
+
+## 3c. Findings (fourth keyboard: quieter Cherry-switch board) — confirms full interleaving
+
+Recorded 3 more clack chunks (`keyboard-clack-cherry-1511/1512/1513`, a quieter Cherry-switch
+board). Re-ran `scripts/clack_features` over the combined 24-sample corpus (relevant excerpt,
+sorted by centroid):
+
+```
+NAME                          ZCR    CENTROID  FRAMES
+short-eh                   0.2168    1869.2Hz      14
+keyboard-clack-cherry-1513 0.2405    2857.1Hz     162
+keyboard-clack-flat-1509   0.2509    2446.7Hz     276
+keyboard-clack-cherry-1512 0.2525    2854.0Hz     408
+keyboard-clack-flat-1510   0.2549    2446.7Hz     226
+short-three                0.2637    2080.3Hz      19
+keyboard-clack-cherry-1511 0.2837    2862.2Hz     358
+short-abc                  0.3189    2488.5Hz      50
+keyboard-clack-1478        0.3421    3038.2Hz      84
+...
+short-yes                  0.4426    2664.8Hz      20
+```
+
+Both features now fully interleave rather than cluster: Cherry clacks (well-sampled, 162-408
+frames) sit at ~2854-2862Hz — *above* `short-yes` (2664.8Hz) — while the flat-keyboard clacks sit
+at 2446.7Hz — *below* `short-abc` (2488.5Hz). Sorted by centroid, clack and speech samples now
+alternate rather than form two separable groups; no single threshold anywhere in the observed
+range classifies all 24 samples correctly. ZCR shows the same overlap (Cherry clacks 0.24-0.28
+sit directly on top of `short-eh`/`short-three`/`short-abc`).
+
+This is a stronger, unambiguous confirmation of §3b's falsification, not just a repeat of it: with
+2 keyboards the gap only narrowed; with 4 keyboards there is no ordering of the samples by either
+feature that separates the two classes at all. §6's redirection toward transient-shape features
+stands, and is now the primary hypothesis rather than one option among several.
 
 ## 4. Known limitation in the sample corpus
 
