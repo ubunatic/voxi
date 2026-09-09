@@ -91,14 +91,23 @@ implementation, not a prescribed design:
   `internal/listutil` or similar), extending `internal/chunks` and having `feedback` depend on it
   (already the case today — `internal/feedback` imports `internal/chunks` for `save-chunk`), or
   somewhere under `internal/deps`?
-- **Does `Sample` need new stored acoustic-stats fields** (duration, RMS, etc., populated at
-  `record`/`save-chunk`/`promote` time — chunks already compute this via `audio.AnalyzePCM`; is
-  that reusable for samples?), **or are stats computed on the fly at list time** by reading the
-  WAV/FLAC audio file per sample? On-the-fly computation is complicated by the corpus now being
-  split public/private with public entries FLAC-encoded (per issue 096) — decoding FLAC at list
-  time mirrors what `scripts/clack_features` already does this session via a shelled-out `ffmpeg`;
-  is that an acceptable dependency for a CLI command outside `scripts/`, or does listing need a
-  different approach (e.g. only showing acoustic stats for samples that have them precomputed)?
+- ~~Does `Sample` need new stored acoustic-stats fields, or are stats computed on the fly at list
+  time?~~ **Resolved by the user: on-the-fly.** No new stored fields on `Sample`; compute
+  duration/RMS/sparkline etc. by reading the WAV/FLAC audio file per sample at list time, the same
+  way `scripts/clack_features` already decodes FLAC via a shelled-out `ffmpeg` this session. That
+  makes `ffmpeg` an accepted runtime dependency for this CLI path too (already true for
+  `sample promote`, which shells out to `ffmpeg` to FLAC-encode).
+- **New idea from the user, not in the original request**: a `--process` flag (or folded into
+  `--full`) that actually runs each listed sample's audio through an ASR engine — explicitly
+  floated as "run it against cohere" (`cohereTranscribeEngine`/`crispasr`, see
+  `internal/eager/cohere.go`) — and shows the live transcription result alongside the stored
+  ground-truth `Text`, rather than only ever showing the stored text. This turns `sample list
+  --process` into a lightweight on-demand accuracy spot-check across the corpus (stored expected
+  vs. fresh actual), distinct from the existing `scripts/speech_context_bench` batch-benchmarking
+  tool. Open sub-questions: does this reuse `speech_context_bench`'s transcription invocation path,
+  or `internal/eager`'s directly; does it run against every configured model/engine or just one
+  (flag-selectable?); is a WER/diff shown per row, or just the two transcripts side by side; what
+  happens to `--short` output width once a second transcript column is added.
 - **Exact shape of `--all`/`--full`/`--short`.** What does `--short` vs. `--full` actually show
   (a compact table vs. a `chunks`-list-style rich table with sparkline/stats columns, or `--full`
   meaning full per-sample detail akin to `chunks show`)? Does `--all` mean "merge private +
@@ -120,6 +129,12 @@ implementation, not a prescribed design:
   corpora, clearly distinguishing which source each row came from.
 - `voxi feedback sample list --full` / `--short` (short is default) controls verbosity as
   described above.
+- Acoustic/timeline stats shown in the table are computed on the fly from the sample's audio file
+  at list time (WAV or FLAC), not stored on `Sample`.
 - `chunks list` and `sample list` share the table-rendering implementation rather than each
   maintaining independent formatting code — the specific extraction is left to the implementer per
   the open questions in §3.
+- `--process` (or a `--full`-gated variant) runs each listed sample through an ASR engine
+  (starting point: cohere-transcribe) and surfaces the fresh transcript next to the stored
+  ground-truth text — exact scope (which engine(s), diff/WER display) left to the open questions
+  in §3.
