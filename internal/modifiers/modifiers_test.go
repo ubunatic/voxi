@@ -171,3 +171,28 @@ func TestModifierReader(t *testing.T) {
 		}
 	})
 }
+
+// TestIsDotoolDeviceExcludesOwnSyntheticKeyboard is the issue 101 live-bug
+// regression test: dotool's own virtual keyboard (voxi's synthetic typing
+// injector, see internal/typing) was previously watched by
+// FindPhysicalKeyboards alongside real keyboards, so dotool's own
+// Shift-down/up events for typed capitals/symbols read back as a fresh
+// physical modifier press -- a feedback loop where voxi's own typed output
+// triggered the modifier-release buffering guard with no key ever touched.
+func TestIsDotoolDeviceExcludesOwnSyntheticKeyboard(t *testing.T) {
+	cases := []struct {
+		name string
+		want bool
+	}{
+		{"dotool keyboard", true},
+		{"Dotool Keyboard", true},
+		{"input-remapper keyboard", false},
+		{"Fnatic Gear Fnatic Gear miniSTREAK Keyboard", false},
+		{"Yubico YubiKey OTP+FIDO+CCID", false},
+	}
+	for _, c := range cases {
+		if got := isDotoolDevice(c.name); got != c.want {
+			t.Errorf("isDotoolDevice(%q) = %v, want %v", c.name, got, c.want)
+		}
+	}
+}

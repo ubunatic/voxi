@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"syscall"
 	"time"
 	"unsafe"
@@ -312,6 +313,15 @@ func isBitSetInSlice(buf []byte, bit int) bool {
 	return (buf[byteIdx] & (1 << bitIdx)) != 0
 }
 
+// isDotoolDevice reports whether an evdev device name looks like dotool's
+// own synthetic virtual keyboard, which "physical" modifier gating must
+// never watch (see the FindPhysicalKeyboards call site). Matches by
+// substring, case-insensitive, rather than an exact "dotool keyboard"
+// string, since dotool versions/configurations can vary the exact name.
+func isDotoolDevice(name string) bool {
+	return strings.Contains(strings.ToLower(name), "dotool")
+}
+
 // FindPhysicalKeyboards scans /dev/input/event* and filters for physical keyboards via EVIOCGBIT.
 func FindPhysicalKeyboards() ([]*evdevKeyboardDevice, []string, error) {
 	matches, err := filepath.Glob("/dev/input/event*")
@@ -342,6 +352,20 @@ func FindPhysicalKeyboards() ([]*evdevKeyboardDevice, []string, error) {
 			name := "Keyboard"
 			if err := evdevIoctl(fd, evdevEviocgname(len(nameBuf)), unsafe.Pointer(&nameBuf[0])); err == nil {
 				name = string(bytes.TrimRight(nameBuf[:], "\x00"))
+			}
+			if isDotoolDevice(name) {
+				// dotool is voxi's own synthetic typing-injection tool
+				// (see internal/typing) -- its virtual keyboard reports its
+				// own key-down/key-up events, including Shift for typed
+				// capitals/symbols. Treating that as a physical modifier
+				// press creates a feedback loop where voxi's own typed
+				// output looks like a fresh gating-modifier press to
+				// itself (issue 101 live verification: every chunk after
+				// one containing a capital letter wrongly entered
+				// buffering with no physical key ever touched). "Physical"
+				// modifier gating must exclude devices voxi itself drives.
+				_ = syscall.Close(fd)
+				continue
 			}
 			keyboards = append(keyboards, &evdevKeyboardDevice{
 				path: path,
