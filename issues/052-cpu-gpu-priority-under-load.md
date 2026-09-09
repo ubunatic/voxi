@@ -1,6 +1,6 @@
 # 052: CPU and GPU Scheduling Priority Research for Responsive Dictation Under Load
 
-**Status**: Open — Research
+**Status**: Closed — Folded into 088 — same launch path (systemd voxi-agent.service), same question (scheduling priority under load). Research questions carried into 088's investigation section
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Research
