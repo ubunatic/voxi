@@ -136,6 +136,17 @@ rather than actively streaming. Candidates, all open and unevaluated:
   "transcribe-stop notification" and "modifier interceptor" — neither
   committed, listed here as terms to search for/reuse if either direction
   is prototyped.
+- **Spoken (TTS) notification** — a variant of the non-injection channel
+  above, verified feasible in this session: `spd-say` (speech-dispatcher)
+  is installed and working, with `rhvoice` + `mbrola`/`mbrola-en1`
+  installed and configured as a noticeably better-sounding voice than the
+  stock `espeak-ng` module (enabled via a user-level
+  `~/.config/speech-dispatcher/speechd.conf` override, no system file
+  touched; `rhvoice` set as `DefaultModule`). A short spoken cue (e.g.
+  "typing paused, press Super+X to finish") avoids the injection-target
+  problem entirely since it never writes into the focused window. Tradeoff
+  to evaluate: audible interruption may be unwanted in some environments
+  (open office, calls) compared to a silent visual cue.
 
 ## 5. Non-Goals For This Ticket
 
