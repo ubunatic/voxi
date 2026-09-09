@@ -1,6 +1,6 @@
 # 089 — `voxi-modifierd` not installed on this dev machine (modifier gating currently inactive)
 
-**Status**: Open
+**Status**: Closed — installed and verified live: voxi-modifierd active/enabled, mods: [Alt] shown in voxi monitor
 **Priority**: P2 (Medium)
 **Severity**: Bug (safety feature inactive, local environment)
 **Category**: Operations / Local Environment
