@@ -147,6 +147,21 @@ rather than actively streaming. Candidates, all open and unevaluated:
   problem entirely since it never writes into the focused window. Tradeoff
   to evaluate: audible interruption may be unwanted in some environments
   (open office, calls) compared to a silent visual cue.
+  - **Simplification, revised during design discussion**: skip live TTS
+    synthesis for the initial implementation. Doing the general dynamic
+    case (detect which TTS system/voice is installed, compose the message
+    text including the actual configured hotkey, invoke the right engine)
+    is real scope — implementation effort disproportionate to what's
+    needed to close this ticket. Instead, ship **one pre-recorded WAV
+    clip** ("Typing paused. Stop recording to finish.") committed to the
+    repo and embedded in the `voxi` binary (Go `embed`), played back with
+    a simple audio player call — no TTS engine dependency, no runtime
+    detection, no per-invocation synthesis latency, fully self-contained.
+    English-only for this ticket; the fixed wording sidesteps needing to
+    interpolate the user's actual configured shortcut into the phrase.
+    Multi-language audio-pack support (compressed, git-tracked WAV/FLAC
+    per language) is out of scope here — see the follow-up ticket filed
+    for that.
 
 ## 5. Non-Goals For This Ticket
 
