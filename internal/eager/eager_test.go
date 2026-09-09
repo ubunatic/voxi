@@ -190,7 +190,7 @@ func TestCaptureTelemetryCorrelatesChunkThroughTyping(t *testing.T) {
 		Stdout:   io.Discard,
 	}
 	opts := EagerOptions{ThresholdRMS: 500, SilenceMs: 60, PreRollMs: 40, MinSpeechMs: 40, MaxWindowMs: 1000, TypeOutput: true, Model: "small.en", SpeechContext: false}
-	if err := runEagerCaptureSession(context.Background(), d, opts, tmp, "cat", []string{rawPath}, true, "session-correlation", recorder, nil); err != nil {
+	if err := runEagerCaptureSession(context.Background(), d, opts, tmp, "cat", []string{rawPath}, true, "session-correlation", recorder, nil, nil); err != nil {
 		t.Fatalf("runEagerCaptureSession: %v", err)
 	}
 
@@ -265,7 +265,7 @@ func TestPathologicalTranscriptProducesZeroInjection(t *testing.T) {
 		Stdout:   io.Discard,
 	}
 	opts := EagerOptions{ThresholdRMS: 500, SilenceMs: 60, PreRollMs: 40, MinSpeechMs: 40, MaxWindowMs: 1000, TypeOutput: true, Model: "small.en"}
-	if err := runEagerCaptureSession(context.Background(), d, opts, tmp, "cat", []string{rawPath}, true, "pathological-session", nil, nil); err != nil {
+	if err := runEagerCaptureSession(context.Background(), d, opts, tmp, "cat", []string{rawPath}, true, "pathological-session", nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := injections.Load(); got != 0 {
@@ -322,7 +322,7 @@ func TestStopCancelsInflightTranscriptionBeforeInjection(t *testing.T) {
 	done := make(chan error, 1)
 	opts := EagerOptions{ThresholdRMS: 500, SilenceMs: 60, PreRollMs: 40, MinSpeechMs: 40, MaxWindowMs: 1000, TypeOutput: true, Model: "small.en"}
 	go func() {
-		done <- runEagerCaptureSession(ctx, d, opts, tmp, "cat", []string{rawPath}, true, "stopped-session", nil, nil)
+		done <- runEagerCaptureSession(ctx, d, opts, tmp, "cat", []string{rawPath}, true, "stopped-session", nil, nil, nil)
 	}()
 	deadline := time.Now().Add(2 * time.Second)
 	for {
@@ -423,7 +423,7 @@ func TestStopFlushesTrailingUtteranceForTranscriptionAndTyping(t *testing.T) {
 	done := make(chan error, 1)
 	opts := EagerOptions{ThresholdRMS: 500, SilenceMs: 60, PreRollMs: 40, MinSpeechMs: 40, MaxWindowMs: 1000, TypeOutput: true, Model: "small.en"}
 	go func() {
-		done <- runEagerCaptureSession(ctx, d, opts, tmp, "cat", []string{fifoPath}, true, "flushed-session", nil, nil)
+		done <- runEagerCaptureSession(ctx, d, opts, tmp, "cat", []string{fifoPath}, true, "flushed-session", nil, nil, nil)
 	}()
 
 	select {
@@ -633,7 +633,7 @@ func TestRunEagerCaptureSessionSignalsCaptureStoppedOnEarlyReturn(t *testing.T) 
 	go func() {
 		done <- runEagerCaptureSession(ctx, d, opts, t.TempDir(), "sleep", []string{"5"}, true, "test-session", nil, func() {
 			stoppedCount.Add(1)
-		})
+		}, nil)
 	}()
 
 	select {
@@ -838,5 +838,168 @@ func TestRunEagerDaemonReachesReadyWithoutVoxtype(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("runEagerDaemon did not shut down promptly after context cancellation")
+	}
+}
+
+// TestModifierBufferEntersAndFlushesWithinTimeout verifies issue 101's
+// staleness gate: a gating-modifier press recorded within the timeout window
+// causes modifierBuffer.EnterIfNeeded to enter (and stay in) buffering mode,
+// and that buffered text is exactly what Flush later returns.
+func TestModifierBufferEntersAndFlushesWithinTimeout(t *testing.T) {
+	mgr := newEagerSessionManager(context.Background(), nil, func(context.Context, string, func()) {})
+	now := time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC)
+	mgr.now = func() time.Time { return now }
+
+	mgr.NoteModifierPress(now)
+	now = now.Add(2 * time.Second)
+
+	var buf modifierBuffer
+	buffer, justEntered := buf.EnterIfNeeded(mgr, 10*time.Second)
+	if !buffer || !justEntered {
+		t.Fatalf("EnterIfNeeded() = (%v, %v), want (true, true) within the timeout window", buffer, justEntered)
+	}
+	buf.Append("hello ")
+
+	// A later chunk, even once the original press is nearly stale, must stay
+	// buffered (sticky) and must not re-trigger the notification.
+	now = now.Add(5 * time.Second)
+	buffer, justEntered = buf.EnterIfNeeded(mgr, 10*time.Second)
+	if !buffer || justEntered {
+		t.Fatalf("EnterIfNeeded() = (%v, %v), want (true, false) once already buffering (sticky)", buffer, justEntered)
+	}
+	buf.Append("world ")
+
+	pending, wasBuffering := buf.Flush()
+	if !wasBuffering {
+		t.Fatal("Flush() wasBuffering = false, want true")
+	}
+	if want := "hello world "; pending != want {
+		t.Fatalf("Flush() pending = %q, want %q", pending, want)
+	}
+	// Flush is called exactly once per session, right before
+	// runEagerCaptureSession returns (see its own doc comment) -- there is
+	// no "next chunk in the same session" to re-check afterward; a fresh
+	// session gets its own fresh modifierBuffer instead (see
+	// TestModifierBufferDoesNotLeakAcrossSessions).
+}
+
+// TestModifierBufferIgnoresStalePress verifies the other half of issue 101's
+// staleness gate: a modifier press older than the timeout (e.g. unrelated
+// hotkey use earlier in the session) must not trigger buffering -- blocking
+// indefinitely on a stale press would silently drop output, the same class
+// of regression issue 083 section 8 fixed once already for a different
+// trigger.
+func TestModifierBufferIgnoresStalePress(t *testing.T) {
+	mgr := newEagerSessionManager(context.Background(), nil, func(context.Context, string, func()) {})
+	now := time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC)
+	mgr.now = func() time.Time { return now }
+
+	mgr.NoteModifierPress(now)
+	now = now.Add(11 * time.Second) // just past a 10s timeout
+
+	var buf modifierBuffer
+	if buffer, justEntered := buf.EnterIfNeeded(mgr, 10*time.Second); buffer || justEntered {
+		t.Fatalf("EnterIfNeeded() = (%v, %v), want (false, false) for a stale press", buffer, justEntered)
+	}
+}
+
+// TestEagerSessionManagerModifierPressResetOnStartStop verifies issue 101's
+// session-scoping requirement: a modifier press from one session must never
+// leak into a later one. eagerSessionManager.Start() always calls Stop()
+// first and rebuilds state from scratch (see activeSessionID etc. above) --
+// lastModifierPressAt must reset the same way, not just conceptually
+// "expire" via the timeout.
+func TestEagerSessionManagerModifierPressResetOnStartStop(t *testing.T) {
+	captureStarted := make(chan struct{}, 2)
+	mgr := newEagerSessionManager(context.Background(), nil, func(ctx context.Context, sessionID string, onCaptureStopped func()) {
+		captureStarted <- struct{}{}
+		<-ctx.Done()
+		onCaptureStopped()
+	})
+
+	mgr.Start()
+	<-captureStarted
+	mgr.NoteModifierPress(time.Now())
+	if !mgr.ModifierPressedWithin(time.Hour) {
+		t.Fatal("expected a recent press to be observed before Stop()")
+	}
+
+	mgr.Stop()
+	mgr.Wait()
+
+	if mgr.ModifierPressedWithin(time.Hour) {
+		t.Fatal("after Stop(), ModifierPressedWithin() = true, want false -- state must not survive Stop")
+	}
+
+	mgr.Start()
+	<-captureStarted
+	if mgr.ModifierPressedWithin(time.Hour) {
+		t.Fatal("a new session must not inherit a modifier press from a prior session")
+	}
+	mgr.Stop()
+	mgr.Wait()
+}
+
+// TestModifierBufferDoesNotLeakAcrossSessions is the issue-101-review
+// regression test: eagerSessionManager is a single long-lived object shared
+// across a rapid Stop-then-Start, and a superseded session's trailing chunk
+// can still reach the buffering decision (and flush) after the manager has
+// already moved on to a new session. Since modifierBuffer is local to each
+// runEagerCaptureSession call rather than a field on the shared manager (see
+// its doc comment), two independent buffers against the *same* manager must
+// never see each other's buffered text.
+func TestModifierBufferDoesNotLeakAcrossSessions(t *testing.T) {
+	captureStarted := make(chan struct{}, 2)
+	mgr := newEagerSessionManager(context.Background(), nil, func(ctx context.Context, sessionID string, onCaptureStopped func()) {
+		captureStarted <- struct{}{}
+		<-ctx.Done()
+		onCaptureStopped()
+	})
+
+	// Session A: a real Start(), a modifier press arms buffering, and A
+	// buffers a trailing chunk that models still being "in flight" (not yet
+	// flushed) when the session is superseded -- Stop() returns as soon as
+	// capture stops (issue 057), without waiting for A's transcription
+	// worker, so this exactly mirrors production timing.
+	mgr.Start()
+	<-captureStarted
+	mgr.NoteModifierPress(time.Now())
+	var sessionA modifierBuffer
+	if buffer, _ := sessionA.EnterIfNeeded(mgr, 10*time.Second); !buffer {
+		t.Fatal("expected session A to enter buffering")
+	}
+	sessionA.Append("leftover from session A ")
+	mgr.Stop()
+	mgr.Wait()
+
+	// Session B: a real Start() resets lastModifierPressAt (see
+	// TestEagerSessionManagerModifierPressResetOnStartStop), so B's own
+	// modifierBuffer -- constructed fresh here, exactly as
+	// runEagerCaptureSession does per call -- must not buffer without a new
+	// press of its own.
+	mgr.Start()
+	<-captureStarted
+	var sessionB modifierBuffer
+	if buffer, _ := sessionB.EnterIfNeeded(mgr, 10*time.Second); buffer {
+		t.Fatal("session B must not inherit session A's buffering state")
+	}
+	// Not buffering (per production usage, text is typed immediately, not
+	// appended, when EnterIfNeeded returns false) -- B's buffer stays empty.
+	mgr.Stop()
+	mgr.Wait()
+
+	// A's trailing chunk finally flushes (its own runEagerCaptureSession
+	// reaching transWg.Wait(), which can happen after B has already started)
+	// -- must return only A's text, never mixed with or replaced by B's.
+	pendingA, wasBufferingA := sessionA.Flush()
+	if !wasBufferingA || pendingA != "leftover from session A " {
+		t.Fatalf("session A Flush() = (%q, %v), want (%q, true)", pendingA, wasBufferingA, "leftover from session A ")
+	}
+
+	// B's own text was never buffered (per the EnterIfNeeded check above) --
+	// confirm B's buffer holds nothing, uncontaminated by A's leftover text.
+	pendingB, wasBufferingB := sessionB.Flush()
+	if wasBufferingB || pendingB != "" {
+		t.Fatalf("session B Flush() = (%q, %v), want (\"\", false) -- B never buffered, so nothing should be pending", pendingB, wasBufferingB)
 	}
 }

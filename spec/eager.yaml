@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=schemas/eager.schema.json
+#
+# Eager pipeline injection-safety tuning. See docs/Spec.md — internal/eager
+# must read these values from here rather than hardcoding them.
+
+# Modifier-release race guard (issue 101): while a gating modifier (Super,
+# etc.) is held, eager output is buffered instead of typed immediately, since
+# the physical key-release that ends modifier-gating can simultaneously
+# trigger unrelated WM/DE behavior (e.g. GNOME's Activities overview on a
+# bare Super release) that steals focus before the buffered text lands.
+modifier_gate:
+  # Staleness window: only buffer/pause when the most recent gating-modifier
+  # press is within this many milliseconds of a chunk becoming ready to
+  # type. A modifier press older than this (e.g. unrelated hotkey use
+  # earlier in the same session) is treated as stale and typing proceeds
+  # normally -- blocking indefinitely on a stale press would silently drop
+  # output, the same class of regression issue 083 section 8 fixed once already.
+  timeout_ms: 10000

@@ -17,3 +17,7 @@
 # Private local speech-context benchmark recordings.
 testdata/speech-context/*.wav
 *.lock
+
+# Committed source asset, not a scratch recording (issue 101): embedded via
+# Go //go:embed and played back as the modifier-release-buffering notice.
+!internal/eager/notify/typing-paused.wav

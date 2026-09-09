@@ -21,8 +21,10 @@ import (
 	"ubunatic.com/voxi/internal/audio"
 	"ubunatic.com/voxi/internal/chunks"
 	"ubunatic.com/voxi/internal/deps"
+	"ubunatic.com/voxi/internal/eager/notify"
 	"ubunatic.com/voxi/internal/feedback"
 	"ubunatic.com/voxi/internal/history"
+	"ubunatic.com/voxi/internal/modifiers"
 	"ubunatic.com/voxi/internal/speechcontext"
 	"ubunatic.com/voxi/internal/telemetry"
 	"ubunatic.com/voxi/internal/typing"
@@ -274,7 +276,11 @@ func RunEagerDictation(ctx context.Context, d deps.Dependencies, opts EagerOptio
 	defer func() {
 		_ = recorder.Record(telemetry.Event{Event: telemetry.MicDeactivated, Timestamp: time.Now(), SessionID: sessionID})
 	}()
-	return runEagerCaptureSession(ctx, d, opts, tmpDir, recCmdName, recArgs, false, sessionID, recorder, nil)
+	// sessions is nil: Super+X-triggered buffering/flush (issue 101) is
+	// scoped to the daemon path only, since the flush trigger is meaningless
+	// without the daemon's socket/signal listener. This standalone CLI
+	// invocation keeps its existing immediate-type behavior.
+	return runEagerCaptureSession(ctx, d, opts, tmpDir, recCmdName, recArgs, false, sessionID, recorder, nil, nil)
 }
 
 // runEagerCaptureSession runs one audio-capture + sequential-transcription
@@ -286,7 +292,7 @@ func RunEagerDictation(ctx context.Context, d deps.Dependencies, opts EagerOptio
 // know "is it safe to start a new session" without waiting for a stale
 // transcription to finish should wait on onCaptureStopped rather than on this
 // function's return (see issue 057 and eagerSessionManager below).
-func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts EagerOptions, tmpDir string, recCmdName string, recArgs []string, isDaemon bool, sessionID string, recorder *telemetry.Recorder, onCaptureStopped func()) error {
+func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts EagerOptions, tmpDir string, recCmdName string, recArgs []string, isDaemon bool, sessionID string, recorder *telemetry.Recorder, onCaptureStopped func(), sessions *eagerSessionManager) error {
 	// Guarantee onCaptureStopped fires exactly once no matter which of this
 	// function's many return paths is taken -- including the early
 	// `return fmt.Errorf(...)` guards below (model spec load failure, audio
@@ -347,6 +353,11 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 	if err != nil {
 		return fmt.Errorf("eager: load model spec: %w", err)
 	}
+	eagerSpec, err := spec.LoadEager()
+	if err != nil {
+		return fmt.Errorf("eager: load eager spec: %w", err)
+	}
+	modifierTimeout := eagerSpec.ModifierTimeout()
 	modelName := opts.Model
 	if modelName == "" {
 		modelName = modelSpec.DefaultModel
@@ -428,6 +439,9 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 	var transWg sync.WaitGroup
 	var fullTranscript strings.Builder
 	var transLock sync.Mutex
+	// eagerBuf is local to this session's worker (see modifierBuffer's own
+	// docs for why it must not live on eagerSessionManager).
+	var eagerBuf modifierBuffer
 	utteranceCount := 0
 
 	writeVoxtypeState("recording")
@@ -508,7 +522,9 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 			text = applyEngineReplacements(engine, text, replacements)
 			accepted := acceptTranscript(err, text, stopWords, silenceArtifacts)
 			safety := asr.CheckTranscriptSafety(text, modelSpec.TranscriptSafety)
-			if safety.Reason != "" { accepted = false }
+			if safety.Reason != "" {
+				accepted = false
+			}
 			wordCount := len(strings.Fields(text))
 			transSuccess := err == nil
 			transError := ""
@@ -519,7 +535,9 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 			rejReason := ""
 			if !accepted {
 				rejReason = rejectionReason(err, rawText, text, stopWords, silenceArtifacts)
-				if safety.Reason != "" { rejReason = safety.Reason }
+				if safety.Reason != "" {
+					rejReason = safety.Reason
+				}
 			}
 
 			rtf := 0.0
@@ -578,23 +596,47 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 				}
 
 				if opts.TypeOutput {
-					typeStart := time.Now()
-					_ = recorder.Record(telemetry.Event{Event: telemetry.TypingStarted, Timestamp: typeStart, SessionID: sessionID, ChunkID: chunkID, ChunkIndex: job.Index})
-					typeCtx := ctx
-					if job.Final {
-						typeCtx = context.Background()
+					// Modifier-release race guard (issue 101): buffer instead of
+					// typing immediately if a gating modifier was pressed
+					// recently. Buffering is sticky for the rest of the session
+					// once entered -- only an explicit stop (see the flush after
+					// transWg.Wait() below) releases it -- since a modifier press
+					// going stale mid-buffer does not retroactively make it safe
+					// to type into whatever now has focus.
+					if buffer, justEntered := eagerBuf.EnterIfNeeded(sessions, modifierTimeout); buffer {
+						eagerBuf.Append(text + " ")
+						if justEntered {
+							go func() {
+								if err := notify.PlayTypingPaused(context.Background(), d); err != nil {
+									// Buffering itself still protects against
+									// injection with no player available; log so
+									// the missing cue is discoverable (journalctl
+									// --user -u voxi-agent.service) instead of a
+									// silent dead-end with no hint to press
+									// Super+X.
+									fmt.Fprintf(d.Stdout, "Warning: cannot play typing-paused notification: %v\n", err)
+								}
+							}()
+						}
+					} else {
+						typeStart := time.Now()
+						_ = recorder.Record(telemetry.Event{Event: telemetry.TypingStarted, Timestamp: typeStart, SessionID: sessionID, ChunkID: chunkID, ChunkIndex: job.Index})
+						typeCtx := ctx
+						if job.Final {
+							typeCtx = context.Background()
+						}
+						typeErr := typing.TypeText(typeCtx, d, text+" ")
+						typeEnd := time.Now()
+						typeSuccess := typeErr == nil
+						typeError := ""
+						if typeErr != nil {
+							typeError = typeErr.Error()
+						}
+						_ = recorder.Record(telemetry.Event{Event: telemetry.TypingComplete, Timestamp: typeEnd, SessionID: sessionID, ChunkID: chunkID, ChunkIndex: job.Index, Success: &typeSuccess, Error: typeError})
+						chunkMeta.TypingStartedAt = typeStart
+						chunkMeta.TypingEndedAt = typeEnd
+						_, _ = chunkBuf.Update(chunkMeta)
 					}
-					typeErr := typing.TypeText(typeCtx, d, text+" ")
-					typeEnd := time.Now()
-					typeSuccess := typeErr == nil
-					typeError := ""
-					if typeErr != nil {
-						typeError = typeErr.Error()
-					}
-					_ = recorder.Record(telemetry.Event{Event: telemetry.TypingComplete, Timestamp: typeEnd, SessionID: sessionID, ChunkID: chunkID, ChunkIndex: job.Index, Success: &typeSuccess, Error: typeError})
-					chunkMeta.TypingStartedAt = typeStart
-					chunkMeta.TypingEndedAt = typeEnd
-					_, _ = chunkBuf.Update(chunkMeta)
 				}
 
 				if historyPath != "" {
@@ -728,6 +770,17 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 	close(jobChan)
 	transWg.Wait()
 
+	// Flush any buffered output now that this session's own worker has fully
+	// drained (issue 101): reaching this point -- whether via an explicit
+	// Super+X stop or this session simply being superseded by a new one --
+	// is what makes flushing safe, since no more chunks for *this* session
+	// can still be queued. eagerBuf is this call's own local buffer (see its
+	// docs), so a rapid Stop-then-Start never mixes this flush with a
+	// different, now-current session's buffer.
+	if pending, wasBuffering := eagerBuf.Flush(); wasBuffering && pending != "" {
+		_ = typing.TypeText(context.Background(), d, pending)
+	}
+
 	if !isDaemon {
 		fmt.Fprintln(d.Stdout, "\n\n── Dictation Complete ──────────────────────────────────────────")
 		fmt.Fprintf(d.Stdout, "Total Utterances Transcribed: %d\n", utteranceCount)
@@ -822,12 +875,13 @@ type eagerSessionManager struct {
 	recorder *telemetry.Recorder
 	now      func() time.Time
 
-	mu              sync.Mutex
-	activeCancel    context.CancelFunc
-	activeStopped   chan struct{}
-	activeSessionID string
-	isRecording     bool
-	sessWg          sync.WaitGroup
+	mu                  sync.Mutex
+	activeCancel        context.CancelFunc
+	activeStopped       chan struct{}
+	activeSessionID     string
+	isRecording         bool
+	sessWg              sync.WaitGroup
+	lastModifierPressAt time.Time // zero value = no gating-modifier press seen yet this session; reset on Start/Stop
 }
 
 func newEagerSessionManager(ctx context.Context, recorder *telemetry.Recorder, run func(context.Context, string, func())) *eagerSessionManager {
@@ -853,6 +907,7 @@ func (m *eagerSessionManager) Stop() {
 	m.activeStopped = nil
 	m.activeSessionID = ""
 	m.isRecording = false
+	m.lastModifierPressAt = time.Time{}
 	m.mu.Unlock()
 
 	if cancel != nil {
@@ -919,6 +974,83 @@ func (m *eagerSessionManager) Recording() bool {
 	return m.isRecording
 }
 
+// NoteModifierPress records that a gating modifier was observed pressed at t.
+// Session-scoped: reset on every Start/Stop (issue 101).
+func (m *eagerSessionManager) NoteModifierPress(t time.Time) {
+	m.mu.Lock()
+	m.lastModifierPressAt = t
+	m.mu.Unlock()
+}
+
+// ModifierPressedWithin reports whether the most recent gating-modifier
+// press was within timeout of now. Read-only and safe to call from any
+// session's worker at any time -- unlike buffered text (see modifierBuffer
+// below), this field is deliberately shared across the manager's whole
+// lifetime and only reset at Start/Stop, since it is fed by a single
+// daemon-wide poller rather than being session-exclusive state.
+func (m *eagerSessionManager) ModifierPressedWithin(timeout time.Duration) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return !m.lastModifierPressAt.IsZero() && m.now().Sub(m.lastModifierPressAt) <= timeout
+}
+
+// modifierBuffer holds eager output buffered during the modifier-release
+// race guard (issue 101). Deliberately a *local* value owned by one
+// runEagerCaptureSession call, not a field on eagerSessionManager: the
+// manager is a single long-lived object shared across a rapid Stop/Start
+// sequence, while a session's trailing chunk can still be transcribing (and
+// reach the buffering decision) after Stop() has already returned and a new
+// session has begun -- storing pending/buffering state on the shared
+// manager let a superseded session's leftover text bleed into, or get
+// flushed by, the next session (confirmed live during review). Since each
+// session has exactly one sequential transcription worker goroutine (see
+// the jobChan loop below), no locking is needed here.
+type modifierBuffer struct {
+	buffering bool
+	pending   strings.Builder
+}
+
+// EnterIfNeeded reports whether eager output should be buffered rather than
+// typed immediately: either buffering is already active for this session
+// (sticky -- see below), or sessions' most recent gating-modifier press is
+// within timeout of now. Once entered, buffering stays active for the rest
+// of the session regardless of later staleness, since a flush is only ever
+// triggered explicitly by stopping the session (issue 101) -- a modifier
+// press going stale mid-buffer does not retroactively make it safe to type.
+// sessions may be nil (the standalone, non-daemon CLI path), which never
+// buffers.
+func (b *modifierBuffer) EnterIfNeeded(sessions *eagerSessionManager, timeout time.Duration) (buffer, justEntered bool) {
+	if sessions == nil {
+		return false, false
+	}
+	if b.buffering {
+		return true, false
+	}
+	if sessions.ModifierPressedWithin(timeout) {
+		b.buffering = true
+		return true, true
+	}
+	return false, false
+}
+
+// Append adds s to the pending buffered output. Callers must have already
+// confirmed buffering via EnterIfNeeded.
+func (b *modifierBuffer) Append(s string) {
+	b.pending.WriteString(s)
+}
+
+// Flush returns and clears any buffered output, along with whether
+// buffering was active. Intended to be called once, after this session's
+// transcription worker has fully drained (see runEagerCaptureSession) --
+// calling it while more chunks may still be queued would flush prematurely.
+func (b *modifierBuffer) Flush() (text string, wasBuffering bool) {
+	text = b.pending.String()
+	wasBuffering = b.buffering
+	b.pending.Reset()
+	b.buffering = false
+	return text, wasBuffering
+}
+
 // Wait blocks until every session's full lifetime (capture + transcription
 // drain) has completed. Intended for daemon shutdown only.
 func (m *eagerSessionManager) Wait() {
@@ -970,7 +1102,8 @@ func runEagerDaemon(ctx context.Context, d deps.Dependencies, opts EagerOptions)
 	defer writeVoxtypeState("inactive")
 
 	recorder := telemetry.NewRecorder(telemetry.Path(d.Getenv("XDG_DATA_HOME"), d.Getenv("HOME")))
-	sessions := newEagerSessionManager(ctx, recorder, func(sessCtx context.Context, sessionID string, onCaptureStopped func()) {
+	var sessions *eagerSessionManager
+	sessions = newEagerSessionManager(ctx, recorder, func(sessCtx context.Context, sessionID string, onCaptureStopped func()) {
 		// Each session gets its own subdirectory under the daemon's base
 		// tmpDir rather than sharing one across sessions: since Stop/Start
 		// no longer wait for the previous session's transcription drain to
@@ -994,8 +1127,31 @@ func runEagerDaemon(ctx context.Context, d deps.Dependencies, opts EagerOptions)
 		_ = runEagerCaptureSession(sessCtx, d, opts, sessTmpDir, recCmdName, recArgs, true, sessionID, recorder, func() {
 			writeVoxtypeState("idle")
 			onCaptureStopped()
-		})
+		}, sessions)
 	})
+
+	// Modifier-release race guard (issue 101): a lightweight poller feeds
+	// eagerSessionManager.NoteModifierPress whenever any watched physical
+	// modifier reads active, so modifierBuffer.EnterIfNeeded can judge
+	// staleness against a recent press. Any watched modifier counts for a
+	// first cut (narrowing to Super-only, if Ctrl/Alt/Shift use proves too
+	// noisy in practice, is a one-line change to the mask check below, not
+	// an architectural one). Polls at the same 10ms cadence
+	// modifiers.WaitModifiersReleased already uses.
+	go func() {
+		ticker := time.NewTicker(10 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if active, _ := modifiers.AreModifiersActive(); active {
+					sessions.NoteModifierPress(time.Now())
+				}
+			}
+		}
+	}()
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGUSR1, syscall.SIGUSR2)

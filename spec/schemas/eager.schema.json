@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Voxi Eager Pipeline Injection-Safety Tuning",
+  "description": "Modifier-release race guard tuning for internal/eager (issue 101).",
+  "type": "object",
+  "required": ["modifier_gate"],
+  "properties": {
+    "modifier_gate": {
+      "type": "object",
+      "description": "Buffering/staleness tuning for the modifier-release typing race.",
+      "required": ["timeout_ms"],
+      "properties": {
+        "timeout_ms": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 60000,
+          "description": "Staleness window in milliseconds: a gating-modifier press older than this is ignored for buffering purposes."
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

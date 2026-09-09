@@ -210,7 +210,7 @@ func TestEagerDispatchesCohereTranscribeEngineToCrispASR(t *testing.T) {
 		Stdout:   io.Discard,
 	}
 	opts := EagerOptions{ThresholdRMS: 500, SilenceMs: 60, PreRollMs: 40, MinSpeechMs: 40, MaxWindowMs: 1000, TypeOutput: true, Model: "cohere-transcribe-03-2026", SpeechContext: false}
-	if err := runEagerCaptureSession(context.Background(), d, opts, tmp, "cat", []string{rawPath}, true, "session-correlation", recorder, nil); err != nil {
+	if err := runEagerCaptureSession(context.Background(), d, opts, tmp, "cat", []string{rawPath}, true, "session-correlation", recorder, nil, nil); err != nil {
 		t.Fatalf("runEagerCaptureSession: %v", err)
 	}
 
