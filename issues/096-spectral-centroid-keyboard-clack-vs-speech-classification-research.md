@@ -1,6 +1,7 @@
 # 096 — Spectral-centroid keyboard-clack vs. speech classification (research)
 
-**Status**: Research In Progress — threshold holds across 2 of N planned keyboards, more pending
+**Status**: Research In Progress — spectral centroid alone falsified on a 3rd keyboard (flat/chiclet
+keys); needs a second feature or different approach, see §3b
 **Priority**: P2 (Medium)
 **Category**: ASR Quality / Acoustic Gating
 **Related**: [internal/audio/audio.go](../internal/audio/audio.go) (`CheckCandidateAcoustics`), [093](093-collapse-an-immediately-repeated-trailing-sentence-clause-in-eager-transcripts.md)/[094](094-collapserepeatedtrailingclause-wrongly-deletes-a-legitimate-short-answer-that-matches-the-question-s-last-word.md) (adjacent hallucination-filtering work), `scripts/clack_features` (new analysis tool), `~/.config/voxi/samples` (private dev-sample corpus, not in git)
@@ -102,6 +103,48 @@ A ~2850Hz threshold still classifies all 18 samples correctly, but the shrinking
 keyboards are added is exactly the risk flagged in §5 — worth tracking whether it keeps narrowing
 or stabilizes.
 
+## 3b. Findings (third keyboard: flat/chiclet-key variant) — threshold falsified
+
+Recorded 3 more clack chunks (`keyboard-clack-flat-1508/1509/1510`) on a flat/chiclet-key
+keyboard. Re-ran `scripts/clack_features` over the combined 21-sample corpus:
+
+```
+NAME                          ZCR    CENTROID  FRAMES
+keyboard-clack-flat-1508   0.0739    1894.3Hz       2
+short-uh                   0.0833    1165.7Hz      16
+short-nah                  0.1616    1707.4Hz      21
+short-one-two              0.1704    1596.7Hz      39
+short-no-no-yes            0.2021    1775.8Hz      48
+short-eh                   0.2168    1869.2Hz      14
+keyboard-clack-flat-1509   0.2509    2446.7Hz     276
+keyboard-clack-flat-1510   0.2549    2446.7Hz     226
+short-three                0.2637    2080.3Hz      19
+short-abc                  0.3189    2488.5Hz      50
+keyboard-clack-1478        0.3421    3038.2Hz      84
+keyboard-clack-1477        0.3452    3043.9Hz     145
+keyboard-clack-logi-1506   0.3477    3291.0Hz       7
+keyboard-clack-1479        0.3485    3032.4Hz      63
+keyboard-clack-logi-1507   0.3525    2976.8Hz       3
+keyboard-clack-logi-1503   0.3538    3198.4Hz     246
+keyboard-clack-1481        0.3693    3222.3Hz      28
+keyboard-clack-logi-1505   0.3738    3296.5Hz     151
+keyboard-clack-1482        0.3980    3195.4Hz      21
+keyboard-clack-logi-1504   0.4150    3495.7Hz      32
+short-yes                  0.4426    2664.8Hz      20
+```
+
+**Spectral centroid alone no longer separates the classes.** `keyboard-clack-flat-1509` and
+`-1510` (2446.7Hz each, 276 and 226 frames — well-sampled, not noise) sit *below*
+`short-abc` (2488.5Hz) and `short-yes` (2664.8Hz). The flat/chiclet-key keyboard's clacks are
+quieter and spectrally lower than the mechanical/Logi ones, landing squarely in the same range as
+real short speech. (`keyboard-clack-flat-1508` at 2 frames is too sparse to draw any conclusion
+from — essentially silent, likely already caught by the existing `low_energy_transient`/
+`unvoiced_transient` gate before a centroid check would ever run, per its own rejection reason.)
+
+This falsifies §3/§3a's working hypothesis that spectral centroid alone is sufficient. §5/§6
+updated accordingly — a single-feature threshold on centroid is not a viable general solution;
+either a second feature is needed alongside it, or a different approach entirely.
+
 ## 4. Known limitation in the sample corpus
 
 `voxi feedback sample save-chunk`'s interactive prompt has no way to save a literal empty ground
@@ -115,23 +158,35 @@ accuracy scoring without either a real non-speech convention or a `--text` overr
 
 ## 5. Caveats / what's not yet validated
 
-- **n=13, one keyboard, one room.** The ~370Hz gap is a promising first result, not a proven
-  threshold — mechanical vs. membrane vs. laptop-chiclet keyboards, different mic
-  distance/room acoustics, and a wider variety of speech (louder, sung tones, other languages)
-  could shrink or close the gap.
-- Not yet validated against real dictation sessions/telemetry, only the curated 13-sample set.
+- **n=21, three keyboards, one room, one speaker.** Confirmed by §3b: the threshold that held for
+  2 keyboards (mechanical, Logitech MX Keys) broke on a 3rd (flat/chiclet keys). Different mic
+  distance/room acoustics and a wider variety of speech (louder, sung tones, other languages)
+  are still entirely untested and could shrink margins further even within the keyboards already
+  covered.
+- Not yet validated against real dictation sessions/telemetry, only the curated sample set.
 - Spectral centroid was computed energy-weighted across all non-silent frames of the whole
   chunk; a per-frame (not per-chunk) decision might behave differently for chunks that mix a
   clack onset with trailing real speech in the same segment.
+- ZCR doesn't rescue this either: the flat-keyboard clacks' ZCR (0.2509/0.2549) also falls inside
+  the speech cluster's range (`short-three` 0.2637, `short-abc` 0.3189), so neither feature alone,
+  nor an obvious combination of the two, currently separates all 21 samples.
 
 ## 6. Next steps
 
-- Record dev-sample sets on 1-2 more physical keyboards (2 of N done: mechanical, Logitech MX
-  Keys — in progress, user recording more) to test whether the ~2850Hz threshold (or spectral
-  centroid as a feature at all) keeps holding, or whether the margin keeps shrinking toward zero.
-- If it holds: wire spectral centroid into `CheckCandidateAcoustics` as an additional rejection
-  reason (e.g. `high_spectral_centroid`), gated so it only fires on chunks already borderline on
-  the existing RMS/voiced-ratio checks — not as a blanket replacement for them.
-- If it doesn't hold across keyboards: consider spectral flatness or per-frame (not per-chunk)
-  classification as fallback features before considering a trained classifier (ruled out for now
-  as overkill for a 13-sample, one-edge-case problem — see chat discussion 2026-09-09).
+- **Spectral-centroid-alone is falsified as of §3b — do not wire it into `CheckCandidateAcoustics`
+  as currently scoped.** A quiet flat-keyboard clack and a real short speech utterance can share
+  the same centroid range, so a threshold here would trade false-accepted clacks for
+  false-rejected speech (the exact failure class issue 094 already burned us on).
+- Investigate features that target the *transient shape* rather than the steady-state spectrum,
+  since that's the more fundamental acoustic difference between a percussive clack and voiced
+  speech regardless of keyboard: attack sharpness/rise-time, spectral flux (frame-to-frame
+  spectral change, high at a clack's onset), or onset-to-decay energy ratio. These need a
+  per-frame or per-onset analysis, not the current whole-chunk energy-weighted average.
+- Record 1-2 more keyboards (especially another flat/chiclet or laptop-style one, to see if
+  keyboard-clack-flat's low centroid is that whole *class* of keyboard or an outlier) before
+  drawing conclusions about which feature(s) might work.
+- Given single-feature thresholds keep breaking as the sample set grows, revisit whether a
+  trained classifier is still overkill (previously ruled out for a 13-sample, one-edge-case
+  problem — see chat discussion 2026-09-09) now that it's a 21-sample, three-keyboard problem with
+  two falsified single-feature hypotheses. Still likely premature at n=21, but the bar for
+  "hand-crafted features are good enough" is looking higher than initially assumed.
