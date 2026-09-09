@@ -151,3 +151,30 @@ func TestStripLeadingDashFragment(t *testing.T) {
 		})
 	}
 }
+
+func TestCollapseRepeatedTrailingClause(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "repeated two-word clause after period",
+			input: "Let's get started. get started",
+			want:  "Let's get started.",
+		},
+		{
+			name:  "mid-sentence repetition remains",
+			input: "It was very very good",
+			want:  "It was very very good",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := CollapseRepeatedTrailingClause(tc.input); got != tc.want {
+				t.Errorf("CollapseRepeatedTrailingClause(%q) = %q, want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}

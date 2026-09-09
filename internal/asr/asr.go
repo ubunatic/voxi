@@ -3,6 +3,7 @@ package asr
 import (
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 var (
@@ -101,6 +102,60 @@ func StripLeadingHallucinations(text string, stopWords []string) string {
 	return strings.TrimSpace(clean)
 }
 
+// CollapseRepeatedTrailingClause removes a one- or two-word suffix repeated
+// immediately after terminal punctuation, e.g. "Let's get started. get
+// started" becomes "Let's get started.". Repetition without a punctuation
+// boundary is left untouched so intentional emphasis such as "very very good"
+// is preserved.
+func CollapseRepeatedTrailingClause(text string) string {
+	runes := []rune(text)
+	for i := len(runes) - 1; i >= 0; i-- {
+		if runes[i] != '.' && runes[i] != '!' && runes[i] != '?' {
+			continue
+		}
+		if i+1 >= len(runes) || !unicode.IsSpace(runes[i+1]) {
+			continue
+		}
+
+		suffix := strings.TrimSpace(string(runes[i+1:]))
+		suffix = strings.TrimSuffix(suffix, ".")
+		suffix = strings.TrimSuffix(suffix, "!")
+		suffix = strings.TrimSuffix(suffix, "?")
+		suffixWords := strings.Fields(suffix)
+		if len(suffixWords) < 1 || len(suffixWords) > 2 || !allWords(suffixWords) {
+			continue
+		}
+
+		prefixWords := strings.Fields(string(runes[:i]))
+		if len(prefixWords) < len(suffixWords) {
+			continue
+		}
+		matches := true
+		start := len(prefixWords) - len(suffixWords)
+		for j, suffixWord := range suffixWords {
+			if !strings.EqualFold(prefixWords[start+j], suffixWord) {
+				matches = false
+				break
+			}
+		}
+		if matches {
+			return strings.TrimSpace(string(runes[:i+1]))
+		}
+	}
+	return text
+}
+
+func allWords(words []string) bool {
+	for _, word := range words {
+		for _, r := range word {
+			if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '\'' && r != '-' {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // StripLeadingDashFragment removes a spurious short dash-prefixed fragment that
 // Whisper sometimes prepends to an otherwise genuine transcript, e.g.:
 //
@@ -147,6 +202,7 @@ func CleanWhisperTranscript(output string, stopWords []string) string {
 		candidate = StripLeadingDashFragment(candidate)
 		candidate = StripLeadingHallucinations(candidate, stopWords)
 		candidate = StripTrailingHallucinations(candidate, stopWords)
+		candidate = CollapseRepeatedTrailingClause(candidate)
 		if IsSafeToType(candidate, stopWords) {
 			return candidate
 		}
@@ -180,6 +236,7 @@ func CleanWhisperTranscript(output string, stopWords []string) string {
 		trimmed = StripLeadingDashFragment(trimmed)
 		trimmed = StripLeadingHallucinations(trimmed, stopWords)
 		trimmed = StripTrailingHallucinations(trimmed, stopWords)
+		trimmed = CollapseRepeatedTrailingClause(trimmed)
 		if IsSafeToType(trimmed, stopWords) {
 			resultLines = append(resultLines, trimmed)
 		}
