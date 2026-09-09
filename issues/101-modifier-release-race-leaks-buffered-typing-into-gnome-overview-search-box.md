@@ -144,11 +144,23 @@ value should live in `spec/` alongside voxi's other tunables per
 must be per-recording-session state, not persisted across sessions.**
 Stopping the current recording or starting a new one must reset it, so
 a modifier press from a prior session can never arm the pause/notify
-path for a later one. Flagged explicitly because nothing here is
-implemented yet — there is no existing code path to point to that
-already guarantees this, so the implementer must build the reset in
-deliberately (e.g. tied to whatever already marks a new eager session
-boundary in `internal/eager`) rather than assume it falls out for free.
+path for a later one.
+
+Verified during design discussion that this already has a clear
+precedent to piggyback on, so it needs no new plumbing: `internal/eager/
+eager.go`'s `eagerSessionManager.Start()` (~line 868) always calls
+`Stop()` first, then rebuilds session state from scratch — fresh
+`sessionID`, fresh `context.WithCancel`, fresh `stopped` channel, with
+`activeCancel`/`activeStopped`/`activeSessionID` explicitly zeroed by
+`Stop()` (~lines 852-855) and repopulated by `Start()`. `Toggle()`
+(~line 903) dispatches to `Stop`/`Start`, so both the SIGUSR1 path and
+the socket-driven `record start/stop/toggle` path go through this same
+fresh-construction boundary — nothing from a prior session's fields
+carries forward. A per-session temp dir (`sessTmpDir`) is already reset
+the same way for the same reason (the 057 fix). The new "last
+gating-modifier-press timestamp" should be added as a field on
+`eagerSessionManager`, initialized/reset inside `Start()` alongside
+`activatedAt` — it falls out of the existing pattern for free.
 
 However buffering is signaled, the user needs to know typing is paused
 rather than actively streaming. Candidates, all open and unevaluated:
