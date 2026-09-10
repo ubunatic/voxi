@@ -268,7 +268,7 @@ export default class VoxiVoiceInputExtension extends Extension {
         modeLayout.add_child(modeBtnBox);
 
         this._modeDescLabel = new St.Label({
-            text: 'Batch: Whisper base.en | Streaming: Parakeet | Eager: Continuous Whisper',
+            text: 'Batch: Whisper base.en | Streaming: Parakeet | Eager: Cohere Transcribe',
             style_class: 'voice-input-note',
         });
         modeLayout.add_child(this._modeDescLabel);

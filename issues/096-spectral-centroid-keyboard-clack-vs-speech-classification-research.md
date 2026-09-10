@@ -295,3 +295,10 @@ accuracy scoring without either a real non-speech convention or a `--text` overr
   with three falsified single-feature hypotheses (centroid, ZCR, and — pending confirmation —
   transient shape's inapplicability to sustained noise). Still worth trying harmonicity first,
   but the bar for "hand-crafted features are good enough" keeps rising.
+
+## 7. Sprint Disposition (2026-09-10)
+
+No production classifier was added. The current next experiment is measuring
+harmonicity/pitch salience over the committed multi-source corpus, after the
+056 noise assertion is stable. Transient-shape analysis remains useful for
+percussive noise but is not expected to cover sustained motor or kitchen noise.

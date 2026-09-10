@@ -264,3 +264,13 @@ all worked correctly) but its noise-rejection assertion is confirmed flaky
 against real hardware for the reason above — treat Phase 2 as "harness
 built, assertion not yet stable" rather than "complete," until one of the
 two options above is implemented.
+
+## 9. Sprint Update (2026-09-10)
+
+The first option was implemented at the shared safety boundary: `asr.IsSafeToType`
+now rejects punctuation-only decodes such as a bare period, with unit coverage.
+The Phase 2 matcher also requires distinct accepted chunks for the two speech
+fixtures, preventing one chunk from satisfying both WER checks. The gated real
+pipeline test was not run here because it requires `VOXI_E2E=1`, private WAV
+fixtures, and the Whisper runtime; live hardware verification remains required
+before calling Phase 2 complete.

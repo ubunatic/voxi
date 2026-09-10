@@ -29,7 +29,9 @@ transcription speed numbers, see [BenchBaseline.md](BenchBaseline.md).
   transcription, the global GNOME toggle shortcut, and direct text injection at the
   focused cursor (correct on a German QWERTZ layout) via a user-level `dotool`+`dotoold`
   daemon — not `eitype` (portal-dialog authorization) or `ydotool` (no XKB awareness).
-- Never uses cloud transcription or requests membership in the `input` group.
+- Never sends audio to a cloud transcription service or requests membership in the
+  `input` group. The default Cohere weights are downloaded on first use; after
+  they are cached under `~/.cache/voxi/models/`, inference is local and offline.
 
 ## Installation
 
@@ -112,12 +114,13 @@ Cohere emits multiple forms. No fuzzy, phonetic, semantic, or model-based matchi
 Corrections are loaded when an eager Cohere session starts and happen before acceptance,
 chunk metadata, aggregation, typing, and history. They never span chunk boundaries.
 Whisper output is unchanged: use `voxi feedback vocabulary` for its decoder prompt.
+The vocabulary prompt is not used by the default Cohere backend.
 
 Until issue 029 is implemented, `voxi mode` toggles between these mutually exclusive
 systemd user services:
 - `voxtype.service` for batch mode (`base.en` Whisper, typed at end of utterance)
 - `voxtype-streaming.service` for opt-in streaming (Parakeet ONNX, typed incrementally)
-- `voxi-eager.service` for continuous eager sentence streaming (rolling Whisper inference, 0 pause drops)
+- `voxi-eager.service` for continuous eager sentence streaming (Cohere Transcribe by default; rolling Whisper inference for an explicit Whisper model)
 
 `voxi record toggle` acts as a universal toggle for all 3 modes, allowing a single global
 shortcut (`Super+X`) to control whichever mode is currently active.
@@ -175,16 +178,17 @@ the legacy service path until their backend adapters are implemented.
 
 ## Model selection & CPU/GPU behavior
 
-Every model `voxi` can drive through Voxtype (`base.en`, `small.en`, `large-v3-turbo`) is
+The model registry includes the default local Cohere Transcribe backend and optional
+Whisper models (`base.en`, `small.en`, `large-v3-turbo`). Every entry is
 declared in `spec/models.yaml` — the single source of truth, schema-checked against
 `spec/schemas/models.schema.json` and embedded into the binary. Each model owns its own
-list of hallucination stop-word patterns (phrases Whisper reliably invents on silence,
+list of hallucination stop-word patterns (phrases an engine may reliably invent on silence,
 e.g. "thanks for watching"), filtered out before anything is typed.
 
 A model may declare `requires_gpu: true` when it is measurably sub-realtime on CPU
 (`large-v3-turbo` does — see BenchBaseline.md). When GPU is required and no GPU render
 node is present, `voxi eager` does not hard-fail: it substitutes that model's
-`cpu_fallback` (currently `small.en`, also the default model) and prints a notice, rather
+`cpu_fallback` (currently `small.en`) and prints a notice, rather
 than either running too slow to keep up with live speech or refusing to start.
 
 Run `voxi bench` to measure RTF (real-time factor) and speedup for every configured model
@@ -301,11 +305,12 @@ voxi vad-probe  # prototype VAD-segmented sentence-by-sentence dictation
 
 ### 2. VAD Sentence Dictation Probe (`vad-probe`)
 - Continuously buffers 16kHz audio with a 250ms circular pre-roll buffer (eliminating initial consonant loss).
-- Segments utterances on 600ms silence and transcribes completed sentences with Whisper in <300ms.
+- Segments utterances on 600ms silence and transcribes completed sentences locally;
+  the default engine is Cohere Transcribe, while explicit Whisper models remain supported.
 
 ## Continuous Eager Sentence Streaming (Issue 026)
 
-To bridge the gap between high-accuracy batch Whisper and low-latency streaming without suffering Parakeet's pause-loss bug, Issue 026 implements **Continuous Eager Sentence Streaming** in native Go orchestration (`voxi eager --daemon`):
+To bridge the gap between high-accuracy batch transcription and low-latency streaming without suffering Parakeet's pause-loss bug, Issue 026 implements **Continuous Eager Sentence Streaming** in native Go orchestration (`voxi eager --daemon`):
 - **Continuous Rolling VAD Capture**: Captures 16kHz PCM audio via `pw-record` with a `500ms` circular pre-roll buffer and `350ms` post-roll audio padding, preserving leading unstressed words (*"The"*, *"A"*) and trailing unvoiced consonants (*"cat"*, *"six"*).
 - **GPU Hardware Acceleration**: Runs official release `voxtype-0.7.5-linux-x86_64-vulkan` leveraging local AMD Radeon Cezanne iGPU via Mesa RADV compute shaders (`/dev/dri/renderD128`). Reduces transcription latency from $>2.5\text{s}$ CPU compute to $<250\text{ms}$ GPU compute ($10\text{--}15\times$ faster than realtime) — see BenchBaseline.md for the full per-model CPU vs GPU table.
 - **Session Barrier & Kill Watcher**: Active context watcher terminates recording child processes in $<10\text{ms}$ on cancel; `sync.WaitGroup` session barriers prevent zombie processes and orphaned recording leaks.
@@ -317,7 +322,7 @@ To bridge the gap between high-accuracy batch Whisper and low-latency streaming 
 
 ```text
 ╭─ [s] voice & speed ─────────────────╮ ╭─ [h] hardware load ──────────────────╮
-│ status:  ○ idle (eager / small.en)  │ │ cpu:   1.4%  [ ▂  ▅ ▂   ]  avg 4.5%  │
+│ status:  ○ idle (eager / cohere)    │ │ cpu:   1.4%  [ ▂  ▅ ▂   ]  avg 4.5%  │
 │ engine:  AMD Radeon Vulkan 1.4      │ │ gpu:  12.0%  [  ▂ █ ▂   ]  sys 0.74% │
 │ speed:   10.5x realtime [████████]  │ │ mem:   6.1 MB daemon   1.3/8.0G VRAM │
 │ lag:     0.22s · 8m 8s audio (118)  │ │ up:   55m 6s (PID 723612)            │

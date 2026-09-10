@@ -2,14 +2,14 @@
 
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/License-AGPL--3.0--or--later-blue.svg)](LICENSE)
 
-`voxi` is a high-performance, privacy-first voice input, continuous eager sentence streaming, and desktop typing engine for Linux/Wayland. It brings fast, sub-second speech-to-text dictation directly to any focused window with zero cloud dependencies and hotkey-safe input injection.
+`voxi` is a high-performance, privacy-first voice input, continuous eager sentence streaming, and desktop typing engine for Linux/Wayland. It brings fast speech-to-text dictation directly to any focused window with no cloud transcription and hotkey-safe input injection. The default Cohere model is downloaded once on first use, then runs locally and offline from the cache.
 
 ---
 
 ## Key Features & Architecture Highlights
 
 - **Continuous Eager Sentence Streaming (`voxi eager` / `voxi agent`)**  
-  Captures audio continuously with a circular pre-roll buffer. Utterances are segmented on natural speech pauses (silence > 800ms) or rolling windows and transcribed locally via Whisper with zero dropped words across pauses.
+  Captures audio continuously with a circular pre-roll buffer. Utterances are segmented on natural speech pauses (silence > 800ms) or rolling windows and transcribed locally via Cohere Transcribe by default, with optional Whisper models for explicit selection.
 
 - **Physical Modifier Gating Safety (`voxi-modifierd`)**  
   Monitors physical modifier keys (Ctrl, Alt, Super, Shift) via kernel evdev `EVIOCGKEY` with sub-10ns release gating. Prevents accidental hotkey combinations (e.g. typing `w` while holding `Ctrl` closing tabs) while strictly guaranteeing zero non-modifier keylogging.
@@ -18,7 +18,7 @@
   Injects keystrokes directly into active Wayland applications via `dotool`/`dotoold` with complete XKB layout awareness (e.g. German QWERTZ, Colemak, Dvorak) and atomic clipboard fallback (`wl-copy`).
 
 - **Spec-Driven Hallucination Filtering**  
-  Automatically filters out Whisper silence artifacts, repetitive hallucination loops, and metadata logs using embedded model specifications ([`spec/models.yaml`](spec/models.yaml)).
+  Automatically filters model-specific silence artifacts, repetitive hallucination loops, and metadata logs using embedded model specifications ([`spec/models.yaml`](spec/models.yaml)).
 
 - **Btop-Style Resource & Latency Monitor (`voxi monitor --watch`)**  
   A rich real-time terminal dashboard displaying live audio RMS meters, transcription latency sparklines, GPU Vulkan / CPU memory consumption, and daemon status.
@@ -168,7 +168,8 @@ voxi record status   # Check current recording state
 ### Direct Eager Streaming
 ```bash
 # Run continuous sentence streaming directly in terminal
-voxi eager --type --history --model small.en
+voxi eager --type --history                 # default: local Cohere Transcribe
+voxi eager --type --history --model small.en # optional Whisper path
 ```
 
 ### Resource & Latency Monitor

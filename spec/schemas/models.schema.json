@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Voxi ASR Model Registry",
-  "description": "Whisper models Voxi may invoke via voxtype, and the per-model hallucination stop-word patterns used to filter transcripts.",
+  "description": "Local ASR models Voxi may invoke and the per-model hallucination stop-word patterns used to filter transcripts.",
   "type": "object",
   "required": ["default_model", "speech_context", "transcript_safety", "models"],
   "properties": {
@@ -41,7 +41,7 @@
     },
     "models": {
       "type": "object",
-      "description": "Map of Whisper model name (as passed to voxtype --model) to its configuration.",
+      "description": "Map of local ASR model name to its configuration.",
       "minProperties": 1,
       "additionalProperties": {
         "type": "object",

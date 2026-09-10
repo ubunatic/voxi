@@ -38,7 +38,9 @@
         <h1><span class="name">voxi</span> types what you say, as you say it.</h1>
         <p class="lede">
           High-quality, local speech-to-text dictation for Linux/Wayland, now using
-          Cohere Transcribe 03-2026 by default for strong multilingual recognition.
+          Cohere Transcribe 03-2026 by default for strong local recognition. Voxi currently
+          runs the default path with English forced; multilingual model support is not yet
+          exposed as a user language setting.
           Continuous eager sentence streaming, kernel-level modifier key gating safety,
           and direct synthetic typing injection into any active window. Audio stays on your
           machine; after a one-time model download, transcription works offline on the CPU.
@@ -165,7 +167,7 @@
           <p>
             Teach voxi your own corrections, stored locally: exact heard-to-written transcript
             replacements, custom ASR stop-words, whole-utterance silence artifacts to discard,
-            and persistent vocabulary terms &mdash; all layered on top of the shipped
+            and persistent Whisper decoder-vocabulary terms &mdash; all layered on top of the shipped
             <code>spec/models.yaml</code> defaults, never sent anywhere.
           </p>
           <div class="feat-badge"><code>voxi feedback</code></div>
@@ -269,8 +271,8 @@
         <h2 id="why-title">Why Cohere Transcribe?</h2>
         <p class="section-desc">
           Voxi adopted Cohere Transcribe 03-2026 after local canary testing showed a clear
-          recognition-quality improvement on its dictation fixtures, including multilingual
-          speech. The default stays private in use: <code>crispasr</code> performs inference
+          recognition-quality improvement on its English dictation fixtures, including
+          technical terms and embedded German words. The default stays private in use: <code>crispasr</code> performs inference
           locally on the CPU and sends no audio to a transcription service.
         </p>
       </div>
@@ -481,7 +483,8 @@
             anywhere. <b>replacement</b> maps an exact heard-form to a written-form (e.g. a
             misheard project name); <b>stop-word</b> and <b>silence-artifact</b> add phrases to
             discard as hallucinated filler or whole-utterance noise; <b>vocabulary</b> adds
-            persistent decoder-context terms. <code>voxi feedback status</code> summarizes all
+            persistent Whisper decoder-context terms (the default Cohere backend does not use
+            decoder vocabulary prompting). <code>voxi feedback status</code> summarizes all
             active local overrides. Real examples from this project's own dictation
             (<code>voxi feedback replacement add HEARD WRITTEN</code>): <code>codeblock</code>,
             <code>codebroad</code>, <code>codebrook</code>, <code>codeburg</code>, and

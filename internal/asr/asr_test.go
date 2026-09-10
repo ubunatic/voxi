@@ -36,6 +36,10 @@ func TestIsSafeToType(t *testing.T) {
 		{"Please subscribe to my channel.", false},
 		{"Kathryn", false},
 		{"kathryn.", false},
+		{".", false},
+		{"!?", false},
+		{" \t\u2026 ", false},
+		{"\u2605", false},
 		{"", false},
 	}
 

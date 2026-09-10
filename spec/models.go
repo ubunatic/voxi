@@ -1,5 +1,5 @@
-// Package spec loads spec/models.yaml: the Whisper models Voxi can drive
-// via voxtype, and each model's hallucination stop-word patterns. It is
+// Package spec loads spec/models.yaml: the local ASR models Voxi can drive
+// and each model's hallucination stop-word patterns. It is
 // the single source of truth for model names and hallucination filtering
 // — see docs/Spec.md. Application code must not duplicate these values.
 package spec
@@ -15,7 +15,7 @@ import (
 //go:embed models.yaml
 var modelsYAML []byte
 
-// Model describes one Whisper model Voxi can invoke.
+// Model describes one local ASR model Voxi can invoke.
 type Model struct {
 	Label       string     `yaml:"label"`
 	Engine      string     `yaml:"engine"`

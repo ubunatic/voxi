@@ -232,5 +232,7 @@ Implemented as designed in §3, with no scope changes:
   (from issue 066's canary download) so `ensureCohereWeights`'s cache check
   finds them without re-downloading 1.66 GiB.
 - Out-of-scope items from §5 were left untouched: no official-vs-mirror
-  weight resolution, no vocabulary-biasing hook, issue 073 not read, and
-  `spec/models.yaml`'s `default_model` remains `small.en`.
+  weight resolution, no vocabulary-biasing hook, issue 073 not read. The
+  default-model promotion was outside this ticket's original scope; the current
+  `spec/models.yaml` default is `cohere-transcribe-03-2026` (the historical
+  implementation note previously said `small.en`).

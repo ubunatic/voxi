@@ -600,16 +600,29 @@ func TestEagerCaptureSessionEndToEndSplicedNoiseSession(t *testing.T) {
 
 	// Best-match WER: the real VAD may occasionally split a fixture's speech
 	// across more than one accepted chunk (e.g. a tiny leading fragment plus
-	// the main sentence), so take the best-matching accepted chunk for each
-	// fixture rather than requiring one exact 1:1 chunk-to-fixture mapping.
+	// the main sentence), so choose the minimum-WER one-to-one assignment
+	// rather than greedily claiming a shared near-match.
 	const maxWER = 0.4
-	for _, fx := range []e2eFixture{fxA, fxB} {
-		bestWER, bestText := 1.0, ""
-		for _, c := range accepted {
-			if w := wordErrorRate(fx.Expected, c.CleanedTranscript); w < bestWER {
-				bestWER, bestText = w, c.CleanedTranscript
+	bestIndices := []int{-1, -1}
+	bestTotal := 3.0
+	for i, a := range accepted {
+		for j, b := range accepted {
+			if i == j {
+				continue
+			}
+			total := wordErrorRate(fxA.Expected, a.CleanedTranscript) + wordErrorRate(fxB.Expected, b.CleanedTranscript)
+			if total < bestTotal {
+				bestTotal, bestIndices = total, []int{i, j}
 			}
 		}
+	}
+	if bestIndices[0] < 0 {
+		t.Fatal("fewer than two accepted chunks available for distinct speech-fixture matching")
+	}
+	for index, fx := range []e2eFixture{fxA, fxB} {
+		bestWER, bestText := 1.0, ""
+		bestText = accepted[bestIndices[index]].CleanedTranscript
+		bestWER = wordErrorRate(fx.Expected, bestText)
 		t.Logf("fixture=%s expected=%q best accepted match=%q wer=%.3f", fx.ID, fx.Expected, bestText, bestWER)
 		if bestWER > maxWER {
 			t.Errorf("no accepted chunk matches fixture %s within WER %.2f (best wer=%.3f, best match=%q, expected=%q)",

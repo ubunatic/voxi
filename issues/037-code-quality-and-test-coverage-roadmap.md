@@ -56,3 +56,11 @@ This umbrella improvement ticket tracks four focused initiatives:
    - No Go or JS files trigger the `>500 LOC` warning.
 2. Run `go test ./...` in `voxi` to ensure full test suite passes.
 3. Run `make install` and verify CLI subcommands and continuous eager typing work without regression.
+
+## 4. Sprint Disposition (2026-09-10)
+
+Implementation remains parked until the Now safety work settles. The first safe
+slice afterward is extracting the eager daemon control plane (Unix socket path
+resolution, control requests, and status queries) into `internal/eager/control.go`
+with temporary-socket tests. Do not begin by extracting modifier buffering,
+session lifecycle, or transcription workers while 083/092/103/100 remain active.

@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=schemas/models.schema.json
 #
-# ASR model registry: every Whisper model Voxi is set up to drive through
-# voxtype, plus the hallucination stop-word patterns known to leak from
+# ASR model registry: local engines and the hallucination stop-word patterns
+# known to leak from
 # each model's silence/low-confidence output. See docs/Spec.md.
 #
 # stop_words are case-insensitive regex fragments (not literal strings):

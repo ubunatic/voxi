@@ -130,3 +130,16 @@ as exhaustive:
    daemon, run `make restart-service` instead so the active service loads it.
 5. Do not publish the website during implementation; leave
    `uman website sync voxi` for an explicitly authorized release step.
+
+## 5. Sprint Progress (2026-09-10)
+
+The main product surfaces now describe Cohere Transcribe as the default:
+README, `docs/VoiceInput.md`, telemetry guidance, root CLI help, the GNOME
+extension label, model-registry comments/schema descriptions, and website copy
+were aligned. They also distinguish the one-time local weight download from
+cloud transcription and state that vocabulary prompting applies to Whisper
+alternatives, not the default Cohere path.
+
+The issue remains open for a final repository-wide wording audit and any stale
+legacy-architecture or historical notes not covered by this pass. Website
+source was updated; it was not published or synced.

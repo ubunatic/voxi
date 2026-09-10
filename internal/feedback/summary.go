@@ -105,7 +105,7 @@ func FormatSummary(w io.Writer, s Summary) error {
 	fmt.Fprintf(&b, "\nVocabulary terms: %d\n", len(s.VocabularyTerms))
 	writePreview(&b, s.VocabularyTerms, "voxi feedback vocabulary list")
 
-	fmt.Fprintf(&b, "\nSpeech-context (--speech-context): %s by default for small.en; disable per eager invocation with --speech-context=false\n", onOff(s.SpeechContextDefaultOn))
+	fmt.Fprintf(&b, "\nSpeech-context (--speech-context): %s by default for Whisper small.en; not used by default Cohere; disable per eager invocation with --speech-context=false\n", onOff(s.SpeechContextDefaultOn))
 	fmt.Fprintln(&b, "  vocabulary resolves from, in priority order:")
 	fmt.Fprintf(&b, "    1. explicit file (~/.config/voxi/vocabulary.txt): %s, %d term(s)\n", presence(s.VocabularySources.ExplicitFilePresent), s.VocabularySources.ExplicitFileTerms)
 	fmt.Fprintf(&b, "    2. static spec terms (spec/models.yaml speech_context.terms): %d term(s) available\n", s.VocabularySources.StaticSpecTerms)

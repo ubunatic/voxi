@@ -47,9 +47,9 @@ interleave freely; the query and stats commands correlate them for you.
 |---|---|
 | `mic_activated` | User gesture (Super+X) accepted by the daemon |
 | `capture_started` | Audio device actually opened |
-| `chunk_finalized` | Audio chunk sealed and sent to Whisper queue |
-| `transcription_started` | Whisper begins processing the chunk |
-| `transcription_completed` | Whisper done; word count recorded |
+| `chunk_finalized` | Audio chunk sealed and sent to the ASR queue |
+| `transcription_started` | The configured ASR engine begins processing the chunk |
+| `transcription_completed` | The configured ASR engine finished; word count recorded |
 | `typing_started` | Keystroke injection begins |
 | `typing_completed` | Injection call returned (or stream accepted by `dotoolc`) |
 | `mic_deactivated` | Stop gesture accepted |
@@ -125,7 +125,7 @@ session=…-000004 chunk=…/13 queue=633.0ms transcription=2010.9ms  typing-del
 - **`words=-`** — the chunk has no `transcription_completed` event yet (or the
   transcription stage is missing). A partial chunk at the very end of a session
   is normal if you stopped mid-utterance.
-- **`silence=true`** — chunk was probably silence; Whisper may have produced
+- **`silence=true`** — chunk was probably silence; the ASR engine may have produced
   hallucinated text. Check if unexpected words appeared around that time.
 - **`post-deactivation=true`** — chunk was transcribed or typed after you
   stopped the mic. Normal for the last 1–2 chunks; more than that suggests a
@@ -154,7 +154,7 @@ Latency total chunk-to-type n=11 avg=1735.7ms p50=1349.5ms p95=2662.4ms max=3654
 Input quality: 0 malformed row(s), 0 newer-schema row(s) skipped
 ```
 
-**Healthy baselines (small.en, modern laptop):**
+**Healthy baseline (local default engine on a modern laptop):**
 
 | Metric | Healthy | Investigate |
 |---|---|---|
@@ -228,7 +228,7 @@ voxi telemetry query --view events --session <SESSION_ID> | grep typing
 ```
 
 A large gap between `typing_started` and `typing_completed` points to the
-typing injector, not Whisper.
+typing injector, not the ASR engine.
 
 If you see no post-deactivation flag but a late word still appeared, look at
 the last chunk's `queue` value — a backlog in the transcription queue can delay

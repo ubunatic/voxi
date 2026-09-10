@@ -115,3 +115,10 @@ mechanics — evaluate before committing to any:
 - Not designing the full implementation here — this ticket exists to scope the problem and record
   open questions; a follow-up ticket (or a reopened/expanded version of this one) should carry the
   concrete design once §4's questions are answered.
+
+## 6. Sprint Disposition (2026-09-10)
+
+No download mechanism was added. The existing corpus manifest and benchmark
+directory conventions are suitable integration seams, but source licensing,
+checksums, cache policy, and transcript-format alignment must be resolved before
+implementation. Keep this issue open and subordinate to 056.

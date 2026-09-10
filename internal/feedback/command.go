@@ -154,7 +154,7 @@ func NewCommand(out io.Writer, home string, builtins []spec.StopWord, maxVocabul
 			if err := speechcontext.SaveVocabulary(vocabularyPath, terms, maxVocabularyTermChars); err != nil {
 				return err
 			}
-			fmt.Fprintf(out, "Added vocabulary term %q. It is active by default on the next `voxi eager` run (small.en); disable prompting with --speech-context=false\n", term)
+			fmt.Fprintf(out, "Added vocabulary term %q. It is active for Whisper small.en on the next `voxi eager` run; the default Cohere backend does not use decoder vocabulary prompting. Disable prompting with --speech-context=false\n", term)
 			return nil
 		}},
 		&cobra.Command{Use: "list", Args: cobra.NoArgs, RunE: func(_ *cobra.Command, _ []string) error {

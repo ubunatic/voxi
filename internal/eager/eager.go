@@ -159,8 +159,8 @@ func gpuAvailable() bool {
 }
 
 // requireEngineBinary validates and resolves the one runtime dependency the
-// given model's resolved engine actually needs: voxtype for "whisper" (the
-// legacy default engine value, unchanged behavior and requirement), or
+// given model's resolved engine actually needs: voxtype for an explicit
+// "whisper" model (the legacy engine path), or
 // crispasr plus cached/downloaded Cohere Transcribe GGUF weights for
 // "cohere-transcribe" (see issue 074). It returns the transcription binary
 // path and, for cohere-transcribe only, the resolved weights path (empty for
@@ -404,8 +404,8 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 		silenceArtifacts = overrides.SilenceArtifacts
 	}
 
-	// Dispatch on the resolved model's engine: whisper (the legacy/default
-	// engine value, unchanged behavior) requires and invokes voxtype; cohere-transcribe
+	// Dispatch on the resolved model's engine: an explicit whisper model uses
+	// voxtype; cohere-transcribe
 	// requires and invokes the crispasr binary instead, lazily downloading its
 	// GGUF weights on first use. requireEngineBinary is the single place
 	// (shared by both the direct RunEagerDictation path and the daemon path,

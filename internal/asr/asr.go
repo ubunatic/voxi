@@ -53,6 +53,14 @@ func IsSafeToType(text string, stopWords []string) bool {
 	if trimmed == "" {
 		return false
 	}
+	// A punctuation-only decode is a common low-confidence silence/noise
+	// artifact (for example, a bare period). It carries no dictated words and
+	// must never reach the desktop injector.
+	if strings.TrimFunc(trimmed, func(r rune) bool {
+		return unicode.IsSpace(r) || unicode.IsPunct(r) || unicode.IsSymbol(r)
+	}) == "" {
+		return false
+	}
 	if rfc3339TimeRe.MatchString(trimmed) {
 		return false
 	}

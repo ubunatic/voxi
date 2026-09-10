@@ -156,3 +156,11 @@ material for §4/§5 above, still undecided/not started.
   an unprivileged process can actually open a high-priority context.
 - Document any required `/etc/security/limits.d/` ceiling if `LimitNICE`
   needs raising beyond the default.
+
+## 8. Sprint Disposition (2026-09-10)
+
+No scheduler change is justified yet. Existing telemetry has useful latency
+values but no CPU/GPU-load marker or priority correlation, and the live service
+is currently at `Nice=0` with `LimitNICE=0`. The next step is a controlled
+idle-versus-loaded canary with fixed utterances and telemetry/process snapshots;
+test `CPUWeight` before attempting negative nice values. Keep this issue open.

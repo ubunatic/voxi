@@ -40,7 +40,7 @@ func main() {
 		Version: voxi.Version,
 		Short:   "Standalone Linux voice input, continuous eager streaming, and desktop typing engine",
 		Long: "Voxi is a high-performance voice input and typing engine for Linux/Wayland.\n" +
-			"It provides continuous eager sentence streaming with rolling Whisper inference,\n" +
+			"It provides continuous eager sentence streaming with local Cohere Transcribe by default,\n" +
 			"modifier key gating daemon for hotkey safety, synthetic typing injection, and a btop-style monitor.",
 	}
 
@@ -146,7 +146,7 @@ func main() {
 	eagerCmd.Flags().BoolVar(&eagerOpts.RecordHistory, "history", eagerOpts.RecordHistory, "record transcribed utterances into local dictation history")
 	eagerCmd.Flags().BoolVar(&eagerOpts.Daemon, "daemon", eagerOpts.Daemon, "run as background systemd daemon listening for toggle control")
 	eagerCmd.Flags().StringVar(&eagerOpts.Model, "model", eagerOpts.Model, fmt.Sprintf("model name, see spec/models.yaml (default: %s, engine cohere-transcribe via crispasr; explicit whisper-engine models need voxtype)", eagerOpts.Model))
-	eagerCmd.Flags().BoolVar(&eagerOpts.SpeechContext, "speech-context", eagerOpts.SpeechContext, "bounded local vocabulary hints for small.en (default: on; use --speech-context=false to disable)")
+	eagerCmd.Flags().BoolVar(&eagerOpts.SpeechContext, "speech-context", eagerOpts.SpeechContext, "bounded local vocabulary hints for Whisper small.en (default: on; ignored by default Cohere; use --speech-context=false to disable)")
 	eagerCmd.Flags().StringSliceVar(&eagerOpts.Vocabulary, "vocabulary", eagerOpts.Vocabulary, "additional comma-separated speech-context terms (requires --speech-context)")
 
 	// 4. monitor / top / resources command
