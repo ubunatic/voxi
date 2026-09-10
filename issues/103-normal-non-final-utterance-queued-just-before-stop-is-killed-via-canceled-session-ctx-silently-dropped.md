@@ -1,6 +1,6 @@
 # 103 — Normal (Non-Final) Utterance Queued Just Before Stop Is Killed Via Canceled Session ctx, Silently Dropped
 
-**Status**: Open
+**Status**: Closed
 **Priority**: P1 (High)
 **Severity**: Major
 **Category**: Bug
@@ -150,3 +150,13 @@ killed`, 0.04s transcribe duration, empty transcript. Re-check with `voxi
 chunks show 1734` if the chunk is still in the local ring buffer at the
 time this is picked up; not required to still exist since the diagnostics
 above are self-contained.
+
+## 7. Resolution (2026-09-11)
+
+Closed by separating queued-job context selection from in-flight cancellation.
+Normal jobs observed by the worker after session cancellation now use a bounded
+detached transcription/typing context and retain their session/chunk delivery
+identity. A job already running when stop arrives remains attached to the
+session context and is canceled, while the existing trailing `Final` flush keeps
+its detached policy. Added regression coverage for active versus canceled
+queued-job context selection; race and full repository checks pass.

@@ -500,13 +500,7 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 
 			writeVoxtypeState("transcribing")
 			cmdArgs := buildTranscribeArgs(wavPath)
-			transcribeParent := ctx
-			if job.Final {
-				// The session ctx is already canceled by the time a Final job is
-				// queued (see TranscribeJob.Final) -- deriving from it would abort
-				// this transcription before it starts.
-				transcribeParent = context.Background()
-			}
+			transcribeParent := queuedJobContext(ctx, job.Final)
 			transcribeCtx, cancelTranscribe := context.WithTimeout(transcribeParent, transcribeTimeout)
 			cmd := exec.CommandContext(transcribeCtx, transcribeBinPath, cmdArgs...)
 			cmd.Env = append(os.Environ(), "NO_COLOR=1", "RUST_LOG=error")
@@ -626,10 +620,7 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 						}
 						typeStart := time.Now()
 						_ = recorder.Record(telemetry.Event{Event: telemetry.TypingStarted, Timestamp: typeStart, SessionID: sessionID, ChunkID: chunkID, ChunkIndex: job.Index, DeliveryID: chunkID, Attempt: 1})
-						typeCtx := ctx
-						if job.Final {
-							typeCtx = context.Background()
-						}
+						typeCtx := queuedJobContext(ctx, job.Final)
 						typeErr := typing.TypeTextObserved(typeCtx, d, text+" ", &injectorObserver{recorder: recorder, sessionID: sessionID, chunkID: chunkID, chunkIndex: job.Index, deliveryID: chunkID})
 						typeEnd := time.Now()
 						typeSuccess := typeErr == nil
@@ -806,6 +797,19 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 	}
 
 	return nil
+}
+
+// queuedJobContext preserves the stop contract at the worker boundary. A
+// normal job that is dequeued after capture stop was already accepted and
+// queued, so it gets a bounded detached context and may finish. A job already
+// running when stop cancels the session keeps the session context and is
+// terminated by the cancellation. Final jobs use the same detached policy
+// because the segmenter queues them after capture stop.
+func queuedJobContext(sessionCtx context.Context, final bool) context.Context {
+	if final || sessionCtx.Err() != nil {
+		return context.Background()
+	}
+	return sessionCtx
 }
 
 // reportEagerFailure makes hard pipeline failures visible to both direct users

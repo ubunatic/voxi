@@ -152,6 +152,21 @@ func TestReportEagerFailureIgnoresExpectedRejection(t *testing.T) {
 	}
 }
 
+func TestQueuedJobContextDetachesCanceledQueuedJobs(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if got := queuedJobContext(ctx, false); got != ctx {
+		t.Fatal("active queued job unexpectedly detached")
+	}
+	cancel()
+	if got := queuedJobContext(ctx, false); got == ctx {
+		t.Fatal("queued job after stop retained canceled session context")
+	}
+	if got := queuedJobContext(context.Background(), true); got == nil {
+		t.Fatal("final job returned nil context")
+	}
+}
+
 func TestProbableSilenceUsesInspectableVoicedRatio(t *testing.T) {
 	if !probableSilence(audioStats(100, 4)) {
 		t.Fatal("4% voiced chunk was not marked probable silence")
