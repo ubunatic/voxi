@@ -1,8 +1,9 @@
 # Voice Input
 
 `voxi` is a standalone Linux/Wayland voice input, continuous eager sentence streaming, and
-desktop typing engine. It installs and runs independently (`make install`) — there is no
-package catalog or `--dry-run`/`--scope` installer; see [Installation](#installation) below.
+desktop typing engine. Bootstrap the CLI with `make install`, then use the user-scoped
+`voxi install` command for the complete installation; see [Installation](#installation)
+and [Installation Architecture](InstallationArchitecture.md).
 For the multi-tier desktop companion, Mutter focus coordination, and Wayland input
 architecture, see [VoiceInputArchitecture.md](VoiceInputArchitecture.md). For per-model
 hallucination filtering, GPU requirements, and CPU fallback, see
@@ -240,7 +241,7 @@ working on this same workstation as of 2026-08-17: words appear incrementally du
 dictation via the existing `dotoolc` fast path, still fully offline. It is **not** the
 default; switching to it requires a one-time setup and then `voxi mode streaming`:
 
-1. One-time setup (not automated by `voxi`/`make install` yet): install the
+1. One-time setup (not part of the default `voxi install` workflow): install the
    `onnx-avx2` voxtype binary, download the streaming-capable model
    (`voxtype setup --download --model parakeet-unified-en-0.6b --quiet`, ~2.7GB), and
    create `~/.config/voxtype/config-streaming.toml` plus a
