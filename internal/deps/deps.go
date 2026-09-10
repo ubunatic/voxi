@@ -22,9 +22,13 @@ type Dependencies struct {
 	Run       func(context.Context, string, ...string) error
 	RunOutput func(ctx context.Context, name string, args ...string) (string, error)
 	RunStdin  func(ctx context.Context, stdin string, name string, args ...string) error
-	Sleep     func(time.Duration)
-	Stdin     io.Reader
-	Stdout    io.Writer
+	// RunStdinProcess is the lifecycle-aware stdin boundary used by desktop
+	// injection. It returns the child PID after the process has exited. A nil
+	// value falls back to RunStdin for lightweight callers and tests.
+	RunStdinProcess func(ctx context.Context, stdin string, name string, args ...string) (pid int, err error)
+	Sleep           func(time.Duration)
+	Stdin           io.Reader
+	Stdout          io.Writer
 }
 
 // lookPathWithFallbacks resolves binaries via standard exec.LookPath, falling back to
@@ -75,6 +79,15 @@ func DefaultDependencies(in io.Reader, out io.Writer) Dependencies {
 			cmd := exec.CommandContext(ctx, resolveCommand(name), args...)
 			cmd.Stdin = strings.NewReader(stdin)
 			return cmd.Run()
+		},
+		RunStdinProcess: func(ctx context.Context, stdin string, name string, args ...string) (int, error) {
+			cmd := exec.CommandContext(ctx, resolveCommand(name), args...)
+			cmd.Stdin = strings.NewReader(stdin)
+			if err := cmd.Start(); err != nil {
+				return 0, err
+			}
+			pid := cmd.Process.Pid
+			return pid, cmd.Wait()
 		},
 		Sleep:  time.Sleep,
 		Stdin:  in,

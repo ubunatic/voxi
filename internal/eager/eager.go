@@ -449,6 +449,11 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 	defer writeVoxtypeState("idle")
 
 	chunkBuf := chunks.NewBuffer(chunks.StorageDir(d.Getenv("XDG_RUNTIME_DIR"), d.Getenv("HOME")), chunks.DefaultBufferSize)
+	deliveryPath := ""
+	if recorder != nil {
+		deliveryPath = filepath.Join(filepath.Dir(telemetry.Path(d.Getenv("XDG_DATA_HOME"), d.Getenv("HOME"))), "eager-delivery-ledger.jsonl")
+	}
+	delivery := newDeliveryLedger(deliveryPath)
 
 	// Start sequential transcription worker
 	transWg.Add(1)
@@ -605,25 +610,35 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 					// going stale mid-buffer does not retroactively make it safe
 					// to type into whatever now has focus.
 					if buffer, justEntered := eagerBuf.EnterIfNeeded(sessions, modifierTimeout); buffer {
-						eagerBuf.Append(text + " ")
+						eagerBuf.AppendDelivery(chunkID, text+" ")
 						if justEntered {
 							eagerBuf.ScheduleNotify(d, modifierNotifyDelay)
 						}
 					} else {
+						claimed, claimErr := delivery.Claim(chunkID)
+						if claimErr != nil {
+							accepted = false
+							_ = recorder.Record(telemetry.Event{Event: telemetry.DeliveryDuplicate, Timestamp: time.Now(), SessionID: sessionID, ChunkID: chunkID, ChunkIndex: job.Index, DeliveryID: chunkID, Error: claimErr.Error()})
+							continue
+						}
+						if !claimed {
+							_ = recorder.Record(telemetry.Event{Event: telemetry.DeliveryDuplicate, Timestamp: time.Now(), SessionID: sessionID, ChunkID: chunkID, ChunkIndex: job.Index, DeliveryID: chunkID})
+							continue
+						}
 						typeStart := time.Now()
-						_ = recorder.Record(telemetry.Event{Event: telemetry.TypingStarted, Timestamp: typeStart, SessionID: sessionID, ChunkID: chunkID, ChunkIndex: job.Index})
+						_ = recorder.Record(telemetry.Event{Event: telemetry.TypingStarted, Timestamp: typeStart, SessionID: sessionID, ChunkID: chunkID, ChunkIndex: job.Index, DeliveryID: chunkID, Attempt: 1})
 						typeCtx := ctx
 						if job.Final {
 							typeCtx = context.Background()
 						}
-						typeErr := typing.TypeText(typeCtx, d, text+" ")
+						typeErr := typing.TypeTextObserved(typeCtx, d, text+" ", &injectorObserver{recorder: recorder, sessionID: sessionID, chunkID: chunkID, chunkIndex: job.Index, deliveryID: chunkID})
 						typeEnd := time.Now()
 						typeSuccess := typeErr == nil
 						typeError := ""
 						if typeErr != nil {
 							typeError = typeErr.Error()
 						}
-						_ = recorder.Record(telemetry.Event{Event: telemetry.TypingComplete, Timestamp: typeEnd, SessionID: sessionID, ChunkID: chunkID, ChunkIndex: job.Index, Success: &typeSuccess, Error: typeError})
+						_ = recorder.Record(telemetry.Event{Event: telemetry.TypingComplete, Timestamp: typeEnd, SessionID: sessionID, ChunkID: chunkID, ChunkIndex: job.Index, DeliveryID: chunkID, Attempt: 1, Success: &typeSuccess, Error: typeError})
 						chunkMeta.TypingStartedAt = typeStart
 						chunkMeta.TypingEndedAt = typeEnd
 						_, _ = chunkBuf.Update(chunkMeta)
@@ -768,8 +783,19 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 	// can still be queued. eagerBuf is this call's own local buffer (see its
 	// docs), so a rapid Stop-then-Start never mixes this flush with a
 	// different, now-current session's buffer.
-	if pending, wasBuffering := eagerBuf.Flush(); wasBuffering && pending != "" {
-		_ = typing.TypeText(context.Background(), d, pending)
+	if pending, wasBuffering := eagerBuf.FlushDeliveries(); wasBuffering {
+		for _, item := range pending {
+			claimed, claimErr := delivery.Claim(item.ID)
+			if claimErr != nil || !claimed {
+				event := telemetry.Event{Event: telemetry.DeliveryDuplicate, Timestamp: time.Now(), SessionID: sessionID, ChunkID: item.ID, DeliveryID: item.ID}
+				if claimErr != nil {
+					event.Error = claimErr.Error()
+				}
+				_ = recorder.Record(event)
+				continue
+			}
+			_ = typing.TypeTextObserved(context.Background(), d, item.Text, &injectorObserver{recorder: recorder, sessionID: sessionID, chunkID: item.ID, deliveryID: item.ID})
+		}
 	}
 
 	if !isDaemon {
@@ -1014,10 +1040,13 @@ func (m *eagerSessionManager) ModifierPressedWithin(timeout time.Duration) bool 
 type modifierBuffer struct {
 	buffering bool
 	pending   strings.Builder
+	entries   []bufferedDelivery
 	// cancelNotify cancels a scheduled-but-not-yet-played notification (see
 	// ScheduleNotify/Flush below); nil once played or canceled.
 	cancelNotify context.CancelFunc
 }
+
+type bufferedDelivery struct{ ID, Text string }
 
 // EnterIfNeeded reports whether eager output should be buffered rather than
 // typed immediately: either buffering is already active for this session
@@ -1046,6 +1075,11 @@ func (b *modifierBuffer) EnterIfNeeded(sessions *eagerSessionManager, timeout ti
 // confirmed buffering via EnterIfNeeded.
 func (b *modifierBuffer) Append(s string) {
 	b.pending.WriteString(s)
+}
+
+func (b *modifierBuffer) AppendDelivery(id, text string) {
+	b.pending.WriteString(text)
+	b.entries = append(b.entries, bufferedDelivery{ID: id, Text: text})
 }
 
 // ScheduleNotify plays the typing-paused notification after delay, unless
@@ -1084,15 +1118,28 @@ func (b *modifierBuffer) ScheduleNotify(d deps.Dependencies, delay time.Duration
 // ScheduleNotify): reaching Flush means the session is already done, so
 // there is nothing left to tell the user to finish.
 func (b *modifierBuffer) Flush() (text string, wasBuffering bool) {
+	entries, wasBuffering := b.FlushDeliveries()
+	for _, entry := range entries {
+		text += entry.Text
+	}
+	return text, wasBuffering
+}
+
+func (b *modifierBuffer) FlushDeliveries() (entries []bufferedDelivery, wasBuffering bool) {
 	if b.cancelNotify != nil {
 		b.cancelNotify()
 		b.cancelNotify = nil
 	}
-	text = b.pending.String()
 	wasBuffering = b.buffering
+	if len(b.entries) > 0 {
+		entries = append(entries, b.entries...)
+	} else if text := b.pending.String(); text != "" {
+		entries = []bufferedDelivery{{Text: text}}
+	}
 	b.pending.Reset()
+	b.entries = nil
 	b.buffering = false
-	return text, wasBuffering
+	return entries, wasBuffering
 }
 
 // Wait blocks until every session's full lifetime (capture + transcription

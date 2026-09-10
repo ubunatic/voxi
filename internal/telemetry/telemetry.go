@@ -25,6 +25,9 @@ const (
 	TranscriptionComplete = "transcription_completed"
 	TypingStarted         = "typing_started"
 	TypingComplete        = "typing_completed"
+	DeliveryDuplicate     = "delivery_duplicate"
+	InjectorStarted       = "injector_started"
+	InjectorComplete      = "injector_completed"
 )
 
 // AudioMetrics contains recording-side measurements derived from PCM without
@@ -50,6 +53,12 @@ type Event struct {
 	TranscriptWordCount *int          `json:"transcript_word_count,omitempty"`
 	Success             *bool         `json:"success,omitempty"`
 	Error               string        `json:"error,omitempty"`
+	DeliveryID          string        `json:"delivery_id,omitempty"`
+	InjectorPath        string        `json:"injector_path,omitempty"`
+	ProcessID           int           `json:"process_id,omitempty"`
+	Attempt             int           `json:"attempt,omitempty"`
+	DurationMS          *float64      `json:"duration_ms,omitempty"`
+	CancelReason        string        `json:"cancel_reason,omitempty"`
 }
 
 // Recorder serializes event appends from overlapping Eager session drains.

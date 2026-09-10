@@ -196,3 +196,20 @@ This is a caution for the remaining open work in §3/§8: the at-most-once/gener
 design still needs to distinguish "the last thing the user said, right up to stop" from
 "a stale or pathological result arriving after stop" — collapsing both into one
 `ctx.Err()` check reintroduces this regression.
+
+## 9. Durable at-most-once delivery slice (2026-09-10)
+
+Implemented the scoped accepted-transcript delivery contract without changing the
+trailing-utterance flush policy. Each accepted eager chunk now carries its stable
+`sessionID/chunkID` identity through immediate and modifier-buffered delivery. A
+file-locked, fsynced ledger claims that identity before the irreversible injector
+submission; duplicate claims are rejected and recorded as `delivery_duplicate`,
+including across daemon/process restarts. The typing boundary now exposes one
+injector attempt with selected path, completion, cancellation/error, duration, and
+child PID when the production process runner is used. `injector_started` and
+`injector_completed` telemetry records that lifecycle without storing dictation text.
+
+Focused tests cover persistent duplicate rejection and the injectable process
+attempt boundary. Issue 083 remains In Progress: emergency stop, exhaustive
+active-process/FIFO lifecycle canaries, and the broader stop/generation policy are
+not claimed by this slice.

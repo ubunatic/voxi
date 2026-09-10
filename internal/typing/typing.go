@@ -13,6 +13,23 @@ import (
 	"ubunatic.com/voxi/internal/modifiers"
 )
 
+// InjectionAttempt describes one and only one submission to an injector.
+// PID is zero when the test/legacy dependency boundary cannot expose it.
+type InjectionAttempt struct {
+	Path      string
+	PID       int
+	StartedAt time.Time
+	EndedAt   time.Time
+	Err       error
+}
+
+// InjectionObserver receives lifecycle notifications around the irreversible
+// injector call. Implementations must not block the typing operation.
+type InjectionObserver interface {
+	Started(path string, at time.Time)
+	Completed(attempt InjectionAttempt)
+}
+
 // BuildDotoolCommands renders the dotool script command stream for typing text.
 func BuildDotoolCommands(text string, typeDelayMs int) string {
 	var b strings.Builder
@@ -53,6 +70,13 @@ func dotoolDaemonReady(path string) bool {
 // TypeText synthesizes keystrokes into the focused window using dotool/dotoold.
 // It gates on active modifier keys (e.g. Ctrl, Alt, Super) to prevent hotkey collisions.
 func TypeText(ctx context.Context, d deps.Dependencies, text string) error {
+	return TypeTextObserved(ctx, d, text, nil)
+}
+
+// TypeTextObserved is TypeText with an injectable lifecycle observer. The
+// selected path is announced immediately before the single injector attempt;
+// completion includes the child PID when the dependency boundary supports it.
+func TypeTextObserved(ctx context.Context, d deps.Dependencies, text string, observer InjectionObserver) error {
 	if text == "" {
 		return nil
 	}
@@ -79,16 +103,34 @@ func TypeText(ctx context.Context, d deps.Dependencies, text string) error {
 	if dotoolDaemonReady(dotoolPipePath(d.Getenv)) {
 		// Once a FIFO submission is attempted its partial-write status is
 		// unknowable. Never retry the whole script through standalone dotool.
-		if err := d.RunStdin(ctx, commands, "dotoolc"); err != nil {
-			return fmt.Errorf("dotoolc: %w", err)
-		}
-		return nil
+		return runInjector(ctx, d, commands, "dotoolc", observer)
 	}
 	if _, err := d.LookPath("dotool"); err != nil {
 		return fmt.Errorf("dotool not found on PATH: %w", err)
 	}
-	if err := d.RunStdin(ctx, commands, "dotool"); err != nil {
-		return fmt.Errorf("dotool: %w", err)
+	return runInjector(ctx, d, commands, "dotool", observer)
+}
+
+func runInjector(ctx context.Context, d deps.Dependencies, commands, name string, observer InjectionObserver) error {
+	started := time.Now()
+	if observer != nil {
+		observer.Started(name, started)
+	}
+	pid := 0
+	var err error
+	if d.RunStdinProcess != nil {
+		pid, err = d.RunStdinProcess(ctx, commands, name)
+	} else if d.RunStdin != nil {
+		err = d.RunStdin(ctx, commands, name)
+	} else {
+		err = fmt.Errorf("injector dependency is not configured")
+	}
+	ended := time.Now()
+	if observer != nil {
+		observer.Completed(InjectionAttempt{Path: name, PID: pid, StartedAt: started, EndedAt: ended, Err: err})
+	}
+	if err != nil {
+		return fmt.Errorf("%s: %w", name, err)
 	}
 	return nil
 }
