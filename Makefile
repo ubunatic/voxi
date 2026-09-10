@@ -36,6 +36,7 @@ install-debug: ⚙️ build-debug  # install debug binary to ~/go/bin
 
 install-all: ⚙️ install install-user-services install-crispasr install-dotool install-dotoold  # install user binaries, systemd user services, and default engine + typing-injection deps
 	go install ./cmd/voxi-modifierd
+	systemctl --user enable --now voxi-agent.service
 
 install-dotool: ⚙️  # install dotool (direct keystroke injection) to ~/go/bin
 	go install git.sr.ht/~geb/dotool@latest
