@@ -159,7 +159,7 @@ func TestQueuedJobContextDetachesCanceledQueuedJobs(t *testing.T) {
 		t.Fatal("active queued job unexpectedly detached")
 	}
 	cancel()
-	if got := queuedJobContext(ctx, false); got == ctx {
+	if got := queuedJobContext(ctx, true); got == ctx {
 		t.Fatal("queued job after stop retained canceled session context")
 	}
 	if got := queuedJobContext(context.Background(), true); got == nil {
