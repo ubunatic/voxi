@@ -1,6 +1,6 @@
 # 104 — Add `voxi install` command for complete user install with optional privileged setup
 
-**Status**: Open
+**Status**: Closed
 **Priority**: P1 (High)
 **Severity**: Major
 **Category**: Feature

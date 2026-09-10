@@ -35,13 +35,35 @@ transcription speed numbers, see [BenchBaseline.md](BenchBaseline.md).
 ```sh
 git clone https://codeberg.org/ubunatic/voxi
 cd voxi
-make install                 # user binaries (~/go/bin)
-make install-user-services   # systemd user services (voxi-agent.service, compatibility eager unit)
-sudo make install-modifierd  # optional: system-wide voxi-modifierd daemon
+
+make install                 # build/install the CLI (~/go/bin)
+
+# Build/install the CLI, embed its user units, and enable the agent.
+voxi install
+
+# Optional physical modifier gating (the only privileged path).
+voxi install --modifierd  # asks sudo; writes /usr/local and /etc only here
 ```
 
-There is no uninstall command yet; `make uninstall` removes installed binaries and the
-system modifier daemon but does not track ownership of files it did not create.
+`voxi install` is intended for Linux user sessions with a systemd user manager. The
+default path writes only `~/.local/bin` and `~/.config/systemd/user`; it never invokes
+`sudo`, writes `/usr/local`, or changes system services. It is safe to repeat and reports
+the user binary, user units, agent activation, and optional modifier phase separately.
+The optional `voxi-modifierd` service reads only physical modifier state and prevents
+held Ctrl/Alt/Super/Shift keys from leaking into injected text; it requires root access
+to evdev devices. Verify the result with:
+
+```sh
+systemctl --user is-enabled voxi-agent.service
+systemctl --user is-active voxi-agent.service
+systemctl is-enabled voxi-modifierd.service  # only after --modifierd
+systemctl is-active voxi-modifierd.service   # only after --modifierd
+```
+
+The command installs the Voxi binary and service units, downloads the supported CrispASR
+release, and installs `dotool`/`dotoold` from their Go module. External platform
+prerequisites such as `wl-clipboard` and audio capture remain package-manager concerns;
+the existing Makefile targets remain available for compatibility.
 
 ## Commands
 

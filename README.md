@@ -55,24 +55,26 @@ Ensure the following tools and packages are installed on your Linux system:
 git clone https://codeberg.org/ubunatic/voxi.git
 cd voxi
 
-# Install user binaries to ~/go/bin
+# Build/install the CLI first.
 make install
 
-# Install systemd user service units
-make install-user-services
+# Install the CLI into ~/.local/bin and its user service, then enable the agent.
+# This path is user-scoped and never uses sudo.
+voxi install
 
-# (Optional) Install system physical modifier daemon
-sudo make install-modifierd
+# (Optional) Install the system physical modifier daemon (requires sudo).
+voxi install --modifierd
 ```
 
-Ensure `~/go/bin` is in your `$PATH`.
+Ensure `~/.local/bin` (and `~/go/bin` for Go-installed helpers) is in your `$PATH`.
 
-### 2. Start the Agent Service
+### 2. Verify the Agent Service
 
 Start the unified background voice agent:
 
 ```bash
-systemctl --user enable --now voxi-agent.service
+systemctl --user is-enabled voxi-agent.service
+systemctl --user is-active voxi-agent.service
 ```
 
 ### 3. Start Dictating
