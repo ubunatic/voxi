@@ -47,7 +47,7 @@ instrumentation* to *closing the trust contract* it revealed.
   "the last thing the user said, right up to stop" from "a stale or pathological
   late result" — collapsing the two reintroduces the §8 regression.
 - **[080 surface eager typing/transcription failures](../issues/080-surface-eager-typing-transcription-failures-beyond-private-telemetry.md)**
-  (Open, P0/Critical). Small scope, disproportionate value. A live session
+  (Closed, P0/Critical). Small scope, disproportionate value. A live session
   transcribed correctly and typed nothing — with `dotool` missing — and produced
   no signal in the console, in `journalctl --user -u voxi-agent.service`, or
   anywhere else a user would look. For a dictation tool this is close to the
@@ -57,14 +57,14 @@ instrumentation* to *closing the trust contract* it revealed.
   bucket diagnosable by the user instead of by an agent running telemetry
   queries. Take it alongside 083 — both touch the same acceptance/typing seam.
 - **[092 `eagerSessionManager.Toggle` check-then-act race](../issues/092-eagersessionmanager-toggle-has-a-check-then-act-race-under-concurrent-sigusr1-socket-invocation.md)**
-  (Open, P2). Included in Now because it is small, well-localized, and sits in
+  (Closed, P2). Included in Now because it is small, well-localized, and sits in
   exactly the session-lifecycle code 083 is already rewriting — fixing it as
   part of that pass is much cheaper than fixing it later against a changed
   file. User-visible symptom (two near-simultaneous toggles silently no-op the
   dictation start, while both report "Recording started") is a lifecycle
   predictability bug, i.e. the same axis as 083.
 - **[103 queued utterance lost on stop](../issues/103-normal-non-final-utterance-queued-just-before-stop-is-killed-via-canceled-session-ctx-silently-dropped.md)**
-  (Open, P1). This is the concrete queued-job half of the stop/delivery contract
+  (Closed, P1). This is the concrete queued-job half of the stop/delivery contract
   that 083 does not yet cover; resolve its disposition alongside the at-most-once
   design rather than treating the existing final-flush fix as sufficient.
 - **[100 background-voice false acceptance](../issues/100-background-distant-voice-hallucinated-into-accepted-transcripts-bypassing-silence-gate.md)**
