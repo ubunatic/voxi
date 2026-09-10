@@ -11,6 +11,7 @@ In-depth references for architecture, decisions, and operations of the Voxi Linu
 | [PublicationAndRelease.md](PublicationAndRelease.md) | Codeberg hosting philosophy, local CI quality gates, and release workflow |
 | [ChunkDiagnostics.md](ChunkDiagnostics.md) | `voxi chunks` ring buffer, RMS/acoustic-gate fields, the Braille LEVEL sparkline (dual-column packing, log-scale calibration pitfalls), and `--color` |
 | [LiveMicMeter.md](LiveMicMeter.md) | `audiolevel` package: capture, two-sided ballistics easing, decoupled paint/collect/capture cadences, truecolor gradient rendering, GNOME mic-indicator suppression, and the `stty`-subprocess perf pitfall |
+| [EagerDeliverySafety.md](EagerDeliverySafety.md) | Eager chunk identities, at-most-once delivery ledger, stop/queue semantics, visible failures, and conservative transcript safety limits |
 
 ---
 
@@ -38,4 +39,3 @@ In-depth references for architecture, decisions, and operations of the Voxi Linu
 | [studies/2026-08-24-single-agent-mode-orchestration.md](studies/2026-08-24-single-agent-mode-orchestration.md) | Single Agent Mode Orchestration |
 | [studies/2026-09-07-fluidvoice-review-and-chunk-diagnostics.md](studies/2026-09-07-fluidvoice-review-and-chunk-diagnostics.md) | FluidVoice Prior-Art Review, Chunk Diagnostics, and Three Rounds of Calibration |
 | [studies/2026-09-09-spec-audit-and-cross-agent-implementation.md](studies/2026-09-09-spec-audit-and-cross-agent-implementation.md) | Spec/Code-Quality Audit, Roadmap Reconciliation, and Cross-Agent Implementation & Review |
-
