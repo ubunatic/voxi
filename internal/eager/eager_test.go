@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -617,6 +618,45 @@ func TestEagerSessionManagerRapidToggleDuringDrainStartsFreshSession(t *testing.
 	if got := started.Load(); got != 3 {
 		t.Fatalf("fake capture run invoked %d times, want exactly 3 sessions started", got)
 	}
+}
+
+func TestEagerSessionManagerConcurrentTogglesPreserveParity(t *testing.T) {
+	var started atomic.Int32
+	mgr := newEagerSessionManager(context.Background(), nil, fakeCaptureRun(0, &started))
+
+	const rounds = 20
+	for range rounds {
+		var wg sync.WaitGroup
+		wg.Add(2)
+		for range 2 {
+			go func() {
+				defer wg.Done()
+				mgr.Toggle()
+			}()
+		}
+		wg.Wait()
+		if mgr.Recording() {
+			t.Fatal("two concurrent toggles from idle left a recording session active")
+		}
+	}
+
+	mgr.Start()
+	for range 2 {
+		var wg sync.WaitGroup
+		wg.Add(2)
+		for range 2 {
+			go func() {
+				defer wg.Done()
+				mgr.Toggle()
+			}()
+		}
+		wg.Wait()
+		if !mgr.Recording() {
+			t.Fatal("two concurrent toggles from active left the manager idle")
+		}
+	}
+	mgr.Stop()
+	mgr.Wait()
 }
 
 // TestRunEagerCaptureSessionSignalsCaptureStoppedOnEarlyReturn is the

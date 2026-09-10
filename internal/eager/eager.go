@@ -907,6 +907,7 @@ type eagerSessionManager struct {
 	modifierStartGrace time.Duration
 
 	mu                  sync.Mutex
+	toggleMu            sync.Mutex // serializes check-and-act Toggle operations
 	activeCancel        context.CancelFunc
 	activeStopped       chan struct{}
 	activeSessionID     string
@@ -994,6 +995,8 @@ func (m *eagerSessionManager) Start() {
 
 // Toggle stops the active session if one is running, otherwise starts one.
 func (m *eagerSessionManager) Toggle() string {
+	m.toggleMu.Lock()
+	defer m.toggleMu.Unlock()
 	m.mu.Lock()
 	rec := m.isRecording
 	m.mu.Unlock()

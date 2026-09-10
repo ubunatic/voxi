@@ -1,6 +1,6 @@
 # 092 — eagerSessionManager.Toggle has a check-then-act race under concurrent SIGUSR1/socket invocation
 
-**Status**: Open
+**Status**: Closed
 **Priority**: P2 (Medium)
 **Severity**: Bug (race condition, hard-to-reproduce double-toggle)
 **Category**: Go Code Quality / Concurrency
@@ -59,6 +59,13 @@ the two sessions is torn down microseconds after being reported as started.
 - `Recording()` (eager.go:916-920) and `Toggle()`'s returned status string
   can each report state that's already stale by the time the caller reads
   it, compounding debugging difficulty for this class of bug.
+
+## 4. Resolution (2026-09-11)
+
+Closed by serializing the check-and-act portion of `Toggle()` with a dedicated
+manager control mutex. The existing state mutex remains narrowly scoped, so
+session stop waits and capture callbacks do not deadlock. Regression tests cover
+concurrent toggles from both idle and recording states under the race detector.
 
 ## 3. Suggested Fix
 
