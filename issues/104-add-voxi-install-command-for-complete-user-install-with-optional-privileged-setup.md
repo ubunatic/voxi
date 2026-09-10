@@ -1,6 +1,6 @@
 # 104 — Add `voxi install` command for complete user install with optional privileged setup
 
-**Status**: Closed
+**Status**: Closed — implemented and verified: user install activates `voxi-agent.service`; optional `--modifierd` path is explicitly privileged and stages its service file before `sudo install`
 **Priority**: P1 (High)
 **Severity**: Major
 **Category**: Feature
@@ -120,3 +120,17 @@ later implementation plan explicitly requires a compatibility adjustment.
 - Redesigning the modifier daemon, transcription engines, typing injection, or
   desktop shortcut behavior.
 - Automatically changing unrelated desktop or system configuration.
+
+## 6. Closure Evidence (2026-09-10)
+
+- `cmd/voxi install` and `internal/install` implement the user-scoped default
+  workflow and the explicitly gated `--modifierd` path.
+- `internal/install/install_test.go` covers default no-`sudo` behavior,
+  privileged command construction, phase failures, and help text.
+- `make install-all` enables and starts `voxi-agent.service`; the equivalent
+  behavior is also part of `voxi install`.
+- Live verification reported both `voxi-agent.service` and
+  `voxi-modifierd.service` as enabled and active.
+- The original privileged install failure caused by piping a unit through
+  `sudo install /dev/stdin` was fixed by staging the unit in the user cache
+  before invoking `sudo install`.

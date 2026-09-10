@@ -1,6 +1,6 @@
 # Voxi Roadmap
 
-Reconciled from the active issue backlog on 2026-09-09 (previous pass:
+Reconciled from the active issue backlog on 2026-09-10 (previous pass:
 2026-09-05). This is a communication artifact, not a scheduling tool;
 `issues/README.md` remains the authoritative tracker.
 
@@ -56,14 +56,6 @@ instrumentation* to *closing the trust contract* it revealed.
   lacks, then surface `typeErr`), and it makes every other failure in this
   bucket diagnosable by the user instead of by an agent running telemetry
   queries. Take it alongside 083 — both touch the same acceptance/typing seam.
-- **[089 `voxi-modifierd` not installed (modifier gating inactive)](../issues/089-voxi-modifierd-not-installed-on-this-dev-machine-modifier-gating-currently-inactive.md)**
-  (Open, P2, operational). Cheapest trust win on the board: one `sudo make
-  install-modifierd` plus a live re-verify. The headline safety mechanism the
-  README and website advertise is currently *not running* on the development
-  machine, and `mods: off` is plainly visible in the published
-  `website/voxi-demo.mp4`. Do it now, then act on its second half — decide
-  whether the quickstart's "(Optional)" framing undersells a step that is the
-  actual safety guarantee behind a headline feature.
 - **[092 `eagerSessionManager.Toggle` check-then-act race](../issues/092-eagersessionmanager-toggle-has-a-check-then-act-race-under-concurrent-sigusr1-socket-invocation.md)**
   (Open, P2). Included in Now because it is small, well-localized, and sits in
   exactly the session-lifecycle code 083 is already rewriting — fixing it as
@@ -71,6 +63,14 @@ instrumentation* to *closing the trust contract* it revealed.
   file. User-visible symptom (two near-simultaneous toggles silently no-op the
   dictation start, while both report "Recording started") is a lifecycle
   predictability bug, i.e. the same axis as 083.
+- **[103 queued utterance lost on stop](../issues/103-normal-non-final-utterance-queued-just-before-stop-is-killed-via-canceled-session-ctx-silently-dropped.md)**
+  (Open, P1). This is the concrete queued-job half of the stop/delivery contract
+  that 083 does not yet cover; resolve its disposition alongside the at-most-once
+  design rather than treating the existing final-flush fix as sufficient.
+- **[100 background-voice false acceptance](../issues/100-background-distant-voice-hallucinated-into-accepted-transcripts-bypassing-silence-gate.md)**
+  (Open, P1). It is a distinct false-positive injection path: plausible ASR text
+  from non-user audio passes the current acoustic gate, so it belongs with the
+  safety work even though repetition limits cannot solve it.
 
 ## Next — make responsiveness and the product story evidence-based
 
@@ -111,6 +111,11 @@ instrumentation* to *closing the trust contract* it revealed.
   its own measurements. The harness has already earned its keep (it caught a
   genuine, previously-unknown Whisper outro-hallucination variant on its first
   independent run), which is why it stays active rather than being parked.
+- **[096 acoustic classification research](../issues/096-spectral-centroid-keyboard-clack-vs-speech-classification-research.md)**
+  (Research In Progress, P2) and **[097 public speech-sample catalog](../issues/097-external-public-domain-speech-sample-catalog-download-on-demand-not-committed.md)**
+  (Open, P2) support 056's noise-rejection work. 096 has moved beyond falsified
+  spectral-centroid/ZCR heuristics toward harmonicity/pitch-salience and
+  transient-shape analysis; 097 should supply reproducible external fixtures.
 - **[037 code quality, coverage, and modularization](../issues/037-code-quality-and-test-coverage-roadmap.md)**
   (Open, P3), scoped initially to the Eager decomposition and focused CLI/audio/
   ASR tests. Unchanged reasoning from the last pass, reinforced by this one:
@@ -139,6 +144,11 @@ instrumentation* to *closing the trust contract* it revealed.
   additionally admits a legitimate cheaper resolution: if a schema-validation
   dependency is unwanted, correct `docs/Spec.md` instead of adding the
   validator. Decide that before implementing.
+- **[095 spoken number normalization](../issues/095-normalize-spoken-number-words-to-digits-in-dictated-transcripts-library-vs-build-our-own.md)**,
+  **[099 corpus manifest replacement](../issues/099-replace-corpus-tsv-sample-manifest-with-a-more-robust-storage-format.md)**,
+  and **[102 notification language packs](../issues/102-multi-language-audio-packs-for-the-modifier-release-notification-clip.md)**
+  remain Later: useful product or developer-experience improvements, but none
+  should displace the current injection-safety and false-acceptance work.
 - **[024 GNOME typing-feedback icon](../issues/024-gnome-typing-feedback-icon.md)**
   and **[025 GNOME volume/VU-meter animation](../issues/025-voice-input-volume-animation.md)**
   (Open, P4). Unchanged: low value while the GNOME Shell extension is not in
@@ -181,6 +191,12 @@ instrumentation* to *closing the trust contract* it revealed.
   constrained decoding** and **052 CPU/GPU priority research** all closed
   during this roadmap pass (087 re-verified fixed by `82b0ee6`; 040 doubly
   blocked with no productive path on either ASR backend; 052 folded into 088).
+- **089 modifier-daemon installation gap** closed and live-verified: the system
+  modifier daemon and user agent are enabled and active; the durable install path
+  is documented in [`InstallationArchitecture.md`](InstallationArchitecture.md).
+- **093, 094, 098, 101, and 104** are closed with implementation and/or live
+  verification recorded in their issue files; they are removed from active
+  sequencing and retained here as shipped evidence.
 - **086 always-show live loudness**, **085 release onboarding** (v0.1.1),
   **081 persistent `dotoold` user service**, and **082 Cohere transcript
   replacements** all closed.
@@ -196,12 +212,13 @@ instrumentation* to *closing the trust contract* it revealed.
   actually safe*. Trust properties are now ranked explicitly.
 - **Out of the roadmap entirely**: 057, 060, and 061 (all closed) — 061 was the
   prior top `Now` item and is recorded under Shipped rather than dropped.
-- **New to the roadmap**: 080, 083, 087, 088, 089, 090, 091, 092, all filed
+- **New to the roadmap**: 080, 083, 087, 088, 089, 090, 091, 092, 100, 103,
+  all filed
   since the last pass.
 - **Promoted**: 075 from unlisted to the head of `Next` — Cohere is the default
-  in the spec but not in the docs, and that gates 001. 089 promoted into `Now`
-  on cost-versus-trust grounds despite a P2 field, since it is a single install
-  command standing between the project and its own headline safety claim.
+  in the spec but not in the docs, and that gates 001. 089 was removed from
+  `Now` after its installation and live verification completed; 104 now records
+  the durable installation path that prevents the same omission on fresh setups.
 - **Demoted / restructured**: 052 moved from `Next` in its own right to a merge
   candidate under 088, and both now sit behind a hard requirement to produce
   telemetry numbers first. 056 stayed in `Next` but split explicitly into

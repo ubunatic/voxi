@@ -1,6 +1,6 @@
 # 089 — `voxi-modifierd` not installed on this dev machine (modifier gating currently inactive)
 
-**Status**: Closed — installed and verified live: voxi-modifierd active/enabled, mods: [Alt] shown in voxi monitor
+**Status**: Closed — installed and verified live on 2026-09-10: voxi-modifierd enabled/active; voxi-agent enabled/active; modifier state available
 **Priority**: P2 (Medium)
 **Severity**: Bug (safety feature inactive, local environment)
 **Category**: Operations / Local Environment
@@ -47,7 +47,7 @@ decision on whether `make install-all`/onboarding docs should more strongly surf
 that `install-modifierd` is a *separate, easy-to-forget* `sudo` step (the main
 `make install`/`make install-user-services` path doesn't touch it).
 
-## 4. Next Steps (not decided here)
+## 4. Historical Next Steps
 
 1. Run `sudo make install-modifierd` on this machine and re-verify (`systemctl status`,
    `voxi monitor` showing `mods:` as `neutral`/active rather than `off`).
@@ -57,5 +57,13 @@ that `install-modifierd` is a *separate, easy-to-forget* `sudo` step (the main
    service — already noted as "(Optional)" in the quickstart's install command block,
    but "optional" undersells that it's the actual safety mechanism behind a headline
    feature.
-3. No code change is anticipated; this is expected to close once installed and
-   re-verified live on this machine.
+3. No code change was anticipated; this issue is now closed after installation
+   and live re-verification on this machine.
+
+## 5. Closure Evidence (2026-09-10)
+
+The previously missing system service is now enabled and active. The user
+agent is also enabled and active, so the post-login workflow has both the user
+control plane and the physical modifier gate running. The consolidated
+installation path is documented in
+[`docs/InstallationArchitecture.md`](../docs/InstallationArchitecture.md).
