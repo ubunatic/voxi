@@ -130,6 +130,27 @@ func TestRejectionReason(t *testing.T) {
 	}
 }
 
+func TestReportEagerFailureIsUserVisibleWithoutTranscriptText(t *testing.T) {
+	var out bytes.Buffer
+	d := deps.Dependencies{Stdout: &out}
+	reportEagerFailure(d, "typing", "session-1", "session-1/2", fmt.Errorf("dotool not found on PATH"))
+	want := "voxi eager: typing failed (session=session-1 chunk=session-1/2): dotool not found on PATH\n"
+	if out.String() != want {
+		t.Fatalf("diagnostic = %q, want %q", out.String(), want)
+	}
+	if strings.Contains(out.String(), "private transcript") {
+		t.Fatal("diagnostic included transcript text")
+	}
+}
+
+func TestReportEagerFailureIgnoresExpectedRejection(t *testing.T) {
+	var out bytes.Buffer
+	reportEagerFailure(deps.Dependencies{Stdout: &out}, "transcription", "session-1", "session-1/1", nil)
+	if out.Len() != 0 {
+		t.Fatalf("nil error produced diagnostic %q", out.String())
+	}
+}
+
 func TestProbableSilenceUsesInspectableVoicedRatio(t *testing.T) {
 	if !probableSilence(audioStats(100, 4)) {
 		t.Fatal("4% voiced chunk was not marked probable silence")

@@ -463,9 +463,7 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 			chunkID := fmt.Sprintf("%s/%d", sessionID, job.Index)
 			wavPath := filepath.Join(tmpDir, fmt.Sprintf("utt_%03d.wav", job.Index))
 			if err := audio.WriteWAVAudio(wavPath, job.Audio, sampleRate); err != nil {
-				if !isDaemon {
-					fmt.Fprintf(d.Stdout, "Error writing utterance audio: %v\n", err)
-				}
+				reportEagerFailure(d, "audio", sessionID, chunkID, err)
 				continue
 			}
 
@@ -536,6 +534,7 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 			transError := ""
 			if err != nil {
 				transError = err.Error()
+				reportEagerFailure(d, "transcription", sessionID, chunkID, err)
 			}
 			_ = recorder.Record(telemetry.Event{Event: telemetry.TranscriptionComplete, Timestamp: transEnd, SessionID: sessionID, ChunkID: chunkID, ChunkIndex: job.Index, TranscriptWordCount: &wordCount, Success: &transSuccess, Error: transError})
 			rejReason := ""
@@ -637,6 +636,7 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 						typeError := ""
 						if typeErr != nil {
 							typeError = typeErr.Error()
+							reportEagerFailure(d, "typing", sessionID, chunkID, typeErr)
 						}
 						_ = recorder.Record(telemetry.Event{Event: telemetry.TypingComplete, Timestamp: typeEnd, SessionID: sessionID, ChunkID: chunkID, ChunkIndex: job.Index, DeliveryID: chunkID, Attempt: 1, Success: &typeSuccess, Error: typeError})
 						chunkMeta.TypingStartedAt = typeStart
@@ -806,6 +806,17 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 	}
 
 	return nil
+}
+
+// reportEagerFailure makes hard pipeline failures visible to both direct users
+// and daemon users. The daemon's stdout is inherited by systemd, so this is
+// also the journal-visible diagnostic boundary. Expected transcript rejections
+// (empty output, silence artifacts, stop words, and safety rejects) remain quiet.
+func reportEagerFailure(d deps.Dependencies, stage, sessionID, chunkID string, err error) {
+	if err == nil || d.Stdout == nil {
+		return
+	}
+	fmt.Fprintf(d.Stdout, "voxi eager: %s failed (session=%s chunk=%s): %v\n", stage, sessionID, chunkID, err)
 }
 
 func applyEngineReplacements(engine, text string, rules []feedback.Replacement) string {
