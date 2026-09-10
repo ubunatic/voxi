@@ -859,6 +859,9 @@ func rejectionReason(err error, rawText, cleanedText string, stopWords, silenceA
 	if feedback.IsSilenceArtifact(cleanedText, silenceArtifacts) {
 		return "silence_artifact"
 	}
+	if asr.HasRepeatedSentencePair(cleanedText) {
+		return "repeated_sentence_pair"
+	}
 	if !asr.IsSafeToType(cleanedText, stopWords) {
 		return "stop_word"
 	}

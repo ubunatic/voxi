@@ -1,6 +1,6 @@
 # 100 — Background/Distant Voice Hallucinated Into Accepted Transcripts, Bypassing Silence Gate
 
-**Status**: Open
+**Status**: In Progress
 **Priority**: P1 (High)
 **Severity**: Major
 **Category**: Bug
@@ -104,3 +104,15 @@ open questions only:
 - [ ] Land the accept/reject change in `internal/eager` alongside the
   existing `probable_silence`/voiced_ratio gating.
 - [ ] Consider a 056-style stress-session assertion once a fix lands.
+
+## 7. Canary and partial safety slice (2026-09-11)
+
+The promoted fixtures were inspected with a non-injecting corpus canary. Their
+energy overlaps ordinary background/noise recordings, so an unsupported RMS or
+voiced-ratio threshold would risk rejecting legitimate quiet speech. Adjacent
+duplicated complete sentence pairs are now rejected before typing, covering the
+hospital-hallucination transcript shape, with unit regression tests and an
+explicit `repeated_sentence_pair` rejection reason. The non-repetitive
+`Aye, you did that.` fixture still requires a speaker/confidence signal that is
+not currently available; this issue remains In Progress pending a justified
+canary-driven classifier.

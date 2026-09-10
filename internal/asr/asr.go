@@ -77,11 +77,44 @@ func IsSafeToType(text string, stopWords []string) bool {
 	if urlPatternRe.MatchString(trimmed) {
 		return false
 	}
+	if HasRepeatedSentencePair(trimmed) {
+		return false
+	}
 	// Reject known Whisper silence hallucinations
 	if re := hallucinationRegexp(stopWords); re != nil && re.MatchString(trimmed) {
 		return false
 	}
 	return true
+}
+
+// HasRepeatedSentencePair detects a complete sentence repeated immediately
+// after terminal punctuation. Short answers and ordinary word repetition are
+// intentionally excluded.
+func HasRepeatedSentencePair(text string) bool {
+	trimmed := strings.TrimSpace(text)
+	for i, r := range trimmed {
+		if r != '.' && r != '!' && r != '?' {
+			continue
+		}
+		left := normalizeSentence(trimmed[:i])
+		right := normalizeSentence(trimmed[i+1:])
+		if left == right && len(strings.Fields(left)) >= 4 {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeSentence(text string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(text) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.IsSpace(r) || r == '\'' {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte(' ')
+		}
+	}
+	return strings.Join(strings.Fields(b.String()), " ")
 }
 
 // StripTrailingHallucinations cleans trailing hallucinated tokens (e.g.

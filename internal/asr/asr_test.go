@@ -51,6 +51,26 @@ func TestIsSafeToType(t *testing.T) {
 	}
 }
 
+func TestHasRepeatedSentencePair(t *testing.T) {
+	for _, text := range []string{
+		"I'm going to the hospital. I'm going to the hospital.",
+		"This is a complete sentence! This is a complete sentence!",
+	} {
+		if !HasRepeatedSentencePair(text) {
+			t.Errorf("HasRepeatedSentencePair(%q) = false", text)
+		}
+	}
+	for _, text := range []string{
+		"Yes. Yes.",
+		"very very good",
+		"This is one sentence. This is different.",
+	} {
+		if HasRepeatedSentencePair(text) {
+			t.Errorf("HasRepeatedSentencePair(%q) = true", text)
+		}
+	}
+}
+
 func TestCleanWhisperTranscript(t *testing.T) {
 	out := `
 [2026-08-18T10:00:00Z INFO] Loading audio file: /tmp/utt_001.wav
