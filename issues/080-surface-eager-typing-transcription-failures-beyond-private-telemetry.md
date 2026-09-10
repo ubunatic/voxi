@@ -159,8 +159,9 @@ implementation time.
 ## 6. Resolution (2026-09-11)
 
 Closed by emitting hard audio-write, transcription, and typing failures through
-the eager output stream. Direct invocations show the diagnostic on stdout, and
-the daemon's inherited stdout is captured by `voxi-agent.service` in the user
-journal. Expected empty, silence-artifact, stop-word, and pathological transcript
-rejections remain quiet. Telemetry recording is unchanged, and focused tests
-cover the diagnostic boundary without including transcript text.
+the eager output stream, including modifier-buffer flush failures. Direct
+invocations show the diagnostic on stdout, and the daemon's inherited stdout is
+captured by `voxi-agent.service` in the user journal. Expected empty,
+silence-artifact, stop-word, and pathological transcript rejections remain quiet.
+Telemetry recording is unchanged, and focused tests cover the diagnostic
+boundary without including transcript text.

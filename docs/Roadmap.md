@@ -68,7 +68,7 @@ instrumentation* to *closing the trust contract* it revealed.
   that 083 does not yet cover; resolve its disposition alongside the at-most-once
   design rather than treating the existing final-flush fix as sufficient.
 - **[100 background-voice false acceptance](../issues/100-background-distant-voice-hallucinated-into-accepted-transcripts-bypassing-silence-gate.md)**
-  (Open, P1). It is a distinct false-positive injection path: plausible ASR text
+  (In Progress, P1). It is a distinct false-positive injection path: plausible ASR text
   from non-user audio passes the current acoustic gate, so it belongs with the
   safety work even though repetition limits cannot solve it.
 

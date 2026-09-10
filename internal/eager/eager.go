@@ -460,6 +460,7 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 	go func() {
 		defer transWg.Done()
 		for job := range jobChan {
+			detachedJob := job.Final || ctx.Err() != nil
 			chunkID := fmt.Sprintf("%s/%d", sessionID, job.Index)
 			wavPath := filepath.Join(tmpDir, fmt.Sprintf("utt_%03d.wav", job.Index))
 			if err := audio.WriteWAVAudio(wavPath, job.Audio, sampleRate); err != nil {
@@ -500,7 +501,7 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 
 			writeVoxtypeState("transcribing")
 			cmdArgs := buildTranscribeArgs(wavPath)
-			transcribeParent := queuedJobContext(ctx, job.Final)
+			transcribeParent := queuedJobContext(ctx, detachedJob)
 			transcribeCtx, cancelTranscribe := context.WithTimeout(transcribeParent, transcribeTimeout)
 			cmd := exec.CommandContext(transcribeCtx, transcribeBinPath, cmdArgs...)
 			cmd.Env = append(os.Environ(), "NO_COLOR=1", "RUST_LOG=error")
@@ -620,7 +621,10 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 						}
 						typeStart := time.Now()
 						_ = recorder.Record(telemetry.Event{Event: telemetry.TypingStarted, Timestamp: typeStart, SessionID: sessionID, ChunkID: chunkID, ChunkIndex: job.Index, DeliveryID: chunkID, Attempt: 1})
-						typeCtx := queuedJobContext(ctx, job.Final)
+						typeCtx := queuedJobContext(ctx, detachedJob)
+						if !detachedJob && ctx.Err() != nil {
+							continue
+						}
 						typeErr := typing.TypeTextObserved(typeCtx, d, text+" ", &injectorObserver{recorder: recorder, sessionID: sessionID, chunkID: chunkID, chunkIndex: job.Index, deliveryID: chunkID})
 						typeEnd := time.Now()
 						typeSuccess := typeErr == nil
@@ -785,7 +789,10 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 				_ = recorder.Record(event)
 				continue
 			}
-			_ = typing.TypeTextObserved(context.Background(), d, item.Text, &injectorObserver{recorder: recorder, sessionID: sessionID, chunkID: item.ID, deliveryID: item.ID})
+			typeErr := typing.TypeTextObserved(context.Background(), d, item.Text, &injectorObserver{recorder: recorder, sessionID: sessionID, chunkID: item.ID, deliveryID: item.ID})
+			if typeErr != nil {
+				reportEagerFailure(d, "typing", sessionID, item.ID, typeErr)
+			}
 		}
 	}
 
@@ -805,8 +812,8 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 // running when stop cancels the session keeps the session context and is
 // terminated by the cancellation. Final jobs use the same detached policy
 // because the segmenter queues them after capture stop.
-func queuedJobContext(sessionCtx context.Context, final bool) context.Context {
-	if final || sessionCtx.Err() != nil {
+func queuedJobContext(sessionCtx context.Context, detached bool) context.Context {
+	if detached {
 		return context.Background()
 	}
 	return sessionCtx

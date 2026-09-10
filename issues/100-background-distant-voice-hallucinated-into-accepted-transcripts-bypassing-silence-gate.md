@@ -115,4 +115,6 @@ hospital-hallucination transcript shape, with unit regression tests and an
 explicit `repeated_sentence_pair` rejection reason. The non-repetitive
 `Aye, you did that.` fixture still requires a speaker/confidence signal that is
 not currently available; this issue remains In Progress pending a justified
-canary-driven classifier.
+canary-driven classifier. The complete-sentence detector compares adjacent
+sentences anywhere in a cleaned transcript and intentionally requires at least
+three words per sentence to avoid rejecting short answers.

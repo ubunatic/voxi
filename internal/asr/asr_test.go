@@ -55,6 +55,7 @@ func TestHasRepeatedSentencePair(t *testing.T) {
 	for _, text := range []string{
 		"I'm going to the hospital. I'm going to the hospital.",
 		"This is a complete sentence! This is a complete sentence!",
+		"Please note this. This is repeated. This is repeated.",
 	} {
 		if !HasRepeatedSentencePair(text) {
 			t.Errorf("HasRepeatedSentencePair(%q) = false", text)

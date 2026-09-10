@@ -92,15 +92,24 @@ func IsSafeToType(text string, stopWords []string) bool {
 // intentionally excluded.
 func HasRepeatedSentencePair(text string) bool {
 	trimmed := strings.TrimSpace(text)
+	start := 0
 	for i, r := range trimmed {
 		if r != '.' && r != '!' && r != '?' {
 			continue
 		}
-		left := normalizeSentence(trimmed[:i])
-		right := normalizeSentence(trimmed[i+1:])
-		if left == right && len(strings.Fields(left)) >= 4 {
-			return true
+		first := normalizeSentence(trimmed[start:i])
+		if len(strings.Fields(first)) >= 3 {
+			for j := i + 1; j < len(trimmed); j++ {
+				if trimmed[j] != '.' && trimmed[j] != '!' && trimmed[j] != '?' {
+					continue
+				}
+				if first == normalizeSentence(trimmed[i+1:j]) {
+					return true
+				}
+				break
+			}
 		}
+		start = i + 1
 	}
 	return false
 }
