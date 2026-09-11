@@ -28,11 +28,15 @@ build-all: ⚙️ build build-modifierd  # build all binaries
 run: ⚙️ build  # run voxi monitor
 	./$(BINARY) monitor
 
-install: ⚙️ build  # install voxi binary to ~/go/bin (user)
+install: ⚙️ build  # install voxi binary to ~/go/bin and ~/.local/bin (user)
 	go install ./cmd/voxi
+	@mkdir -p $(HOME)/.local/bin
+	install -m 0755 $(BINARY) $(HOME)/.local/bin/$(BINARY)
 
-install-debug: ⚙️ build-debug  # install debug binary to ~/go/bin
+install-debug: ⚙️ build-debug  # install debug binary to ~/go/bin and ~/.local/bin
 	go install -tags debug ./cmd/voxi
+	@mkdir -p $(HOME)/.local/bin
+	install -m 0755 $(BINARY) $(HOME)/.local/bin/$(BINARY)
 
 install-all: ⚙️ install install-user-services install-crispasr install-dotool install-dotoold  # install user binaries, systemd user services, and default engine + typing-injection deps
 	go install ./cmd/voxi-modifierd
