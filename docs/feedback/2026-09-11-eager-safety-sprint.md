@@ -61,3 +61,20 @@ helper-only context tests are useful but insufficient.
   clearly displaying its project and current ticket scope.
 - Make malformed patch feedback include the nearby unmatched file context to
   reduce repeated retries.
+
+## Issue 083 stop-drain follow-up
+
+The daily-driver reproduction clarified that the final Super-X is a flush
+command: stop capture, drain all audio captured before the request, transcribe
+it, and type it promptly. The implementation now records the stop request
+timestamp before cancellation, preserves pre-stop reads even when cancellation
+is observed between read and processing, and drains in-flight, queued, and
+segmenter-flushed jobs under a bounded asynchronous lease. Delivery is fenced
+by lease eligibility before and after the durable at-most-once claim.
+
+The independent review caught several subtle concurrency defects before the
+commit, including a late stop timestamp, a post-read cancellation drop, and a
+modifier-buffer claim before eligibility. The remaining known limitation is
+the crash window after a durable claim but before injector submission; this
+keeps the safety guarantee at-most-once at the cost of possible loss and
+remains part of issue 083's open work.
