@@ -25,16 +25,22 @@ written into these lifecycle records by default.
 ## Stop and queue semantics
 
 Stopping capture is deliberately fast: the recording process is killed and
-reaped, while already-queued transcription work drains asynchronously. A normal
-job observed by the worker after cancellation uses a bounded detached context so
-accepted speech is not silently lost. A job already running when cancellation is
-observed remains session-bound and is canceled. The segmenter's trailing `Final`
-flush is also detached because it represents speech buffered before stop.
+reaped, while all audio captured before the stop request drains asynchronously.
+The final Super-X is a flush command, not a discard command: in-flight, queued,
+and segmenter-buffered jobs belonging to that generation may finish
+transcription and type promptly under a bounded five-second drain lease.
+
+The stop request is timestamped before cancellation. Reads completed before that
+boundary survive even if cancellation is observed between reading and frame
+processing; reads completing after the boundary are discarded. A stopped
+generation's lease is independent of a newly started generation, while delivery
+checks lease eligibility before claiming an identity and again immediately
+before injection.
 
 This distinction is important. Detaching every job would allow stale ASR output
 to type after stop; canceling every job drops the last words the user spoke.
-`queuedJobContext` captures the worker's queue-state decision once and applies it
-to both transcription and typing.
+The explicit generation boundary and bounded drain lease express both policies
+without making the control socket wait for transcription.
 
 ## User-visible failures
 
@@ -64,7 +70,8 @@ RMS threshold should be added without a canary comparison against close-mic
 speech and ambient/noise fixtures.
 
 Issue 083 also retains open work for emergency stop, active injector/FIFO
-lifecycle canaries, failed-injection policy, and broader generation fencing.
+lifecycle canaries, failed-injection policy, and the durable claim/injector
+crash window.
 
 ## Verification baseline
 

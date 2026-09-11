@@ -250,3 +250,25 @@ Focused tests cover persistent duplicate rejection and the injectable process
 attempt boundary. Issue 083 remains In Progress: emergency stop, exhaustive
 active-process/FIFO lifecycle canaries, and the broader stop/generation policy are
 not claimed by this slice.
+
+## 10. Bounded final-Super-X drain implementation (2026-09-11)
+
+Implemented in commit `df6af2b` after the fresh chunk `#52`/`#53` reproduction.
+The final Super-X now means “stop capture and flush,” matching the daily-driver
+workflow: all audio captured before the request may finish transcription and
+typing promptly, including a subprocess already in flight, queued jobs, and the
+segmenter's final buffered job.
+
+The stop request is timestamped before cancellation and passed into the capture
+session. A completed read before that boundary is preserved even if cancellation
+is observed before frame processing; a read completing after the boundary is
+discarded. A bounded five-second drain lease keeps the control path fast while
+allowing eligible work to complete asynchronously. Generation eligibility is
+checked before the durable delivery claim and again before injection, including
+modifier-buffered delivery. Added coverage combines in-flight, queued, and
+segmenter-flushed jobs, generation overlap, lease expiry, cancellation/read
+interleaving, and ordered exactly-once typing.
+
+The issue remains In Progress. Emergency stop, exhaustive FIFO/standalone
+injector lifecycle canaries, and the documented crash window between durable
+claim and injector submission remain open.
