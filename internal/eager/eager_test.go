@@ -36,8 +36,10 @@ func TestAcceptTranscriptRejectsIsolatedSilenceArtifactBeforeTypingAndHistory(t 
 }
 
 func TestApplyEngineReplacementsIsCohereOnlyAndChunkLocal(t *testing.T) {
+	// "Voxy" is heard in Title Case here, so the stored lowercase "voxi" is
+	// adapted to "Voxi" to match (see feedback.ApplyReplacements).
 	rules := []feedback.Replacement{{From: "Voxy", To: "voxi"}}
-	if got := applyEngineReplacements(cohereTranscribeEngine, "Voxy one", rules); got != "voxi one" {
+	if got := applyEngineReplacements(cohereTranscribeEngine, "Voxy one", rules); got != "Voxi one" {
 		t.Fatalf("Cohere result = %q", got)
 	}
 	if got := applyEngineReplacements("whisper", "Voxy one", rules); got != "Voxy one" {
@@ -48,7 +50,7 @@ func TestApplyEngineReplacementsIsCohereOnlyAndChunkLocal(t *testing.T) {
 	for i := range chunks {
 		chunks[i] = applyEngineReplacements(cohereTranscribeEngine, chunks[i], []feedback.Replacement{{From: "Voxy project", To: "voxi project"}, {From: "Voxy", To: "voxi"}})
 	}
-	if got := strings.Join(chunks, " "); got != "voxi project and voxi" {
+	if got := strings.Join(chunks, " "); got != "Voxi project and Voxi" {
 		t.Fatalf("chunk-local aggregate = %q", got)
 	}
 }

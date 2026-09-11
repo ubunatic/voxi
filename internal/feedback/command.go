@@ -187,28 +187,41 @@ func NewCommand(out io.Writer, home string, builtins []spec.StopWord, maxVocabul
 	replacementPath := ReplacementPath(home)
 	replacement := &cobra.Command{Use: "replacement", Short: "Manage exact Cohere transcript corrections"}
 	replacement.AddCommand(
-		&cobra.Command{Use: "add HEARD WRITTEN", Short: "Add an exact heard-form to written-form mapping", Args: cobra.ExactArgs(2), RunE: func(_ *cobra.Command, a []string) error {
-			rules, err := LoadReplacements(replacementPath)
-			if err != nil {
-				return err
-			}
-			rules, rule, err := AddReplacement(rules, a[0], a[1])
-			if err != nil {
-				return err
-			}
-			if err := SaveReplacements(replacementPath, rules); err != nil {
-				return err
-			}
-			fmt.Fprintf(out, "Added Cohere transcript replacement %q -> %q. Remove it with: voxi feedback replacement remove %q\n", rule.From, rule.To, rule.From)
-			return nil
-		}},
+		func() *cobra.Command {
+			add := &cobra.Command{Use: "add HEARD WRITTEN", Short: "Add a heard-form to written-form mapping, case-insensitive and case-adaptive", Args: cobra.ExactArgs(2), RunE: func(cmd *cobra.Command, a []string) error {
+				fixedCase, _ := cmd.Flags().GetBool("fixed-case")
+				rules, err := LoadReplacements(replacementPath)
+				if err != nil {
+					return err
+				}
+				rules, rule, err := AddReplacement(rules, a[0], a[1], fixedCase)
+				if err != nil {
+					return err
+				}
+				if err := SaveReplacements(replacementPath, rules); err != nil {
+					return err
+				}
+				note := ""
+				if fixedCase {
+					note = " (fixed case: always written exactly as given)"
+				}
+				fmt.Fprintf(out, "Added Cohere transcript replacement %q -> %q%s. Remove it with: voxi feedback replacement remove %q\n", rule.From, rule.To, note, rule.From)
+				return nil
+			}}
+			add.Flags().Bool("fixed-case", false, "always write WRITTEN exactly as given, regardless of how HEARD was cased (use for domains and the like)")
+			return add
+		}(),
 		&cobra.Command{Use: "list", Short: "List exact Cohere transcript corrections", Args: cobra.NoArgs, RunE: func(_ *cobra.Command, _ []string) error {
 			rules, err := LoadReplacements(replacementPath)
 			if err != nil {
 				return err
 			}
 			for _, rule := range rules {
-				fmt.Fprintf(out, "%s\t%s\n", rule.From, rule.To)
+				if rule.FixedCase {
+					fmt.Fprintf(out, "%s\t%s\t[fixed-case]\n", rule.From, rule.To)
+				} else {
+					fmt.Fprintf(out, "%s\t%s\n", rule.From, rule.To)
+				}
 			}
 			return nil
 		}},
@@ -227,6 +240,43 @@ func NewCommand(out io.Writer, home string, builtins []spec.StopWord, maxVocabul
 			fmt.Fprintf(out, "Removed Cohere transcript replacement %q -> %q. Add it again with: voxi feedback replacement add %q %q\n", rule.From, rule.To, rule.From, rule.To)
 			return nil
 		}},
+		func() *cobra.Command {
+			cleanup := &cobra.Command{
+				Use:   "cleanup",
+				Short: "Remove case-variant duplicates now redundant under case-insensitive matching",
+				Args:  cobra.NoArgs,
+				RunE: func(cmd *cobra.Command, _ []string) error {
+					dryRun, _ := cmd.Flags().GetBool("dry-run")
+					rules, err := LoadReplacements(replacementPath)
+					if err != nil {
+						return err
+					}
+					kept, dropped := DedupeReplacements(rules)
+					if len(dropped) == 0 {
+						fmt.Fprintln(out, "No duplicate replacements found.")
+						return nil
+					}
+					for _, d := range dropped {
+						if d.Conflict {
+							fmt.Fprintf(out, "Dropping %q -> %q: conflicts with kept %q -> %q (its target wins; the dropped target is lost)\n", d.Dropped.From, d.Dropped.To, d.Kept.From, d.Kept.To)
+						} else {
+							fmt.Fprintf(out, "Dropping %q -> %q: case variant of kept %q\n", d.Dropped.From, d.Dropped.To, d.Kept.From)
+						}
+					}
+					if dryRun {
+						fmt.Fprintf(out, "Dry run: %d of %d replacements would be removed. Re-run without --dry-run to apply.\n", len(dropped), len(rules))
+						return nil
+					}
+					if err := SaveReplacements(replacementPath, kept); err != nil {
+						return err
+					}
+					fmt.Fprintf(out, "Removed %d duplicate replacement(s); %d remain.\n", len(dropped), len(kept))
+					return nil
+				},
+			}
+			cleanup.Flags().Bool("dry-run", false, "preview duplicates without writing changes")
+			return cleanup
+		}(),
 	)
 	cmd.AddCommand(replacement)
 	status := &cobra.Command{
