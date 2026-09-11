@@ -19,7 +19,7 @@ func TestApplyReplacements(t *testing.T) {
 	}{
 		{"word and punctuation", "Voxy, then Voxy!", []Replacement{{"Voxy", "voxi"}}, "voxi, then voxi!"},
 		{"embedded word rejected", "Voxyology myVoxy Voxy_2", []Replacement{{"Voxy", "voxi"}}, "Voxyology myVoxy Voxy_2"},
-		{"case exact", "voxy VOXY Voxy", []Replacement{{"Voxy", "voxi"}}, "voxy VOXY voxi"},
+		{"case insensitive", "voxy VOXY Voxy", []Replacement{{"Voxy", "voxi"}}, "voxi voxi voxi"},
 		{"unicode boundaries", "überVoxy Voxy—Voxy Voxy猫", []Replacement{{"Voxy", "voxi"}}, "überVoxy voxi—voxi Voxy猫"},
 		{"phrase flexible whitespace", "Voxy\tproject and Voxy\nproject", []Replacement{{"Voxy project", "voxi project"}}, "voxi project and voxi project"},
 		{"all aliases", "Voxy and Voxie", []Replacement{{"Voxy", "voxi"}, {"Voxie", "voxi"}}, "voxi and voxi"},
@@ -54,6 +54,9 @@ func TestReplacementPersistenceValidationAndCommands(t *testing.T) {
 	if err := run("replacement", "add", "Voxy", "other"); err == nil || !strings.Contains(err.Error(), "already mapped") {
 		t.Fatalf("duplicate error = %v", err)
 	}
+	if err := run("replacement", "add", "VOXY", "other"); err == nil || !strings.Contains(err.Error(), "already mapped") {
+		t.Fatalf("case-insensitive duplicate error = %v", err)
+	}
 	info, err := os.Stat(path)
 	if err != nil {
 		t.Fatal(err)
@@ -68,11 +71,8 @@ func TestReplacementPersistenceValidationAndCommands(t *testing.T) {
 	if got := out.String(); got != "Voxy\tvoxi\nVoxy project\tvoxi project\n" {
 		t.Fatalf("list = %q", got)
 	}
-	if err := run("replacement", "remove", "voxy"); err == nil || !strings.Contains(err.Error(), "case-sensitive") {
-		t.Fatalf("case-sensitive remove error = %v", err)
-	}
-	if err := run("replacement", "remove", "Voxy"); err != nil {
-		t.Fatal(err)
+	if err := run("replacement", "remove", "voxy"); err != nil {
+		t.Fatalf("case-insensitive remove error = %v", err)
 	}
 	loaded, err := LoadReplacements(path)
 	if err != nil || len(loaded) != 1 || loaded[0].From != "Voxy project" {

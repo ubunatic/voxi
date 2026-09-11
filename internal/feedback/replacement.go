@@ -80,32 +80,35 @@ func SaveReplacements(path string, rules []Replacement) error {
 	return os.Chmod(path, 0600)
 }
 
-// AddReplacement adds a unique exact-case source mapping.
+// AddReplacement adds a unique source mapping. Matching is case-insensitive,
+// so "Voxy", "voxy", and "VOXY" are the same source: one rule covers every
+// casing it is heard in, and a case-only variant is rejected as a duplicate
+// rather than needing its own entry.
 func AddReplacement(rules []Replacement, from, to string) ([]Replacement, Replacement, error) {
 	rule, err := normalizeReplacement(from, to)
 	if err != nil {
 		return rules, Replacement{}, err
 	}
 	for _, existing := range rules {
-		if existing.From == rule.From {
-			return rules, Replacement{}, fmt.Errorf("replacement source %q is already mapped to %q", rule.From, existing.To)
+		if strings.EqualFold(existing.From, rule.From) {
+			return rules, Replacement{}, fmt.Errorf("replacement source %q is already mapped to %q (as %q; matching is case-insensitive)", rule.From, existing.To, existing.From)
 		}
 	}
 	rules = append(rules, rule)
 	return normalizeReplacements(rules), rule, nil
 }
 
-// RemoveReplacement removes an exact-case source mapping.
+// RemoveReplacement removes a source mapping. Matching is case-insensitive.
 func RemoveReplacement(rules []Replacement, from string) ([]Replacement, Replacement, error) {
 	from = normalizeSpace(from)
 	for i, rule := range rules {
-		if rule.From == from {
+		if strings.EqualFold(rule.From, from) {
 			out := append([]Replacement(nil), rules[:i]...)
 			out = append(out, rules[i+1:]...)
 			return normalizeReplacements(out), rule, nil
 		}
 	}
-	return rules, Replacement{}, fmt.Errorf("replacement source %q was not found (matching is case-sensitive)", from)
+	return rules, Replacement{}, fmt.Errorf("replacement source %q was not found", from)
 }
 
 func normalizeReplacement(from, to string) (Replacement, error) {
@@ -143,9 +146,11 @@ type replacementMatch struct {
 	rule       Replacement
 }
 
-// ApplyReplacements applies all exact-case rules to the original text once.
-// Phrase spaces match any non-empty Unicode whitespace run. Matches embedded
-// in Unicode words are rejected; punctuation remains adjacent and unchanged.
+// ApplyReplacements applies all rules to the original text once, matching
+// the From phrase case-insensitively (so one stored rule covers any casing
+// it is heard in) and always emitting To verbatim as stored. Phrase spaces
+// match any non-empty Unicode whitespace run. Matches embedded in Unicode
+// words are rejected; punctuation remains adjacent and unchanged.
 func ApplyReplacements(text string, rules []Replacement) string {
 	var matches []replacementMatch
 	for _, rule := range rules {
@@ -153,7 +158,7 @@ func ApplyReplacements(text string, rules []Replacement) string {
 		for i := range parts {
 			parts[i] = regexp.QuoteMeta(parts[i])
 		}
-		re := regexp.MustCompile(strings.Join(parts, `\s+`))
+		re := regexp.MustCompile(`(?i)` + strings.Join(parts, `\s+`))
 		for _, loc := range re.FindAllStringIndex(text, -1) {
 			if replacementBoundary(text, loc[0], loc[1]) {
 				matches = append(matches, replacementMatch{loc[0], loc[1], rule})
