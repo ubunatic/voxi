@@ -113,10 +113,20 @@ func Install(ctx context.Context, out io.Writer, e Effects, modifierd bool) erro
 		if err := e.MkdirAll(userBin, 0755); err != nil {
 			return fmt.Errorf("create %s: %w", userBin, err)
 		}
+		_ = e.Remove(voxiPath)
 		if err := e.WriteFile(voxiPath, data, 0755); err != nil {
 			return fmt.Errorf("write %s: %w", voxiPath, err)
 		}
-		return e.Chmod(voxiPath, 0755)
+		if err := e.Chmod(voxiPath, 0755); err != nil {
+			return err
+		}
+		goBin := filepath.Join(e.Home, "go", "bin")
+		if err := e.MkdirAll(goBin, 0755); err != nil {
+			return fmt.Errorf("create %s: %w", goBin, err)
+		}
+		goBinVoxi := filepath.Join(goBin, "voxi")
+		_ = e.Remove(goBinVoxi)
+		return e.Symlink(voxiPath, goBinVoxi)
 	}); err != nil {
 		return err
 	}

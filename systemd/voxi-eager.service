@@ -6,12 +6,12 @@ After=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=%h/go/bin/voxi eager --daemon
+ExecStart=%h/.local/bin/voxi eager --daemon
 Restart=on-failure
 RestartSec=3
 
 Environment=XDG_RUNTIME_DIR=%t
-Environment=PATH=%h/go/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PATH=%h/.local/bin:%h/go/bin:/usr/local/bin:/usr/bin:/bin
 
 [Install]
 WantedBy=graphical-session.target

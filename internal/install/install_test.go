@@ -79,6 +79,13 @@ func TestInstallDefaultIsUserScopedAndIdempotent(t *testing.T) {
 	if !strings.Contains(string(service), "ExecStart=%h/.local/bin/voxi agent --daemon") {
 		t.Fatalf("service is not self-contained: %s", service)
 	}
+	target, err := os.Readlink(filepath.Join(e.Home, "go/bin/voxi"))
+	if err != nil {
+		t.Fatalf("go/bin/voxi is not a symlink: %v", err)
+	}
+	if want := filepath.Join(e.Home, ".local/bin/voxi"); target != want {
+		t.Fatalf("go/bin/voxi symlink = %q, want %q", target, want)
+	}
 	if !strings.Contains(out.String(), "modifier daemon] skipped") {
 		t.Fatalf("missing optional phase report: %s", out.String())
 	}
