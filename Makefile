@@ -109,6 +109,14 @@ test-debug: ⚙️  # run tests with debug tag
 	go vet -tags debug ./...
 	go test -tags debug ./...
 
+test-install-podman: ⚙️  # test curl installer workflow in clean container via podman
+	./scripts/test-install-podman.sh
+
+test-install: ⚙️ test-install-podman  # alias for test-install-podman
+
+test-e2e: ⚙️  # run headless end-to-end integration test in container via podman
+	./scripts/test-e2e-headless.sh
+
 canary-nested: ⚙️  # run nested GNOME Shell Wayland text-injection canary
 	go run ./scripts/canary_nested
 

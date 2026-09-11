@@ -1,0 +1,3 @@
+# id	wav file	expected transcript	keyterms separated by |
+short-one-two	short-one-two.wav	One, two.	One|two
+short-abc	short-abc.wav	A. B. C.	A|B|C

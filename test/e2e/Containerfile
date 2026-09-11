@@ -1,0 +1,45 @@
+FROM debian:bookworm-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash \
+    ca-certificates \
+    curl \
+    tar \
+    git \
+    sudo \
+    procps \
+    python3 \
+    libevdev2 \
+    libevdev-dev \
+    golang-go \
+    gcc \
+    libc6-dev \
+    pkg-config \
+    libxkbcommon-dev \
+    systemd \
+    systemd-sysv \
+    dbus \
+    pulseaudio \
+    pulseaudio-utils \
+    alsa-utils \
+    libasound2-plugins \
+    sox \
+    weston \
+    wayland-protocols \
+    libwayland-client0 \
+    libwayland-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN useradd -m -s /bin/bash -u 1000 testuser && \
+    echo "testuser ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/testuser && \
+    chmod 0440 /etc/sudoers.d/testuser
+
+USER testuser
+WORKDIR /home/testuser
+ENV HOME=/home/testuser
+ENV USER=testuser
+ENV PATH="/home/testuser/.local/lib/voxi/crispasr:/home/testuser/.local/bin:/home/testuser/go/bin:${PATH}"
+
+CMD ["/bin/bash"]
