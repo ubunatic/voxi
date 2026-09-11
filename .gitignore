@@ -21,3 +21,7 @@ testdata/speech-context/*.wav
 # Committed source asset, not a scratch recording (issue 101): embedded via
 # Go //go:embed and played back as the modifier-release-buffering notice.
 !internal/eager/notify/typing-paused.wav
+
+# local Go workspace (untracked)
+/go.work
+/go.work.sum
