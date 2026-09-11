@@ -26,6 +26,8 @@ const (
 	TypingStarted         = "typing_started"
 	TypingComplete        = "typing_completed"
 	DeliveryDuplicate     = "delivery_duplicate"
+	DeliveryStale         = "delivery_stale"
+	StopDrainTimeout      = "stop_drain_timeout"
 	InjectorStarted       = "injector_started"
 	InjectorComplete      = "injector_completed"
 )

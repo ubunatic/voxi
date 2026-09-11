@@ -75,6 +75,85 @@ func DefaultEagerOptions() EagerOptions {
 // longest MaxWindowMs utterance on a slow CPU backend.
 const transcribeTimeout = 30 * time.Second
 
+// stopDrainTimeout is the grace period granted to audio captured before a
+// stop request. Capture stops immediately, while ASR and delivery drain in
+// the background. A finite lease keeps an abandoned generation from typing
+// indefinitely after a newer session has started.
+const stopDrainTimeout = 5 * time.Second
+
+type sessionDrain struct {
+	ctx     context.Context
+	cancel  context.CancelFunc
+	timeout time.Duration
+
+	mu         sync.Mutex
+	stopped    bool
+	boundaryAt time.Time
+	deadline   time.Time
+}
+
+type stopRequest struct {
+	mu sync.Mutex
+	at time.Time
+}
+
+func (r *stopRequest) mark(at time.Time) {
+	r.mu.Lock()
+	r.at = at
+	r.mu.Unlock()
+}
+
+func (r *stopRequest) timestamp() time.Time {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.at
+}
+
+func newSessionDrain() *sessionDrain {
+	return newSessionDrainWithTimeout(stopDrainTimeout)
+}
+
+func newSessionDrainWithTimeout(timeout time.Duration) *sessionDrain {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &sessionDrain{ctx: ctx, cancel: cancel, timeout: timeout}
+}
+
+func (d *sessionDrain) stop() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.stopped {
+		return
+	}
+	d.stopped = true
+	d.boundaryAt = time.Now()
+	d.deadline = d.boundaryAt.Add(d.timeout)
+	time.AfterFunc(d.timeout, d.cancel)
+}
+
+func (d *sessionDrain) stopAt(at time.Time) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.stopped {
+		return
+	}
+	d.stopped = true
+	d.boundaryAt = at
+	d.deadline = time.Now().Add(d.timeout)
+	time.AfterFunc(d.timeout, d.cancel)
+}
+
+func (d *sessionDrain) eligibleAt(at time.Time) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return !d.stopped || at.Before(d.boundaryAt)
+}
+
+func (d *sessionDrain) eligible() bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return !d.stopped || time.Now().Before(d.deadline)
+}
+
 // eagerSocketTimeout bounds a client's round trip to the eager daemon's
 // control socket (start/stop/toggle/status). See issue 057: this is a
 // safety net, not the primary fix -- the primary fix (eagerSessionManager)
@@ -280,7 +359,7 @@ func RunEagerDictation(ctx context.Context, d deps.Dependencies, opts EagerOptio
 	// scoped to the daemon path only, since the flush trigger is meaningless
 	// without the daemon's socket/signal listener. This standalone CLI
 	// invocation keeps its existing immediate-type behavior.
-	return runEagerCaptureSession(ctx, d, opts, tmpDir, recCmdName, recArgs, false, sessionID, recorder, nil, nil)
+	return runEagerCaptureSessionAt(ctx, d, opts, tmpDir, recCmdName, recArgs, false, sessionID, nil, recorder, nil, nil)
 }
 
 // runEagerCaptureSession runs one audio-capture + sequential-transcription
@@ -293,6 +372,10 @@ func RunEagerDictation(ctx context.Context, d deps.Dependencies, opts EagerOptio
 // transcription to finish should wait on onCaptureStopped rather than on this
 // function's return (see issue 057 and eagerSessionManager below).
 func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts EagerOptions, tmpDir string, recCmdName string, recArgs []string, isDaemon bool, sessionID string, recorder *telemetry.Recorder, onCaptureStopped func(), sessions *eagerSessionManager) error {
+	return runEagerCaptureSessionAt(ctx, d, opts, tmpDir, recCmdName, recArgs, isDaemon, sessionID, nil, recorder, onCaptureStopped, sessions)
+}
+
+func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts EagerOptions, tmpDir string, recCmdName string, recArgs []string, isDaemon bool, sessionID string, request *stopRequest, recorder *telemetry.Recorder, onCaptureStopped func(), sessions *eagerSessionManager) error {
 	// Guarantee onCaptureStopped fires exactly once no matter which of this
 	// function's many return paths is taken -- including the early
 	// `return fmt.Errorf(...)` guards below (model spec load failure, audio
@@ -340,13 +423,10 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 		// Final marks the trailing utterance flushed from the segmenter once
 		// capture has stopped (see segmenter.Flush below) -- audio the user
 		// had already finished speaking before/at the moment recording was
-		// stopped, which the session's own ctx is always already canceled by
-		// the time this job is queued. Unlike jobs still mid-transcription
-		// when stop arrives (which must abort promptly and never reach
-		// typing -- see TestStopCancelsInflightTranscriptionBeforeInjection),
-		// this one and only job is deliberately allowed to finish
-		// transcribing and typing on a detached context.
-		Final bool
+		// stopped. Eligible is based on the audio read completion timestamp,
+		// not on when the worker receives the job.
+		Final    bool
+		Eligible bool
 	}
 
 	modelSpec, err := spec.LoadModels()
@@ -437,6 +517,7 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 	}
 
 	jobChan := make(chan TranscribeJob, 10)
+	drain := newSessionDrain()
 	var transWg sync.WaitGroup
 	var fullTranscript strings.Builder
 	var transLock sync.Mutex
@@ -460,11 +541,17 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 	go func() {
 		defer transWg.Done()
 		for job := range jobChan {
-			detachedJob := job.Final || ctx.Err() != nil
+			// Eligibility is attached by capture; queue arrival is not a
+			// sufficient proxy for the stop boundary.
 			chunkID := fmt.Sprintf("%s/%d", sessionID, job.Index)
 			wavPath := filepath.Join(tmpDir, fmt.Sprintf("utt_%03d.wav", job.Index))
 			if err := audio.WriteWAVAudio(wavPath, job.Audio, sampleRate); err != nil {
 				reportEagerFailure(d, "audio", sessionID, chunkID, err)
+				continue
+			}
+			if !job.Eligible {
+				recordStaleDelivery(recorder, sessionID, chunkID, job.Index)
+				_ = os.Remove(wavPath)
 				continue
 			}
 
@@ -501,7 +588,7 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 
 			writeVoxtypeState("transcribing")
 			cmdArgs := buildTranscribeArgs(wavPath)
-			transcribeParent := queuedJobContext(ctx, detachedJob)
+			transcribeParent := drain.ctx
 			transcribeCtx, cancelTranscribe := context.WithTimeout(transcribeParent, transcribeTimeout)
 			cmd := exec.CommandContext(transcribeCtx, transcribeBinPath, cmdArgs...)
 			cmd.Env = append(os.Environ(), "NO_COLOR=1", "RUST_LOG=error")
@@ -512,6 +599,9 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 			_ = recorder.Record(telemetry.Event{Event: telemetry.TranscriptionStarted, Timestamp: transStart, SessionID: sessionID, ChunkID: chunkID, ChunkIndex: job.Index})
 			err := cmd.Run()
 			cancelTranscribe()
+			if drain.ctx.Err() != nil {
+				_ = recorder.Record(telemetry.Event{Event: telemetry.StopDrainTimeout, Timestamp: time.Now(), SessionID: sessionID, ChunkID: chunkID, ChunkIndex: job.Index, Error: drain.ctx.Err().Error()})
+			}
 			transEnd := time.Now()
 			transDuration := transEnd.Sub(transStart).Seconds()
 			writeVoxtypeState("recording")
@@ -609,6 +699,10 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 							eagerBuf.ScheduleNotify(d, modifierNotifyDelay)
 						}
 					} else {
+						if !drain.eligible() {
+							recordStaleDelivery(recorder, sessionID, chunkID, job.Index)
+							continue
+						}
 						claimed, claimErr := delivery.Claim(chunkID)
 						if claimErr != nil {
 							accepted = false
@@ -621,11 +715,11 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 						}
 						typeStart := time.Now()
 						_ = recorder.Record(telemetry.Event{Event: telemetry.TypingStarted, Timestamp: typeStart, SessionID: sessionID, ChunkID: chunkID, ChunkIndex: job.Index, DeliveryID: chunkID, Attempt: 1})
-						typeCtx := queuedJobContext(ctx, detachedJob)
-						if !detachedJob && ctx.Err() != nil {
+						if !drain.eligible() {
+							recordStaleDelivery(recorder, sessionID, chunkID, job.Index)
 							continue
 						}
-						typeErr := typing.TypeTextObserved(typeCtx, d, text+" ", &injectorObserver{recorder: recorder, sessionID: sessionID, chunkID: chunkID, chunkIndex: job.Index, deliveryID: chunkID})
+						typeErr := typing.TypeTextObserved(drain.ctx, d, text+" ", &injectorObserver{recorder: recorder, sessionID: sessionID, chunkID: chunkID, chunkIndex: job.Index, deliveryID: chunkID})
 						typeEnd := time.Now()
 						typeSuccess := typeErr == nil
 						typeError := ""
@@ -692,8 +786,30 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 		}
 
 		n, err := io.ReadFull(audioOut, buf)
+		readCompletedAt := time.Now()
+		if d.AfterAudioRead != nil {
+			d.AfterAudioRead()
+		}
 		if err != nil {
 			break
+		}
+		// Cancellation may be observed between ReadFull and processing. Keep
+		// a frame completed before the explicit request boundary; discard only
+		// a frame completed after it. This is deliberately timestamp-based,
+		// not based on ctx.Err() alone.
+		if ctx.Err() != nil {
+			stopAt := time.Time{}
+			if request != nil {
+				stopAt = request.timestamp()
+			}
+			if stopAt.IsZero() || readCompletedAt.After(stopAt) {
+				if stopAt.IsZero() {
+					drain.stop()
+				} else {
+					drain.stopAt(stopAt)
+				}
+				break
+			}
 		}
 		if n < frameBytes {
 			continue
@@ -727,6 +843,7 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 				Stats:           candidate.Stats,
 				Plausible:       candidate.Plausible,
 				RejectionReason: candidate.RejectionReason,
+				Eligible:        drain.eligibleAt(readCompletedAt),
 			}
 		}
 	}
@@ -740,12 +857,23 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 	// (see issue 057). Signal onCaptureStopped only after the reap so a
 	// caller waiting on it (eagerSessionManager.Stop) never observes a
 	// still-defunct child process.
+	if request != nil {
+		if at := request.timestamp(); !at.IsZero() {
+			drain.stopAt(at)
+		} else {
+			drain.stop()
+		}
+	} else {
+		drain.stop()
+	}
 	close(killDone)
 	if recCmd.Process != nil {
 		_ = recCmd.Process.Kill()
 		_ = recCmd.Wait()
 	}
 	_ = recorder.Record(telemetry.Event{Event: telemetry.CaptureStopped, Timestamp: time.Now(), SessionID: sessionID})
+	// The worker is intentionally not waited on before the callback: the
+	// manager can start the next generation while this session drains.
 	signalCaptureStopped()
 
 	// Flush remaining speech upon exit
@@ -765,6 +893,7 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 			Plausible:       finalCandidate.Plausible,
 			RejectionReason: finalCandidate.RejectionReason,
 			Final:           true,
+			Eligible:        true,
 		}
 	}
 
@@ -780,6 +909,10 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 	// different, now-current session's buffer.
 	if pending, wasBuffering := eagerBuf.FlushDeliveries(); wasBuffering {
 		for _, item := range pending {
+			if !drain.eligible() {
+				recordStaleDelivery(recorder, sessionID, item.ID, 0)
+				continue
+			}
 			claimed, claimErr := delivery.Claim(item.ID)
 			if claimErr != nil || !claimed {
 				event := telemetry.Event{Event: telemetry.DeliveryDuplicate, Timestamp: time.Now(), SessionID: sessionID, ChunkID: item.ID, DeliveryID: item.ID}
@@ -789,7 +922,14 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 				_ = recorder.Record(event)
 				continue
 			}
-			typeErr := typing.TypeTextObserved(context.Background(), d, item.Text, &injectorObserver{recorder: recorder, sessionID: sessionID, chunkID: item.ID, deliveryID: item.ID})
+			// Recheck after the durable claim and immediately before the
+			// irreversible injector call. A lease expiry can therefore suppress
+			// delivery, with the existing crash-after-claim loss tradeoff.
+			if !drain.eligible() {
+				recordStaleDelivery(recorder, sessionID, item.ID, 0)
+				continue
+			}
+			typeErr := typing.TypeTextObserved(drain.ctx, d, item.Text, &injectorObserver{recorder: recorder, sessionID: sessionID, chunkID: item.ID, deliveryID: item.ID})
 			if typeErr != nil {
 				reportEagerFailure(d, "typing", sessionID, item.ID, typeErr)
 			}
@@ -806,17 +946,21 @@ func runEagerCaptureSession(ctx context.Context, d deps.Dependencies, opts Eager
 	return nil
 }
 
-// queuedJobContext preserves the stop contract at the worker boundary. A
-// normal job that is dequeued after capture stop was already accepted and
-// queued, so it gets a bounded detached context and may finish. A job already
-// running when stop cancels the session keeps the session context and is
-// terminated by the cancellation. Final jobs use the same detached policy
-// because the segmenter queues them after capture stop.
+// queuedJobContext is retained for package-level compatibility with older
+// tests; session workers now use sessionDrain so in-flight and queued jobs
+// share one bounded stop lease.
 func queuedJobContext(sessionCtx context.Context, detached bool) context.Context {
 	if detached {
 		return context.Background()
 	}
 	return sessionCtx
+}
+
+func recordStaleDelivery(recorder *telemetry.Recorder, sessionID, chunkID string, index int) {
+	_ = recorder.Record(telemetry.Event{
+		Event: telemetry.DeliveryStale, Timestamp: time.Now(), SessionID: sessionID,
+		ChunkID: chunkID, ChunkIndex: index, DeliveryID: chunkID,
+	})
 }
 
 // reportEagerFailure makes hard pipeline failures visible to both direct users
@@ -913,7 +1057,7 @@ type eagerSessionManager struct {
 	// onCaptureStopped as soon as audio capture ends and its recording
 	// subprocess is reaped, then may continue running (draining
 	// transcription) until it returns.
-	run      func(sessCtx context.Context, sessionID string, onCaptureStopped func())
+	run      func(sessCtx context.Context, sessionID string, request *stopRequest, onCaptureStopped func())
 	recorder *telemetry.Recorder
 	now      func() time.Time
 	// modifierStartGrace: see ignorePressesBefore below. Zero (the default
@@ -924,6 +1068,7 @@ type eagerSessionManager struct {
 	toggleMu            sync.Mutex // serializes check-and-act Toggle operations
 	activeCancel        context.CancelFunc
 	activeStopped       chan struct{}
+	activeRequest       *stopRequest
 	activeSessionID     string
 	isRecording         bool
 	sessWg              sync.WaitGroup
@@ -931,7 +1076,7 @@ type eagerSessionManager struct {
 	ignorePressesBefore time.Time // NoteModifierPress drops presses before this (issue 101 start-grace fix); set in Start
 }
 
-func newEagerSessionManager(ctx context.Context, recorder *telemetry.Recorder, run func(context.Context, string, func())) *eagerSessionManager {
+func newEagerSessionManager(ctx context.Context, recorder *telemetry.Recorder, run func(context.Context, string, *stopRequest, func())) *eagerSessionManager {
 	if recorder == nil {
 		recorder = telemetry.NewRecorder("")
 	}
@@ -946,6 +1091,7 @@ func (m *eagerSessionManager) Stop() {
 	cancel := m.activeCancel
 	stopped := m.activeStopped
 	sessionID := m.activeSessionID
+	request := m.activeRequest
 	deactivatedAt := time.Time{}
 	if cancel != nil {
 		deactivatedAt = m.now()
@@ -953,12 +1099,16 @@ func (m *eagerSessionManager) Stop() {
 	m.activeCancel = nil
 	m.activeStopped = nil
 	m.activeSessionID = ""
+	m.activeRequest = nil
 	m.isRecording = false
 	m.lastModifierPressAt = time.Time{}
 	m.ignorePressesBefore = time.Time{}
 	m.mu.Unlock()
 
 	if cancel != nil {
+		if request != nil {
+			request.mark(deactivatedAt)
+		}
 		_ = m.recorder.Record(telemetry.Event{Event: telemetry.MicDeactivated, Timestamp: deactivatedAt, SessionID: sessionID})
 		cancel()
 	}
@@ -976,9 +1126,11 @@ func (m *eagerSessionManager) Start() {
 	sessionID := m.recorder.NewSessionID(activatedAt)
 	sessCtx, cancel := context.WithCancel(m.ctx)
 	stopped := make(chan struct{})
+	request := &stopRequest{}
 	m.activeCancel = cancel
 	m.activeStopped = stopped
 	m.activeSessionID = sessionID
+	m.activeRequest = request
 	m.isRecording = true
 	// The start hotkey (e.g. Super+X) is itself a gating-modifier press --
 	// without this grace window, the very press that starts the session
@@ -991,7 +1143,7 @@ func (m *eagerSessionManager) Start() {
 
 	go func() {
 		defer m.sessWg.Done()
-		m.run(sessCtx, sessionID, func() {
+		m.run(sessCtx, sessionID, request, func() {
 			close(stopped)
 		})
 		m.mu.Lock()
@@ -1001,6 +1153,7 @@ func (m *eagerSessionManager) Start() {
 			m.activeCancel = nil
 			m.activeStopped = nil
 			m.activeSessionID = ""
+			m.activeRequest = nil
 			m.isRecording = false
 		}
 		m.mu.Unlock()
@@ -1227,7 +1380,7 @@ func runEagerDaemon(ctx context.Context, d deps.Dependencies, opts EagerOptions)
 
 	recorder := telemetry.NewRecorder(telemetry.Path(d.Getenv("XDG_DATA_HOME"), d.Getenv("HOME")))
 	var sessions *eagerSessionManager
-	sessions = newEagerSessionManager(ctx, recorder, func(sessCtx context.Context, sessionID string, onCaptureStopped func()) {
+	sessions = newEagerSessionManager(ctx, recorder, func(sessCtx context.Context, sessionID string, request *stopRequest, onCaptureStopped func()) {
 		// Each session gets its own subdirectory under the daemon's base
 		// tmpDir rather than sharing one across sessions: since Stop/Start
 		// no longer wait for the previous session's transcription drain to
@@ -1248,7 +1401,7 @@ func runEagerDaemon(ctx context.Context, d deps.Dependencies, opts EagerOptions)
 		// returns -- otherwise external state readers (voxi monitor, the
 		// GNOME extension) would keep reporting "recording" for up to
 		// transcribeTimeout after the user told the daemon to stop.
-		_ = runEagerCaptureSession(sessCtx, d, opts, sessTmpDir, recCmdName, recArgs, true, sessionID, recorder, func() {
+		_ = runEagerCaptureSessionAt(sessCtx, d, opts, sessTmpDir, recCmdName, recArgs, true, sessionID, request, recorder, func() {
 			writeVoxtypeState("idle")
 			onCaptureStopped()
 		}, sessions)

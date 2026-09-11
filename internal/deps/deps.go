@@ -27,8 +27,11 @@ type Dependencies struct {
 	// value falls back to RunStdin for lightweight callers and tests.
 	RunStdinProcess func(ctx context.Context, stdin string, name string, args ...string) (pid int, err error)
 	Sleep           func(time.Duration)
-	Stdin           io.Reader
-	Stdout          io.Writer
+	// AfterAudioRead is an optional test seam invoked after a capture frame
+	// has been read and timestamped, before cancellation/processing checks.
+	AfterAudioRead func()
+	Stdin          io.Reader
+	Stdout         io.Writer
 }
 
 // lookPathWithFallbacks resolves binaries via standard exec.LookPath, falling back to

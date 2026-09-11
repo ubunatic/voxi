@@ -167,6 +167,82 @@ func TestQueuedJobContextDetachesCanceledQueuedJobs(t *testing.T) {
 	}
 }
 
+func TestSessionDrainLeaseExpiresAndCancels(t *testing.T) {
+	drain := newSessionDrainWithTimeout(25 * time.Millisecond)
+	if !drain.eligible() {
+		t.Fatal("active session unexpectedly ineligible")
+	}
+	drain.stop()
+	if !drain.eligible() {
+		t.Fatal("pre-stop result was not eligible during drain lease")
+	}
+	select {
+	case <-drain.ctx.Done():
+		t.Fatal("drain lease canceled too early")
+	case <-time.After(5 * time.Millisecond):
+	}
+	select {
+	case <-drain.ctx.Done():
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("drain lease did not expire")
+	}
+	if drain.eligible() {
+		t.Fatal("expired drain lease still allowed delivery")
+	}
+}
+
+func TestSessionDrainBoundaryRejectsReadCompletedAfterStop(t *testing.T) {
+	drain := newSessionDrainWithTimeout(time.Second)
+	before := time.Now()
+	drain.stop()
+	after := time.Now().Add(time.Nanosecond)
+	if !drain.eligibleAt(before) {
+		t.Fatal("read completed before stop was rejected")
+	}
+	if drain.eligibleAt(after) {
+		t.Fatal("read completed after stop was accepted")
+	}
+}
+
+func TestSessionDrainGenerationOverlapKeepsOnlyAuthorizedLease(t *testing.T) {
+	old := newSessionDrainWithTimeout(15 * time.Millisecond)
+	newGeneration := newSessionDrainWithTimeout(time.Second)
+	beforeStop := time.Now()
+	old.stop()
+	if !old.eligibleAt(beforeStop) {
+		t.Fatal("old generation pre-stop result was rejected")
+	}
+	select {
+	case <-old.ctx.Done():
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("old generation lease did not expire")
+	}
+	if old.eligible() {
+		t.Fatal("late old-generation result remained eligible")
+	}
+	if !newGeneration.eligible() {
+		t.Fatal("new generation was incorrectly invalidated by old generation")
+	}
+}
+
+func TestStopBoundaryPreservesReadCompletedBeforeCancellationObservation(t *testing.T) {
+	request := &stopRequest{}
+	boundary := time.Date(2026, 9, 11, 9, 10, 4, 117000000, time.UTC)
+	request.mark(boundary)
+	drain := newSessionDrainWithTimeout(time.Second)
+	drain.stopAt(request.timestamp())
+
+	// Model the precise interleaving: ReadFull completed before the request,
+	// then the capture goroutine observed cancellation before processing it.
+	readCompleted := boundary.Add(-time.Nanosecond)
+	if !drain.eligibleAt(readCompleted) {
+		t.Fatal("read completed before stop was incorrectly rejected")
+	}
+	if drain.eligibleAt(boundary.Add(time.Nanosecond)) {
+		t.Fatal("read completed after stop was incorrectly accepted")
+	}
+}
+
 func TestProbableSilenceUsesInspectableVoicedRatio(t *testing.T) {
 	if !probableSilence(audioStats(100, 4)) {
 		t.Fatal("4% voiced chunk was not marked probable silence")
@@ -321,7 +397,7 @@ func TestPathologicalTranscriptProducesZeroInjection(t *testing.T) {
 	}
 }
 
-func TestStopCancelsInflightTranscriptionBeforeInjection(t *testing.T) {
+func TestStopDrainsInflightTranscriptionBeforeInjection(t *testing.T) {
 	tmp := t.TempDir()
 	rawPath := filepath.Join(tmp, "audio.raw")
 	frame := make([]byte, 640)
@@ -334,8 +410,9 @@ func TestStopCancelsInflightTranscriptionBeforeInjection(t *testing.T) {
 		t.Fatal(err)
 	}
 	started := filepath.Join(tmp, "started")
+	release := filepath.Join(tmp, "release")
 	transcriber := filepath.Join(tmp, "fake-voxtype")
-	script := "#!/bin/sh\n: > '" + started + "'\nexec sleep 30\n"
+	script := "#!/bin/sh\n: > '" + started + "'\nwhile [ ! -e '" + release + "' ]; do sleep 0.01; done\nprintf '%s\\n' 'final speech survived stop'\n"
 	if err := os.WriteFile(transcriber, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -373,15 +450,243 @@ func TestStopCancelsInflightTranscriptionBeforeInjection(t *testing.T) {
 	}
 	cancel()
 	select {
+	case <-done:
+		t.Fatal("session returned before the in-flight drain was released")
+	case <-time.After(150 * time.Millisecond):
+	}
+	if err := os.WriteFile(release, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	select {
 	case err := <-done:
 		if err != nil {
 			t.Fatal(err)
 		}
 	case <-time.After(2 * time.Second):
-		t.Fatal("session did not cancel promptly")
+		t.Fatal("session did not finish the bounded drain")
 	}
-	if got := injections.Load(); got != 0 {
-		t.Fatalf("captured %d injector calls after stop", got)
+	if got := injections.Load(); got != 1 {
+		t.Fatalf("captured %d injector calls after stop, want one drained result", got)
+	}
+}
+
+func TestStopDrainsInflightQueuedAndFlushedJobsInOrder(t *testing.T) {
+	tmp := t.TempDir()
+	fifoPath := filepath.Join(tmp, "audio.fifo")
+	if err := syscall.Mkfifo(fifoPath, 0600); err != nil {
+		t.Fatal(err)
+	}
+	frame := make([]byte, 640)
+	for i := 0; i < len(frame); i += 2 {
+		binary.LittleEndian.PutUint16(frame[i:i+2], 1000)
+	}
+	countPath := filepath.Join(tmp, "count")
+	transcriber := filepath.Join(tmp, "fake-voxtype")
+	script := "#!/bin/sh\ncount=0\nif [ -f '" + countPath + "' ]; then count=$(cat '" + countPath + "'); fi\ncount=$((count + 1))\nprintf '%s' \"$count\" > '" + countPath + "'\nwhile [ ! -e '" + tmp + "/release-'\"$count\" ]; do sleep 0.01; done\ncase \"$count\" in 1) echo first ;; 2) echo second ;; 3) echo third ;; esac\n"
+	if err := os.WriteFile(transcriber, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	written := make(chan struct{})
+	go func() {
+		f, err := os.OpenFile(fifoPath, os.O_WRONLY, 0)
+		if err != nil {
+			return
+		}
+		defer f.Close()
+		for i := 0; i < 3; i++ {
+			for range 12 {
+				if _, err := f.Write(frame); err != nil {
+					return
+				}
+			}
+			if i < 2 {
+				for range 5 {
+					if _, err := f.Write(make([]byte, 640)); err != nil {
+						return
+					}
+				}
+			}
+		}
+		close(written)
+		<-t.Context().Done()
+	}()
+	var typed []string
+	d := deps.Dependencies{
+		Getenv: func(key string) string {
+			if key == "HOME" || key == "XDG_RUNTIME_DIR" {
+				return tmp
+			}
+			return ""
+		},
+		LookPath: func(name string) (string, error) {
+			if name == "voxtype" {
+				return transcriber, nil
+			}
+			return name, nil
+		},
+		RunStdin: func(_ context.Context, stdin, _ string, _ ...string) error { typed = append(typed, stdin); return nil },
+		Stdout:   io.Discard,
+	}
+	done := make(chan error, 1)
+	opts := EagerOptions{ThresholdRMS: 500, SilenceMs: 60, PreRollMs: 40, MinSpeechMs: 40, MaxWindowMs: 1000, TypeOutput: true, Model: "small.en"}
+	var mgr *eagerSessionManager
+	mgr = newEagerSessionManager(context.Background(), nil, func(sessCtx context.Context, sessionID string, request *stopRequest, onCaptureStopped func()) {
+		done <- runEagerCaptureSessionAt(sessCtx, d, opts, tmp, "cat", []string{fifoPath}, true, sessionID, request, nil, onCaptureStopped, mgr)
+	})
+	mgr.Start()
+	select {
+	case <-written:
+	case <-time.After(2 * time.Second):
+		t.Fatal("writer did not finish")
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if data, err := os.ReadFile(countPath); err == nil && string(data) == "1" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("first ASR did not start")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	mgr.Stop()
+	for i := 1; i <= 3; i++ {
+		if err := os.WriteFile(filepath.Join(tmp, fmt.Sprintf("release-%d", i)), nil, 0600); err != nil {
+			t.Fatal(err)
+		}
+		if i < 3 {
+			deadline = time.Now().Add(2 * time.Second)
+			for {
+				data, _ := os.ReadFile(countPath)
+				if string(data) == fmt.Sprint(i+1) {
+					break
+				}
+				if time.Now().After(deadline) {
+					t.Fatalf("queued job %d did not start", i+1)
+				}
+				time.Sleep(time.Millisecond)
+			}
+		}
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("drain did not finish")
+	}
+	mgr.Wait()
+	if want := []string{"type first \n", "type second \n", "type third \n"}; !slices.Equal(typed, want) {
+		t.Fatalf("typed jobs = %#v, want ordered exactly-once %#v", typed, want)
+	}
+}
+
+func TestStopPreservesFrameReadBeforeRequestWhenCancellationInterleaves(t *testing.T) {
+	tmp := t.TempDir()
+	fifoPath := filepath.Join(tmp, "audio.fifo")
+	if err := syscall.Mkfifo(fifoPath, 0600); err != nil {
+		t.Fatal(err)
+	}
+	frame := make([]byte, 640)
+	for i := 0; i < len(frame); i += 2 {
+		binary.LittleEndian.PutUint16(frame[i:i+2], 1000)
+	}
+	transcriber := filepath.Join(tmp, "fake-voxtype")
+	if err := os.WriteFile(transcriber, []byte("#!/bin/sh\necho preserved-before-stop\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	readReturned := make(chan struct{})
+	allowProcessing := make(chan struct{})
+	var reads atomic.Int32
+	var typed []string
+	d := deps.Dependencies{
+		Getenv: func(key string) string {
+			if key == "HOME" || key == "XDG_RUNTIME_DIR" {
+				return tmp
+			}
+			return ""
+		},
+		LookPath: func(name string) (string, error) {
+			if name == "voxtype" {
+				return transcriber, nil
+			}
+			return name, nil
+		},
+		RunStdin: func(_ context.Context, stdin, _ string, _ ...string) error {
+			typed = append(typed, stdin)
+			return nil
+		},
+		AfterAudioRead: func() {
+			if reads.Add(1) != 10 {
+				return
+			}
+			close(readReturned)
+			<-allowProcessing
+		},
+		Stdout: io.Discard,
+	}
+	go func() {
+		f, err := os.OpenFile(fifoPath, os.O_WRONLY, 0)
+		if err != nil {
+			return
+		}
+		defer f.Close()
+		for range 10 {
+			_, _ = f.Write(frame)
+		}
+		<-t.Context().Done()
+	}()
+	opts := EagerOptions{ThresholdRMS: 500, SilenceMs: 60, PreRollMs: 40, MinSpeechMs: 40, MaxWindowMs: 1000, TypeOutput: true, Model: "small.en"}
+	done := make(chan error, 1)
+	var mgr *eagerSessionManager
+	mgr = newEagerSessionManager(context.Background(), nil, func(sessCtx context.Context, sessionID string, request *stopRequest, onCaptureStopped func()) {
+		done <- runEagerCaptureSessionAt(sessCtx, d, opts, tmp, "cat", []string{fifoPath}, true, sessionID, request, nil, onCaptureStopped, mgr)
+	})
+	mgr.Start()
+	select {
+	case <-readReturned:
+	case <-time.After(2 * time.Second):
+		t.Fatal("capture did not complete the controlled read")
+	}
+	mgr.mu.Lock()
+	request := mgr.activeRequest
+	mgr.mu.Unlock()
+	if request == nil {
+		t.Fatal("manager has no active stop request")
+	}
+	stopDone := make(chan struct{})
+	go func() { mgr.Stop(); close(stopDone) }()
+	// Stop has to timestamp/cancel while the capture goroutine is held after
+	// ReadFull; releasing the barrier then forces it to observe ctx.Err().
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		marked := !request.timestamp().IsZero()
+		if marked {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("manager did not record stop timestamp")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	close(allowProcessing)
+	select {
+	case <-stopDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("manager Stop did not complete")
+	}
+	mgr.Wait()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("session drain did not complete")
+	}
+	if want := []string{"type preserved-before-stop \n"}; !slices.Equal(typed, want) {
+		t.Fatalf("typed = %#v, want %#v", typed, want)
 	}
 }
 
@@ -392,9 +697,9 @@ func TestStopCancelsInflightTranscriptionBeforeInjection(t *testing.T) {
 // relies on segmenter.Flush() to recover exactly this buffered-but-not-yet-
 // finalized audio once capture stops; the flushed job must still transcribe
 // and type even though the session's own ctx is already canceled by then. See
-// TestStopCancelsInflightTranscriptionBeforeInjection for the complementary
-// guarantee: an utterance that was already mid-transcription (not merely
-// buffered) when stop arrives must still abort and never type.
+// TestStopDrainsInflightTranscriptionBeforeInjection covers the complementary
+// guarantee: an utterance already mid-transcription when stop arrives is
+// allowed to finish within the bounded stop-drain lease.
 func TestStopFlushesTrailingUtteranceForTranscriptionAndTyping(t *testing.T) {
 	tmp := t.TempDir()
 	fifoPath := filepath.Join(tmp, "audio.fifo")
@@ -504,8 +809,8 @@ func eventNames(events []telemetry.Event) []string {
 // subprocess draining in the background before the session fully returns.
 // startedCount, if non-nil, is incremented once per invocation so a test can
 // assert exactly how many sessions actually ran.
-func fakeCaptureRun(drain time.Duration, startedCount *atomic.Int32) func(context.Context, string, func()) {
-	return func(sessCtx context.Context, _ string, onCaptureStopped func()) {
+func fakeCaptureRun(drain time.Duration, startedCount *atomic.Int32) func(context.Context, string, *stopRequest, func()) {
+	return func(sessCtx context.Context, _ string, _ *stopRequest, onCaptureStopped func()) {
 		if startedCount != nil {
 			startedCount.Add(1)
 		}
@@ -561,7 +866,7 @@ func TestEagerSessionManagerRecordsExactMicControlBoundaries(t *testing.T) {
 	base := time.Date(2026, 9, 5, 10, 0, 0, 123, time.UTC)
 	call := 0
 	seenSession := make(chan string, 1)
-	mgr := newEagerSessionManager(context.Background(), recorder, func(ctx context.Context, sessionID string, stopped func()) {
+	mgr := newEagerSessionManager(context.Background(), recorder, func(ctx context.Context, sessionID string, _ *stopRequest, stopped func()) {
 		seenSession <- sessionID
 		<-ctx.Done()
 		stopped()
@@ -922,7 +1227,7 @@ func TestRunEagerDaemonReachesReadyWithoutVoxtype(t *testing.T) {
 // causes modifierBuffer.EnterIfNeeded to enter (and stay in) buffering mode,
 // and that buffered text is exactly what Flush later returns.
 func TestModifierBufferEntersAndFlushesWithinTimeout(t *testing.T) {
-	mgr := newEagerSessionManager(context.Background(), nil, func(context.Context, string, func()) {})
+	mgr := newEagerSessionManager(context.Background(), nil, func(context.Context, string, *stopRequest, func()) {})
 	now := time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC)
 	mgr.now = func() time.Time { return now }
 
@@ -966,7 +1271,7 @@ func TestModifierBufferEntersAndFlushesWithinTimeout(t *testing.T) {
 // of regression issue 083 section 8 fixed once already for a different
 // trigger.
 func TestModifierBufferIgnoresStalePress(t *testing.T) {
-	mgr := newEagerSessionManager(context.Background(), nil, func(context.Context, string, func()) {})
+	mgr := newEagerSessionManager(context.Background(), nil, func(context.Context, string, *stopRequest, func()) {})
 	now := time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC)
 	mgr.now = func() time.Time { return now }
 
@@ -987,7 +1292,7 @@ func TestModifierBufferIgnoresStalePress(t *testing.T) {
 // "expire" via the timeout.
 func TestEagerSessionManagerModifierPressResetOnStartStop(t *testing.T) {
 	captureStarted := make(chan struct{}, 2)
-	mgr := newEagerSessionManager(context.Background(), nil, func(ctx context.Context, sessionID string, onCaptureStopped func()) {
+	mgr := newEagerSessionManager(context.Background(), nil, func(ctx context.Context, sessionID string, _ *stopRequest, onCaptureStopped func()) {
 		captureStarted <- struct{}{}
 		<-ctx.Done()
 		onCaptureStopped()
@@ -1026,7 +1331,7 @@ func TestEagerSessionManagerModifierPressResetOnStartStop(t *testing.T) {
 // never see each other's buffered text.
 func TestModifierBufferDoesNotLeakAcrossSessions(t *testing.T) {
 	captureStarted := make(chan struct{}, 2)
-	mgr := newEagerSessionManager(context.Background(), nil, func(ctx context.Context, sessionID string, onCaptureStopped func()) {
+	mgr := newEagerSessionManager(context.Background(), nil, func(ctx context.Context, sessionID string, _ *stopRequest, onCaptureStopped func()) {
 		captureStarted <- struct{}{}
 		<-ctx.Done()
 		onCaptureStopped()
@@ -1091,7 +1396,7 @@ func TestModifierBufferDoesNotLeakAcrossSessions(t *testing.T) {
 // within modifierStartGrace of Start(), while still honoring a genuine
 // later press within the same session.
 func TestEagerSessionManagerIgnoresStartHotkeyModifierPress(t *testing.T) {
-	mgr := newEagerSessionManager(context.Background(), nil, func(ctx context.Context, sessionID string, onCaptureStopped func()) {
+	mgr := newEagerSessionManager(context.Background(), nil, func(ctx context.Context, sessionID string, _ *stopRequest, onCaptureStopped func()) {
 		<-ctx.Done()
 		onCaptureStopped()
 	})

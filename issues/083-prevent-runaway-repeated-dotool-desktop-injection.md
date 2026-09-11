@@ -66,6 +66,43 @@ strictly bounds post-stop output, and runaway injection can be halted promptly.
   rollout. There is no evidence either caused the incident; inspect sequencing
   only to establish a timeline.
 
+### Fresh reproduction: legitimate final speech killed on stop (2026-09-11)
+
+The same stop-boundary failure happened again during an ordinary daily-driver
+dictation session. Chunks `#46`–`#51` in session
+`20260911T070942.882005086Z-000002` were accepted and typed normally, including
+the preceding fragment `"Also, the"`. The next valid 8.00-second voiced chunk
+`#52` (`voiced_ratio=0.7625`, finalized at `09:10:04.117`) entered
+transcription, ran for 1.44 seconds, and ended with:
+
+    transcribe_error: signal: killed
+
+It has no transcript and no typing timestamps. The following 1.34-second chunk
+`#53` started immediately afterward but was stopped before transcription could
+run and ended with:
+
+    transcribe_error: context canceled
+
+Chunk `#54` was only a low-energy trailing transient. This confirms that the
+user's final spoken content can be lost even when the preceding chunks arrive
+without interruption: stopping cancels the in-flight transcription subprocess
+and the next queued job. This has now happened more than once and is elevated
+to **high-priority work** within the broader injection-safety contract. The
+fix must preserve the no-stale-typing guarantee while recovering or otherwise
+surfacing legitimate speech that was already captured at stop time.
+
+### Intended daily-driver stop/flush workflow
+
+The usual interaction is `Super-X` to start, several spoken chunks, then
+`Super-X` again to finish quickly. The final toggle is an explicit instruction
+to stop capturing immediately, flush the remaining captured audio, transcribe
+it, and type the result without waiting for another silence boundary. It is not
+an instruction to discard or kill legitimate speech already captured. The
+current cancellation behavior therefore conflicts with the normal user
+contract whenever the final toggle arrives while a chunk is in flight; the
+implementation must distinguish this deliberate final flush from stale work
+that should be prevented from typing.
+
 Correlate history, retained chunk metadata/audio, eager telemetry, service
 journal, generation/session IDs, and process lifetime where available. Preserve
 the distinction between repeated content in one transcript and duplicate
