@@ -1,3 +1,10 @@
+# CRITICAL SAFETY RULE:
+# Container tests running from this image must NEVER mount host /dev/uinput or
+# /dev/input devices when running on workstations with active graphical desktop
+# sessions. Linux uinput and evdev are kernel-global and not namespaced, so
+# injecting keystrokes into a mapped uinput device leaks synthetic typing
+# directly into focused host desktop windows.
+
 FROM debian:bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
