@@ -1,8 +1,8 @@
 # Voxi Roadmap
 
-Reconciled from the active issue backlog on 2026-09-10 (previous pass:
-2026-09-05). This is a communication artifact, not a scheduling tool;
-`issues/README.md` remains the authoritative tracker.
+Reconciled from the active issue backlog on 2026-09-11 (previous passes:
+2026-09-10, 2026-09-05). This is a communication artifact, not a scheduling
+tool; `issues/README.md` remains the authoritative tracker.
 
 ## Value axis
 
@@ -16,212 +16,231 @@ of latency ever buys back.
 
 Three properties define that axis, in order:
 
-1. **Injection safety** — no pathological, stale, or duplicated text is ever
-   injected; physical modifier gating is actually active; stopping means stopped.
+1. **Injection safety**, which this pass splits into two distinct halves now
+   that they have diverged in maturity:
+   - *Exactly-once delivery* — no stale or duplicated text, physical modifier
+     gating actually active, stop means stop without eating the last utterance.
+     Largely **closed** by 083 §9/§10 (durable ledger, bounded final drain).
+   - *Only the user's speech* — nothing the user did not say is ever accepted.
+     Still **open**, and now the leading edge of the axis (100, 096).
 2. **Failure visibility** — when the pipeline breaks, the user finds out where
-   they are looking, not in a private JSONL file.
+   they are looking, not in a private JSONL file. Closed by 080.
 3. **Responsiveness and accuracy under real load** — measured, not felt.
 
 Presentation, distribution, and internal-hygiene work rank below all three,
 with one exception: documentation that *misstates what the product does* is a
 trust problem, not a presentation problem, and is sequenced accordingly.
 
-The measurement substrate the previous roadmap was chasing now exists (060 and
-061 shipped), so this pass shifts the center of gravity from *building
-instrumentation* to *closing the trust contract* it revealed.
+The center of gravity moved again this pass. The 2026-09-10 roadmap was about
+*closing the delivery contract*; three slices (`a65a623`, `df6af2b`, plus the
+review-gap and drain fixes) have now done most of that. What remains on the
+trust axis is almost entirely **false acceptance**: audio that was never the
+user speaking becoming confident, well-formed, correctly-delivered text.
 
-## Now — close the injection-safety and failure-visibility contract
+## Now — stop accepting speech the user did not produce
 
-- **[083 reject pathological repetitive ASR output before injection](../issues/083-prevent-runaway-repeated-dotool-desktop-injection.md)**
-  (In Progress, P1/Critical). The single highest-value open item: it is the
-  ticket standing directly on top of the trust axis. The §7 slice shipped the
-  immediate boundary (spec-owned output/token/repetition limits, the retained
-  `Ubuntuktuktuktuk` regression with zero captured injector calls, session-derived
-  cancellation), but §8 records that the first cut of "no flush after stop" was
-  too broad and silently dropped the trailing utterance on *every* normal stop —
-  fixed in `8795182`, and a standing warning that the remaining work is delicate.
-  What is left is the part that makes the guarantee durable rather than
-  incidental: a cross-session delivery ledger giving each accepted transcript an
-  at-most-once identity, injector attempt/process telemetry, and FIFO/standalone
-  process-lifecycle canaries. Sequenced first because the design must distinguish
-  "the last thing the user said, right up to stop" from "a stale or pathological
-  late result" — collapsing the two reintroduces the §8 regression.
-- **[080 surface eager typing/transcription failures](../issues/080-surface-eager-typing-transcription-failures-beyond-private-telemetry.md)**
-  (Closed, P0/Critical). Small scope, disproportionate value. A live session
-  transcribed correctly and typed nothing — with `dotool` missing — and produced
-  no signal in the console, in `journalctl --user -u voxi-agent.service`, or
-  anywhere else a user would look. For a dictation tool this is close to the
-  worst failure mode: apparent success, no output, no clue. The fix is bounded
-  (establish the daemon-mode logging convention `internal/eager` currently
-  lacks, then surface `typeErr`), and it makes every other failure in this
-  bucket diagnosable by the user instead of by an agent running telemetry
-  queries. Take it alongside 083 — both touch the same acceptance/typing seam.
-- **[092 `eagerSessionManager.Toggle` check-then-act race](../issues/092-eagersessionmanager-toggle-has-a-check-then-act-race-under-concurrent-sigusr1-socket-invocation.md)**
-  (Closed, P2). Included in Now because it is small, well-localized, and sits in
-  exactly the session-lifecycle code 083 is already rewriting — fixing it as
-  part of that pass is much cheaper than fixing it later against a changed
-  file. User-visible symptom (two near-simultaneous toggles silently no-op the
-  dictation start, while both report "Recording started") is a lifecycle
-  predictability bug, i.e. the same axis as 083.
-- **[103 queued utterance lost on stop](../issues/103-normal-non-final-utterance-queued-just-before-stop-is-killed-via-canceled-session-ctx-silently-dropped.md)**
-  (Closed, P1). This is the concrete queued-job half of the stop/delivery contract
-  that 083 does not yet cover; resolve its disposition alongside the at-most-once
-  design rather than treating the existing final-flush fix as sufficient.
 - **[100 background-voice false acceptance](../issues/100-background-distant-voice-hallucinated-into-accepted-transcripts-bypassing-silence-gate.md)**
-  (In Progress, P1). It is a distinct false-positive injection path: plausible ASR text
-  from non-user audio passes the current acoustic gate, so it belongs with the
-  safety work even though repetition limits cannot solve it.
+  (In Progress, P1). Promoted to the head of `Now` this pass, ahead of 083.
+  Rationale: 083's remaining work is residual hardening of a contract that now
+  demonstrably holds, while 100 is an *open hole* — chunk #1533's
+  `"Aye, you did that."` is neither repetitive nor duplicated, so neither the
+  repetition limits, the delivery ledger, nor the new `repeated_sentence_pair`
+  check from §7 can touch it. Half of it landed (`26fc3cf`: adjacent duplicated
+  complete sentence pairs rejected before typing, covering the hospital
+  hallucination shape). The §7 canary also produced a hard negative result that
+  should be respected, not re-litigated: the fixtures' energy overlaps ordinary
+  background recordings, so a bare RMS or voiced-ratio threshold would reject
+  legitimate quiet speech. That makes this ticket **dependent on 096**, which
+  is why 096 moves into `Now` with it.
+- **[096 acoustic classification research](../issues/096-spectral-centroid-keyboard-clack-vs-speech-classification-research.md)**
+  (Research In Progress, P2). Moved up from `Next`. It is no longer a
+  supporting track for 056's noise-rejection gate — it is now the blocking
+  research for 100's accept/reject signal. Three single-feature hypotheses are
+  falsified (spectral centroid, ZCR, and transient-shape's inapplicability to
+  sustained noise), and §6 names harmonicity / pitch salience as the most
+  promising untested direction because it targets a property that should hold
+  across percussive *and* sustained noise: voiced speech has a periodic
+  fundamental, keyboard/mouse/motor/kitchen noise does not. §6 also flags that
+  the bar for "hand-crafted features are good enough" keeps rising at 28
+  samples with three falsifications — that trade-off decision belongs in this
+  bucket, taken deliberately, not deferred a fourth time.
+- **[083 injection-safety residue](../issues/083-prevent-runaway-repeated-dotool-desktop-injection.md)**
+  (In Progress, P1). Demoted within `Now` — still `Now`, no longer first. §9
+  shipped the durable at-most-once ledger (file-locked, fsynced, survives
+  daemon restarts, `delivery_duplicate` telemetry) and the injector attempt
+  boundary; §10 shipped the bounded five-second final-Super-X drain that makes
+  "stop capture and flush" mean what the daily workflow expects, with
+  generation eligibility checked both before the durable claim and before
+  injection. The §8 warning still stands for anyone touching this code: the
+  design must keep distinguishing "the last thing the user said, right up to
+  stop" from "a stale or pathological late result." What is explicitly *not*
+  claimed and remains open: emergency stop, exhaustive FIFO/standalone injector
+  process-lifecycle canaries, and the documented crash window between the
+  durable claim and injector submission. All three are bounded, and the crash
+  window is the only one with a real user-visible failure mode.
 
 ## Next — make responsiveness and the product story evidence-based
 
 - **[075 align documentation and messaging with Cohere as the default ASR](../issues/075-align-documentation-and-product-messaging-with-cohere-transcribe-as-the-default-asr.md)**
-  (Open, P1). Promoted above the performance work this pass. `spec/models.yaml`
-  now defaults to `cohere-transcribe-03-2026`, but the docs still largely tell
-  a Whisper/`small.en` story, and "zero cloud dependencies" is now imprecise
-  given the ~1.66 GiB first-use weight download. Misstating the runtime
-  requirements, privacy boundary, and the fact that vocabulary prompting is a
-  no-op for the default backend sets false expectations at first contact — a
-  trust cost, not a polish item. It is also the natural gate on 001: the
-  website should not be expanded until it is telling the right story. Mostly
-  writing, low risk, no dependency on the Now bucket.
-- ~~087 `voxi monitor` lights the GNOME mic-in-use indicator while idle~~ —
-  **closed**, re-verified resolved. `82b0ee6` added GNOME suppression tags to
-  `PwRecordCommand`, closing the gap this ticket reported; see "Shipped"
-  below.
+  (Open, P1). Scope has shrunk substantially: §5 records that README,
+  `docs/VoiceInput.md`, telemetry guidance, root CLI help, the GNOME extension
+  label, model-registry comments/schema descriptions, and website copy now
+  describe Cohere Transcribe as the default, distinguish the one-time ~1.66 GiB
+  local weight download from cloud transcription, and state that vocabulary
+  prompting applies to Whisper alternatives rather than the default path. What
+  is left is a repository-wide wording audit for stale legacy-architecture and
+  historical notes, plus publishing the updated website source (it was changed
+  but never synced). Keeping it at the head of `Next` rather than closing it:
+  an unpublished website update means the public-facing surface still tells the
+  old story, and that is the half of this ticket that actually reaches users.
+  It remains the gate on 001.
 - **[088 elevate OS scheduling priority for the transcription critical path](../issues/088-elevate-os-scheduling-priority-for-the-transcription-critical-path.md)**
-  (Open, P3). 052's research questions and canary probes were folded into
-  088 §7 and 052 closed as a duplicate track (same launch path, same
-  question — neither the agent service nor the `exec.CommandContext` ASR
-  launch applies any `Nice=`, `CPUWeight=`, `SCHED_*`, or cgroup weight
-  today). The motivating report is *felt* slowness — 088 explicitly records a
-  subjective single-session report with no timing numbers, under load partly
-  self-inflicted by screen recording plus the monitor's own meter. With
-  060/061 shipped there is now no excuse for tuning by feel: reproduce the
-  "screencast + `voxi monitor -w` + dictation" scenario, get idle-versus-loaded
-  stage latencies out of `voxi telemetry query`, and only then choose a
-  mechanism from §4. Ordered after 075 because it is open-ended measurement
-  work, and starting it without the numbers is how it becomes a permanent
-  research ticket.
+  (Open, P3). §8 closed the question honestly: **no scheduler change is
+  justified yet.** The live service runs at `Nice=0`/`LimitNICE=0`, and
+  existing telemetry has latency values but no CPU/GPU-load marker or priority
+  correlation to tune against. The named next step is a controlled
+  idle-versus-loaded canary with fixed utterances and telemetry/process
+  snapshots, testing `CPUWeight` before attempting negative nice values. This
+  is the right shape and the right order; it stays in `Next` precisely because
+  the measurement, not the mechanism, is the work. Starting it from the
+  original *felt-slowness* report instead of numbers is how it becomes a
+  permanent research ticket.
 - **[056 remaining stress-session phases](../issues/056-end-to-end-stress-session-testing-with-noise-and-load.md)**
-  (In Progress, P3). Two distinct pieces of leftover work. First, make the
-  Phase 2 noise-rejection assertion deterministic without moving production
-  defaults — a known-flaky gate is worse than no gate. Second, the deferred
-  CPU/GPU contention phases, which should be the validation vehicle for
-  whatever 052/088 recommends rather than a parallel performance project with
-  its own measurements. The harness has already earned its keep (it caught a
-  genuine, previously-unknown Whisper outro-hallucination variant on its first
-  independent run), which is why it stays active rather than being parked.
-- **[096 acoustic classification research](../issues/096-spectral-centroid-keyboard-clack-vs-speech-classification-research.md)**
-  (Research In Progress, P2) and **[097 public speech-sample catalog](../issues/097-external-public-domain-speech-sample-catalog-download-on-demand-not-committed.md)**
-  (Open, P2) support 056's noise-rejection work. 096 has moved beyond falsified
-  spectral-centroid/ZCR heuristics toward harmonicity/pitch-salience and
-  transient-shape analysis; 097 should supply reproducible external fixtures.
+  (In Progress, P3). §9 narrowed this to one concrete blocker. The de-flaking
+  work landed at the shared safety boundary — `asr.IsSafeToType` now rejects
+  punctuation-only decodes, and the Phase 2 matcher requires distinct accepted
+  chunks so one chunk cannot satisfy both WER checks. But the gated real
+  pipeline test was never run: it needs `VOXI_E2E=1`, private WAV fixtures, and
+  the Whisper runtime. **One live hardware run is all that stands between
+  Phase 2 and done** — that is a small, well-defined action, not open-ended
+  work, and it should be taken before the deferred CPU/GPU contention phases.
+  Those contention phases remain the validation vehicle for whatever 088
+  recommends, not a parallel performance project with its own measurements.
 - **[037 code quality, coverage, and modularization](../issues/037-code-quality-and-test-coverage-roadmap.md)**
-  (Open, P3), scoped initially to the Eager decomposition and focused CLI/audio/
-  ASR tests. Unchanged reasoning from the last pass, reinforced by this one:
-  083, 080, and 092 all land in `internal/eager`, and 083's §8 regression is
-  precisely the kind of defect that unclear lifecycle boundaries produce.
-  Extract those boundaries *after* the Now bucket has pinned the observable
-  behavior down with tests, not before. GNOME modularization stays parked.
+  (Open, P3), scoped to the Eager decomposition and focused CLI/audio/ASR
+  tests. The argument for waiting has now partly expired in Voxi's favour:
+  `internal/eager` has absorbed the ledger, generation eligibility, the drain
+  lease, and the stop-boundary timestamp, all covered by tests that pin the
+  observable behavior down. Decompose *after* 083's residue lands, so the
+  refactor is not chasing a file that is still changing under it — but the
+  window is opening, and `docs/EagerDeliverySafety.md` now gives the extraction
+  a written contract to preserve. GNOME modularization stays parked.
 
 ## Later — distribution, spec hygiene, optional UI polish
 
 - **[001 website integration and public documentation](../issues/001-website-integration.md)**
   (In Progress). Interactive demos, packaging recipes (RPM/deb/PKGBUILD), and
   GNOME/PipeWire setup guides help adoption but change nothing about the
-  reliability of the current user's daily dictation path. Resume after 075, so
-  the expanded site tells the Cohere-default story rather than propagating the
-  Whisper one further. Note the demo asset itself is entangled with 089 — the
-  current clip shows `mods: off`.
+  reliability of the current user's daily dictation path. Resume after 075's
+  website publish, so the expanded site tells the Cohere-default story rather
+  than propagating the Whisper one further.
 - **[090 spec drift: `monitor -w` section aliases hardcoded](../issues/090-spec-drift-monitor-w-section-flag-aliases-hardcoded-separately-from-spec-actions-yaml.md)**
-  (Open, P3) and **[091 JSON Schemas in `spec/schemas/` are never validated against](../issues/091-spec-system-json-schemas-in-spec-schemas-are-never-actually-validated-against-validate-spec-only-runs-go-test.md)**
-  (Open, P2). Both are real gaps between what `docs/Spec.md` promises and what
-  the code enforces — `ParseSections` shadows `spec/actions.yaml` with a
-  hand-written alias table, and `make validate-spec` is just `go test
-  ./spec/...` with no schema validator anywhere in the module. Neither has
-  produced user-facing breakage, so they rank below trust and responsiveness
-  work; both are small and make good filler alongside larger tickets. 091
-  additionally admits a legitimate cheaper resolution: if a schema-validation
-  dependency is unwanted, correct `docs/Spec.md` instead of adding the
-  validator. Decide that before implementing.
-- **[095 spoken number normalization](../issues/095-normalize-spoken-number-words-to-digits-in-dictated-transcripts-library-vs-build-our-own.md)**,
-  **[099 corpus manifest replacement](../issues/099-replace-corpus-tsv-sample-manifest-with-a-more-robust-storage-format.md)**,
-  and **[102 notification language packs](../issues/102-multi-language-audio-packs-for-the-modifier-release-notification-clip.md)**
-  remain Later: useful product or developer-experience improvements, but none
-  should displace the current injection-safety and false-acceptance work.
+  (Open, P3). `ParseSections` shadows `spec/actions.yaml` with a hand-written
+  `switch`; the fix is to resolve against `spec.LoadActions()`'s `Action.Short`
+  and add a test asserting every accepted alias is derivable from the loaded
+  spec. Small, unambiguous, no open questions — good filler alongside a larger
+  ticket, and the accompanying test is what actually prevents recurrence.
+- **[095 spoken number normalization](../issues/095-normalize-spoken-number-words-to-digits-in-dictated-transcripts-library-vs-build-our-own.md)**
+  (Open, P3). Real dictation-quality value, but the ticket's own framing is a
+  library-versus-hand-rolled evaluation with three unvetted Go candidates, and
+  `docs/Go.md` says avoid unneeded deps. Cardinal number conversion is a
+  well-bounded algorithm; the honest expectation is that the hand-rolled
+  version wins and the evaluation is short. Ranked here rather than `Next`
+  only because it is an accuracy *improvement*, not an accuracy *defect*.
+- **[099 corpus manifest replacement](../issues/099-replace-corpus-tsv-sample-manifest-with-a-more-robust-storage-format.md)**
+  (Open, P3) and **[102 notification language packs](../issues/102-multi-language-audio-packs-for-the-modifier-release-notification-clip.md)**
+  (Open, P3). Developer-experience and polish respectively; neither should
+  displace false-acceptance work. 099 gains urgency only if 096/100's growing
+  sample set makes the TSV manifest actively painful — watch for that signal.
 - **[024 GNOME typing-feedback icon](../issues/024-gnome-typing-feedback-icon.md)**
   and **[025 GNOME volume/VU-meter animation](../issues/025-voice-input-volume-animation.md)**
   (Open, P4). Unchanged: low value while the GNOME Shell extension is not in
   daily use and the OS recording indicator suffices. 025 is also partially
   overtaken — 084's live loudness meter delivered the equivalent capability in
-  `voxi monitor`, so re-scope 025 against what already exists before starting it.
+  `voxi monitor`, so re-scope 025 against what already exists before starting.
 
 ## Close / Park
 
-- ~~040 grammar-constrained decoding (GBNF)~~ — **closed**, doubly dead:
-  parked, because it targets the Whisper path while Cohere is the default
-  backend and does not accept prompt/hotword biasing at all (see 075). Recheck
-  only on an upstream binary change; there is no productive Voxi work here.
-- ~~052 as a standalone ticket~~ — **closed**, folded into 088 §7. Same
-  question, same launch path, same systemd unit as 088 — kept as one
-  workstream instead of two duplicated benchmarking efforts.
-- **037 Work Item 3 (GNOME extension modularization)** — noted parked
-  directly in the ticket (037 stays otherwise open: Items 1/2/4 — eager.go
-  decomposition, test coverage, doc archiving — are real, untouched work).
-  Parked alongside 024 and 025 until extension usage resumes.
-- ~~087~~ — **closed**, re-verified resolved: `82b0ee6` (landed after filing)
-  tagged `PwRecordCommand` for GNOME suppression, fixing the stated root
-  cause.
+- **[091 JSON Schemas are never validated against](../issues/091-spec-system-json-schemas-in-spec-schemas-are-never-actually-validated-against-validate-spec-only-runs-go-test.md)**
+  (Open, P2) — **decide, don't schedule.** Moved out of `Later` into this
+  section because it is not really an implementation ticket: §3 offers two
+  resolutions, and one of them is *free*. Either add a pure-Go JSON Schema
+  validator to `validate-spec`, or — if a new dependency is unwanted, which
+  `docs/Go.md` suggests it is — reword `docs/Spec.md` to state plainly that the
+  schemas are IDE-only hints rather than CI-enforced invariants. The second
+  option closes the ticket in one edit and removes a doc that over-promises.
+  Make that call rather than carrying it as backlog.
+- **[097 external public-domain speech sample catalog](../issues/097-external-public-domain-speech-sample-catalog-download-on-demand-not-committed.md)**
+  (Open, P3) — **park, subordinate to 056/096.** §6 is explicit: no download
+  mechanism was added, and source licensing, checksums, cache policy, and
+  transcript-format alignment must all be resolved before implementation. Those
+  are unanswered external/design questions, not work. Revive it only when
+  096's classifier work actually runs out of locally-recorded samples — right
+  now the corpus is growing fine from real recordings, which are better
+  fixtures anyway because they match this user's actual acoustic environment.
+- **037 Work Item 3 (GNOME extension modularization)** — noted parked directly
+  in the ticket (037 stays otherwise open: Items 1/2/4 are real, untouched
+  work). Parked alongside 024 and 025 until extension usage resumes.
+- ~~040 grammar-constrained decoding (GBNF)~~ and ~~052 CPU/GPU priority
+  research~~ — both closed in prior passes (040 doubly blocked upstream; 052
+  folded into 088 §7). Retained here only so the merge is not rediscovered.
 
-## Shipped since the 2026-09-05 pass
+## Shipped since the 2026-09-10 pass
 
-- **061 telemetry analytics and query commands** closed (`3c60c6f`, `662d316`).
-  The previous roadmap's top `Now` item; `voxi telemetry query` now makes the
-  060 timeline usable, which is what allows this pass to demand measurements
-  before scheduling-priority work.
-- **083 safety slice and its regression fix** (`2d438ff`, `6f9cd90`): runaway
-  transcript rejection landed, then the over-broad stop semantics it introduced
-  were caught and fixed by the trailing-utterance flush. Ticket stays open for
-  the remaining at-most-once contract.
-- **084 live mic-loudness meter** closed, with follow-on ballistics/perf and
-  spec work (`cadf312`, `89e2294`, `92c8dc4`, `82b0ee6`, `85bca67`, `ba33ff8`,
-  `7b76138`, `a6cf50a`) plus `docs/LiveMicMeter.md`. It also *created* 087
-  (closed the same session, see Close/Park).
-- **087 GNOME mic-in-use indicator while idle** and **040 GBNF grammar-
-  constrained decoding** and **052 CPU/GPU priority research** all closed
-  during this roadmap pass (087 re-verified fixed by `82b0ee6`; 040 doubly
-  blocked with no productive path on either ASR backend; 052 folded into 088).
-- **089 modifier-daemon installation gap** closed and live-verified: the system
-  modifier daemon and user agent are enabled and active; the durable install path
-  is documented in [`InstallationArchitecture.md`](InstallationArchitecture.md).
-- **093, 094, 098, 101, and 104** are closed with implementation and/or live
-  verification recorded in their issue files; they are removed from active
-  sequencing and retained here as shipped evidence.
-- **086 always-show live loudness**, **085 release onboarding** (v0.1.1),
-  **081 persistent `dotoold` user service**, and **082 Cohere transcript
-  replacements** all closed.
-- **Website and demo asset work** (`01139ce`, `87c3889`, `262f4d2`, `7dd0dff`,
-  `e2eb29f`): real screenshots replaced mockups, and a compressed demo video
-  plus a Go compression script landed — partial, unclosed progress on 001.
+- **080 surface eager typing/transcription failures** closed (`023e080`). The
+  prior pass's second `Now` item: hard pipeline failures — including the live
+  "transcribed correctly, typed nothing, `dotool` missing, no signal anywhere"
+  session — are now surfaced where a user actually looks.
+- **092 `eagerSessionManager.Toggle` check-then-act race** closed (`8a9ec18`),
+  serialized concurrent toggles. Fixed inside the 083 pass exactly as the prior
+  roadmap predicted would be cheapest.
+- **103 queued utterance lost on stop** closed (`b9ea358`, `70c8607`,
+  `d9a093d`, `df6af2b`). The queued-job half of the stop/delivery contract,
+  resolved together with 083 §10's bounded drain rather than separately.
+- **083 §9 durable at-most-once delivery** (`a65a623`) and **§10 bounded
+  final-Super-X drain** (`df6af2b`, after the chunk `#52`/`#53` reproduction),
+  with the contract written up in
+  [`EagerDeliverySafety.md`](EagerDeliverySafety.md) and a sprint retrospective
+  recorded. Ticket stays In Progress for the residue listed in `Now`.
+- **100 §7 partial safety slice** (`26fc3cf`): adjacent duplicated complete
+  sentences are rejected before typing with an explicit
+  `repeated_sentence_pair` reason, deliberately requiring three-plus words per
+  sentence so short legitimate answers are not eaten.
+- **Feedback replacement dictionary overhaul** (`da7c132`, `b61b7a9`) — not
+  tracked by any ticket, recorded here so it is not invisible. Replacements now
+  match case-insensitively and re-case their target to how the phrase was
+  actually heard (lower/UPPER/Title), so one rule replaces the whole family of
+  case-variant entries; `--fixed-case` opts out for things like domain names;
+  and `voxi feedback replacement cleanup [--dry-run]` merges the now-redundant
+  duplicates while flagging genuine target conflicts instead of silently
+  discarding them. This is direct dictation-accuracy value on the main axis.
+- **Install-path consolidation** (`59115ba`, `7a860fe`): a single binary in
+  `~/.local/bin` with a `~/go/bin` symlink, fixing the systemd user service's
+  view of the installed binary.
+- **075 §5 documentation alignment** — most product surfaces now tell the
+  Cohere-default story; see `Next` for the remaining audit and website publish.
+- Everything recorded as shipped in the 2026-09-10 pass (061, 084, 087, 089,
+  093, 094, 098, 101, 104, and the earlier 081/082/085/086 group) remains
+  shipped and is not repeated here.
 
 ## Reconciliation notes
 
-- **Value axis sharpened** rather than replaced: the prior "immediate and
-  trustworthy" framing was right, but with telemetry shipped the operative
-  question moved from *can we see what happens* to *is the injection contract
-  actually safe*. Trust properties are now ranked explicitly.
-- **Out of the roadmap entirely**: 057, 060, and 061 (all closed) — 061 was the
-  prior top `Now` item and is recorded under Shipped rather than dropped.
-- **New to the roadmap**: 080, 083, 087, 088, 089, 090, 091, 092, 100, 103,
-  all filed
-  since the last pass.
-- **Promoted**: 075 from unlisted to the head of `Next` — Cohere is the default
-  in the spec but not in the docs, and that gates 001. 089 was removed from
-  `Now` after its installation and live verification completed; 104 now records
-  the durable installation path that prevents the same omission on fresh setups.
-- **Demoted / restructured**: 052 moved from `Next` in its own right to a merge
-  candidate under 088, and both now sit behind a hard requirement to produce
-  telemetry numbers first. 056 stayed in `Next` but split explicitly into
-  "de-flake the existing gate" and "the deferred contention phases".
-- **Deliberately not force-fit into a bucket**: 040 (external blocker), and the
-  052/088 duplication, which is a tracker decision rather than a sequencing one.
+- **Value axis split, not replaced.** "Injection safety" was one property; it
+  is now two, because exactly-once delivery and only-the-user's-speech have
+  diverged sharply in maturity. The first is close to closed by mechanism; the
+  second has no working mechanism yet and is now the leading edge.
+- **Reprioritized: 100 above 083.** A contract that demonstrably holds and
+  needs hardening ranks below an acceptance hole with a known, reproducible
+  failing fixture. This is the main sequencing change this pass.
+- **Reprioritized: 096 from `Next` to `Now`.** Its role changed from supporting
+  056's noise gate to blocking 100's accept/reject signal — and 100's §7 canary
+  independently proved the cheap alternatives (RMS, voiced ratio) unsafe,
+  which is what elevates the research from optional to on the critical path.
+- **Reprioritized: 037 softened.** Not moved buckets, but the "wait until
+  behavior is pinned by tests" condition it was gated on is now nearly met.
+- **Moved to Close/Park: 091** — a decision, not a build, with a free closing
+  option — **and 097**, blocked on unresolved external licensing/format
+  questions and not currently needed by the work it was meant to serve.
+- **Out of the roadmap entirely**: 080, 092, and 103, all closed and recorded
+  under Shipped rather than dropped. They were the prior pass's `Now` bucket.
+- **Deliberately not force-fit into a bucket**: 091 and 097, per above.
