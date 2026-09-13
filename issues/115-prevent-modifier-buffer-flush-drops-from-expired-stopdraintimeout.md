@@ -59,24 +59,41 @@ if pending, wasBuffering := eagerBuf.FlushDeliveries(); wasBuffering {
 
 ---
 
-## 3. Required Fix & Timeout Architecture (Zero Zombie Guarantee)
+## 3. Required Fix & Architecture Refinements (Advisor Review)
 
-To guarantee no hung processes, no zombie worker loops, and reliable delivery of valid chunks:
+Following advisor review (Codex / Astra), the fix requires addressing context ownership and delivery coordination beyond simply deleting the `drain.eligible()` lines:
 
-1. **Bounded Per-Stage Timeouts**:
-   - **ASR Transcription**: Bounded per job via `transcribeTimeout` (e.g. 30s) so an engine crash or infinite loop is killed and reaped immediately.
-   - **LLM Cleanup**: Bounded via HTTP request context (`context.WithTimeout(ctx, 1500*time.Millisecond)`).
-2. **User Notification & Fallback on LLM Timeout**:
-   - When the LLM cleaner HTTP call times out or fails, the pipeline must:
-     - Fall back immediately to the clean ASR transcript so speech is **never lost**.
-     - Emit a diagnostic warning / notification to the user (e.g., in daemon log & telemetry `llm_cleanup_timeout`, and optional audible/visual status alert) informing them that LLM post-processing timed out and the raw/ASR transcript was used instead.
-3. **Safe Post-Drain Flush**:
-   - Remove `drain.eligible()` check in the post-drain `FlushDeliveries()` path.
-   - Once `transWg.Wait()` completes, the sequential worker has finished all in-flight jobs. Flushing the session's own buffered text is safe and must not be aborted by a wall-clock session drain deadline.
-4. **Early Exit for Non-Speech Chunks**:
-   - Confirm that unvoiced / low-energy transients (`!job.Plausible`) continue to short-circuit immediately without blocking transcription or notifications, ensuring the system only waits on chunks that actually contain speech.
-5. **Update Chunk Metadata on Buffered Flush**:
+1. **Decouple Context Ownership for Delivery**:
+   - `drain.stopAt()` schedules cancellation of `drain.ctx`. Currently, `typing.TypeTextObserved(drain.ctx, ...)` inherits this context.
+   - If `drain.ctx` is canceled after 5s, `TypeTextObserved` will fail with `context.Canceled` even if the `if !drain.eligible()` checks are removed!
+   - **Fix**: The typing/injection call on the post-drain flush path must not use the canceled capture drain context. It should use an independent delivery context (e.g. `context.Background()` or the root daemon context `ctx`) bounded by an injection-specific timeout (e.g. `5s`).
+
+2. **Session Interleaving & Delivery Ordering**:
+   - While `eagerBuf` is session-local, rapid `Stop` -> `Start` sequences can result in the old session draining and typing into the desktop while a new session has already begun.
+   - Ensure the delivery coordinator maintains strict chronological sequencing and respects active window focus boundaries.
+
+3. **Bounded Per-Stage Timeouts & Explicit Error Taxonomy**:
+   - **ASR Transcription**: Bounded per job via `transcribeTimeout` (30s) so an engine crash or infinite loop is killed and reaped immediately.
+   - **LLM Cleanup**: Bounded via HTTP request context (`1500ms`). When it fails, distinguish between `timeout`, `connection_error`, `invalid_schema`, and `empty_response`, falling back to the base clean ASR text and logging telemetry (`llm_cleanup_fallback`).
+   - **Injection**: Bounded per delivery batch.
+
+4. **Update Chunk Metadata on Buffered Flush**:
    - Ensure `chunkMeta.TypingStartedAt` and `chunkMeta.TypingEndedAt` are updated and persisted to `manifest.json` / sidecars when delivered via `FlushDeliveries()`.
-6. **Automated Regression Tests**:
-   - Test that a multi-chunk session entering `modifierBuffer` that takes longer than `stopDrainTimeout` to transcribe still flushes and delivers all buffered text upon completion.
-   - Test that an LLM cleaner timeout falls back cleanly to the base transcript, emits a user-visible warning, and delivers the text without getting dropped.
+
+5. **Acoustic Speech Gate Verification**:
+   - Confirm unvoiced/low-energy transients (`!job.Plausible`) continue to short-circuit without blocking transcription or notifications.
+
+---
+
+## 4. Lifecycle Regression Test Matrix
+
+1. **Multi-Chunk Buffered Drain Beyond Stop Timeout**:
+   - Verify that 2+ chunks taking >5.0s to transcribe in `modifierBuffer` complete and are injected in order, exactly once, without being canceled by `drain.ctx`.
+2. **Context Cancellation Isolation**:
+   - Verify that `drain.cancel()` does not abort in-flight or post-drain `TypeTextObserved` calls.
+3. **Rapid Stop -> Start Sequencing**:
+   - Test rapid Stop/Start with overlapping transcription; assert delivery ledger claims prevent duplicate or interleaved text.
+4. **LLM Cleanup Timeout Fallback & Diagnostic Emission**:
+   - Test LLM latency >1500ms; verify fallback to raw/ASR transcript, diagnostic telemetry emitted, and successful typing.
+5. **Metadata & Telemetry Consistency**:
+   - Verify `voxi chunks show` reports correct `TypingStartedAt` / `TypingEndedAt` for flushed chunks.
