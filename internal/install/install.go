@@ -437,17 +437,33 @@ func buildModifier(ctx context.Context, dir string) (string, error) {
 	if _, err := os.Stat(path); err == nil {
 		return path, nil
 	}
+	// Check if already installed in system or user binary directories
+	for _, cand := range []string{
+		"/usr/local/bin/voxi-modifierd",
+		filepath.Join(os.Getenv("HOME"), "go", "bin", "voxi-modifierd"),
+		filepath.Join(os.Getenv("HOME"), ".local", "bin", "voxi-modifierd"),
+	} {
+		if _, err := os.Stat(cand); err == nil {
+			return cand, nil
+		}
+	}
 	mod, err := exec.CommandContext(ctx, "go", "env", "GOMOD").Output()
-	if err != nil || strings.TrimSpace(string(mod)) == "" || strings.TrimSpace(string(mod)) == "/dev/null" {
-		return "", fmt.Errorf("no source checkout or packaged voxi-modifierd binary available")
+	if err == nil && strings.TrimSpace(string(mod)) != "" && strings.TrimSpace(string(mod)) != "/dev/null" {
+		root := filepath.Dir(strings.TrimSpace(string(mod)))
+		cmd := exec.CommandContext(ctx, "go", "build", "-o", path, "./cmd/voxi-modifierd")
+		cmd.Dir = root
+		if err := cmd.Run(); err == nil {
+			return path, nil
+		}
 	}
-	root := filepath.Dir(strings.TrimSpace(string(mod)))
-	cmd := exec.CommandContext(ctx, "go", "build", "-o", path, "./cmd/voxi-modifierd")
-	cmd.Dir = root
-	if err := cmd.Run(); err != nil {
-		return "", err
+	// If outside a local source checkout, attempt to build from remote module if Go toolchain is available
+	if _, err := exec.LookPath("go"); err == nil {
+		cmd := exec.CommandContext(ctx, "go", "build", "-o", path, "ubunatic.com/voxi/cmd/voxi-modifierd@latest")
+		if err := cmd.Run(); err == nil {
+			return path, nil
+		}
 	}
-	return path, nil
+	return "", fmt.Errorf("no source checkout or packaged voxi-modifierd binary available (install Go to build or place voxi-modifierd in PATH)")
 }
 
 // NewCommand returns the Cobra command used by the main CLI.

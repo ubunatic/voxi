@@ -2,8 +2,12 @@ package monitor
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"strings"
 	"testing"
+
+	"ubunatic.com/voxi/internal/deps"
 )
 
 func TestParseSections(t *testing.T) {
@@ -68,3 +72,22 @@ func TestPrintVoiceResourceReport(t *testing.T) {
 		t.Fatalf("missing expected sections in report: %s", output)
 	}
 }
+
+func TestDetectActiveModel(t *testing.T) {
+	d := deps.Dependencies{
+		Getenv: func(key string) string {
+			if key == "HOME" {
+				return "/tmp/nonexistent-home"
+			}
+			return ""
+		},
+		Run: func(_ context.Context, _ string, _ ...string) error {
+			return errors.New("service inactive")
+		},
+	}
+	model := detectActiveModel(d)
+	if model != "cohere-transcribe-03-2026" {
+		t.Fatalf("expected cohere-transcribe-03-2026 default, got %q", model)
+	}
+}
+

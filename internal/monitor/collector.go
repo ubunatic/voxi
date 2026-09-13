@@ -275,23 +275,27 @@ func detectGPUStatus() string {
 }
 
 func detectActiveModel(d deps.Dependencies) string {
-	defaultModel := "unknown"
-	if s, err := spec.LoadModels(); err == nil {
+	defaultModel := "cohere-transcribe-03-2026"
+	if s, err := spec.LoadModels(); err == nil && s.DefaultModel != "" {
 		defaultModel = s.DefaultModel
 	}
-	home := d.Getenv("HOME")
-	if home == "" {
-		return defaultModel
-	}
-	configPath := filepath.Join(home, ".config", "voxtype", "config.toml")
-	content, err := os.ReadFile(configPath)
-	if err == nil {
-		for _, line := range strings.Split(string(content), "\n") {
-			line = strings.TrimSpace(line)
-			if strings.HasPrefix(line, "model =") {
-				parts := strings.Split(line, "=")
-				if len(parts) == 2 {
-					return strings.Trim(strings.TrimSpace(parts[1]), "\"")
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	// Only read voxtype's legacy config.toml if voxtype.service is currently active
+	if d.Run != nil && d.Run(ctx, "systemctl", "--user", "is-active", "--quiet", "voxtype.service") == nil {
+		home := d.Getenv("HOME")
+		if home != "" {
+			configPath := filepath.Join(home, ".config", "voxtype", "config.toml")
+			if content, err := os.ReadFile(configPath); err == nil {
+				for _, line := range strings.Split(string(content), "\n") {
+					line = strings.TrimSpace(line)
+					if strings.HasPrefix(line, "model =") {
+						parts := strings.Split(line, "=")
+						if len(parts) == 2 {
+							return strings.Trim(strings.TrimSpace(parts[1]), "\"")
+						}
+					}
 				}
 			}
 		}
