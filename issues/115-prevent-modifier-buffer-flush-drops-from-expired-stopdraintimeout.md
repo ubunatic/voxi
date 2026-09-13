@@ -59,13 +59,24 @@ if pending, wasBuffering := eagerBuf.FlushDeliveries(); wasBuffering {
 
 ---
 
-## 3. Required Fix
+## 3. Required Fix & Timeout Architecture (Zero Zombie Guarantee)
 
-1. **Remove `drain.eligible()` check in the post-drain `FlushDeliveries()` path**:
-   - `eagerBuf` is session-local. Once `transWg.Wait()` completes, flushing the session's own buffered text is safe and must not be aborted due to a wall-clock drain timeout that was intended only to kill abandoned worker loops.
-2. **Early exit for non-speech chunks**:
+To guarantee no hung processes, no zombie worker loops, and reliable delivery of valid chunks:
+
+1. **Bounded Per-Stage Timeouts**:
+   - **ASR Transcription**: Bounded per job via `transcribeTimeout` (e.g. 30s) so an engine crash or infinite loop is killed and reaped immediately.
+   - **LLM Cleanup**: Bounded via HTTP request context (`context.WithTimeout(ctx, 1500*time.Millisecond)`).
+2. **User Notification & Fallback on LLM Timeout**:
+   - When the LLM cleaner HTTP call times out or fails, the pipeline must:
+     - Fall back immediately to the clean ASR transcript so speech is **never lost**.
+     - Emit a diagnostic warning / notification to the user (e.g., in daemon log & telemetry `llm_cleanup_timeout`, and optional audible/visual status alert) informing them that LLM post-processing timed out and the raw/ASR transcript was used instead.
+3. **Safe Post-Drain Flush**:
+   - Remove `drain.eligible()` check in the post-drain `FlushDeliveries()` path.
+   - Once `transWg.Wait()` completes, the sequential worker has finished all in-flight jobs. Flushing the session's own buffered text is safe and must not be aborted by a wall-clock session drain deadline.
+4. **Early Exit for Non-Speech Chunks**:
    - Confirm that unvoiced / low-energy transients (`!job.Plausible`) continue to short-circuit immediately without blocking transcription or notifications, ensuring the system only waits on chunks that actually contain speech.
-3. **Update chunk metadata on buffered flush**:
-   - Currently, `chunkMeta.TypingStartedAt` and `chunkMeta.TypingEndedAt` are only updated on the direct typing path (line 761), leaving buffered chunks with zero-value timestamps in `manifest.json` / sidecars even when delivered. Ensure `chunkBuf.Update` records the typing timestamp upon flush.
-4. **Add automated regression tests**:
+5. **Update Chunk Metadata on Buffered Flush**:
+   - Ensure `chunkMeta.TypingStartedAt` and `chunkMeta.TypingEndedAt` are updated and persisted to `manifest.json` / sidecars when delivered via `FlushDeliveries()`.
+6. **Automated Regression Tests**:
    - Test that a multi-chunk session entering `modifierBuffer` that takes longer than `stopDrainTimeout` to transcribe still flushes and delivers all buffered text upon completion.
+   - Test that an LLM cleaner timeout falls back cleanly to the base transcript, emits a user-visible warning, and delivers the text without getting dropped.
