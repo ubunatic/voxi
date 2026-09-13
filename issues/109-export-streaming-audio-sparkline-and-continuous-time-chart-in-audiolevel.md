@@ -1,6 +1,6 @@
 # 109 — Export Streaming Audio Sparkline and Continuous Time-Chart in `audiolevel`
 
-**Status**: Open
+**Status**: In Progress
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Feature
