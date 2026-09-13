@@ -1,10 +1,10 @@
 # 111 — Define LLM cleanup audio context and evaluate transcript fidelity
 
-**Status**: Open
+**Status**: Closed — evaluation complete; multiline fidelity failure documented
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Bug
-**Related**: [LLM cleanup request](../internal/eager/eager.go), [request test](../internal/eager/eager_test.go), [106 LLM service defaults](106-configure-llm-transcription-cleanup-service-defaults-for-lmcoder-integration.md)
+**Related**: [LLM cleanup request](../internal/eager/eager.go), [request test](../internal/eager/eager_test.go), [real-model evaluation](../docs/studies/2026-09-13-llm-cleanup-evaluation.md), [106 LLM service defaults](106-configure-llm-transcription-cleanup-service-defaults-for-lmcoder-integration.md)
 
 ---
 
@@ -23,7 +23,13 @@ The YAML fields `mean_rms` and `peak_rms` also lack a definition in the model in
 
 ## 3. Acceptance Criteria
 
-- [ ] The prompt accurately defines the RMS measurements supplied in `chunk`.
-- [ ] A repeatable real-model evaluation demonstrates that spoken commands remain dictated text and prior replacements survive cleanup, or records failing cases for a targeted fix.
-- [ ] The evaluation covers YAML-looking multiline transcript text and ordinary cleanup cases.
-- [ ] Any claim of YAML token savings is supported by measured usage for the configured model, or explicitly left unverified.
+- [x] The prompt accurately defines the RMS measurements supplied in `chunk`.
+- [x] A repeatable real-model evaluation demonstrates that spoken commands remain dictated text and prior replacements survive cleanup, or records failing cases for a targeted fix.
+- [x] The evaluation covers YAML-looking multiline transcript text and ordinary cleanup cases.
+- [x] Any claim of YAML token savings is supported by measured usage for the configured model, or explicitly left unverified.
+
+## 4. Evaluation outcome
+
+The configured Qwen3-4B cleanup model preserved literal commands and the prior `Voxi` replacement in the final run. Ordinary cleanup succeeded. YAML-looking multiline speech still failed: the request crossed the production 1.5-second deadline and Voxi fell back to the original transcript. Before the RMS prompt edit, the model returned HTTP 200 but flattened all three line breaks. This fidelity problem remains unresolved; the [repeatable evaluation](../docs/studies/2026-09-13-llm-cleanup-evaluation.md) records exact inputs, outputs, timings, and fallback state for a targeted future fix.
+
+Measured server usage for one equivalent message was 206 YAML prompt tokens and 203 compact JSON prompt tokens, so YAML token savings were not observed. The evaluation and code were committed as `ea2c44f` and `742159c`; `go test ./...` and `make restart-service` passed.
