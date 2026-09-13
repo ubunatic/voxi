@@ -52,9 +52,10 @@ if pending, wasBuffering := eagerBuf.FlushDeliveries(); wasBuffering {
 ```
 
 ### Why this is a bug:
-1. **Audio was already verified valid**: Chunks held in `eagerBuf` were already verified eligible when captured (`job.Eligible`), transcribed successfully, and buffered specifically *for this session*.
-2. **Session is already sequentially drained**: Reaching line 940 happens strictly after `transWg.Wait()`. No new or stray background chunks from this session can arrive later.
-3. **`stopDrainTimeout` (5s) is too tight for queue backlog + LLM cleanup**: When multiple chunks queue up or when ASR / LLM post-processing takes >5s total across the trailing chunks, the hard 5-second wall clock deadline from the initial stop request expires, causing `drain.eligible()` to silently drop valid, completed speech at the final delivery stage.
+1. **Audio was already verified valid**: Chunks held in `eagerBuf` were already verified eligible when captured (`job.Eligible`), evaluated as acoustically plausible speech (`job.Plausible`), transcribed successfully, and buffered specifically *for this session*.
+2. **We only wait for genuine speech**: Non-speech slices (clicks, silence, transients with `!job.Plausible`) are filtered out immediately in milliseconds without running Whisper/CrispASR or holding up the pipeline. Only chunks with verified speech acoustics are queued and transcribed.
+3. **Session is already sequentially drained**: Reaching line 940 happens strictly after `transWg.Wait()`. No new or stray background chunks from this session can arrive later.
+4. **`stopDrainTimeout` (5s) is too tight for queue backlog + LLM cleanup**: When multiple valid chunks queue up or when ASR / LLM post-processing takes >5s total across the trailing chunks, the hard 5-second wall clock deadline from the initial stop request expires, causing `drain.eligible()` to silently drop valid, completed speech at the final delivery stage.
 
 ---
 
@@ -62,7 +63,9 @@ if pending, wasBuffering := eagerBuf.FlushDeliveries(); wasBuffering {
 
 1. **Remove `drain.eligible()` check in the post-drain `FlushDeliveries()` path**:
    - `eagerBuf` is session-local. Once `transWg.Wait()` completes, flushing the session's own buffered text is safe and must not be aborted due to a wall-clock drain timeout that was intended only to kill abandoned worker loops.
-2. **Update chunk metadata on buffered flush**:
+2. **Early exit for non-speech chunks**:
+   - Confirm that unvoiced / low-energy transients (`!job.Plausible`) continue to short-circuit immediately without blocking transcription or notifications, ensuring the system only waits on chunks that actually contain speech.
+3. **Update chunk metadata on buffered flush**:
    - Currently, `chunkMeta.TypingStartedAt` and `chunkMeta.TypingEndedAt` are only updated on the direct typing path (line 761), leaving buffered chunks with zero-value timestamps in `manifest.json` / sidecars even when delivered. Ensure `chunkBuf.Update` records the typing timestamp upon flush.
-3. **Add automated regression tests**:
+4. **Add automated regression tests**:
    - Test that a multi-chunk session entering `modifierBuffer` that takes longer than `stopDrainTimeout` to transcribe still flushes and delivers all buffered text upon completion.
