@@ -2,4 +2,4 @@
 // by `harnez release` — see docs/practices/GoRelease.md.
 package voxi
 
-var Version = "0.1.5"
+var Version = "0.1.6"
