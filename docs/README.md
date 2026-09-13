@@ -11,7 +11,7 @@ In-depth references for architecture, decisions, and operations of the Voxi Linu
 | [BenchBaseline.md](BenchBaseline.md) | `voxi bench` CPU vs GPU RTF baseline for an average dev machine (T14 Gen2 AMD) |
 | [PublicationAndRelease.md](PublicationAndRelease.md) | Codeberg hosting philosophy, local CI quality gates, and release workflow |
 | [ChunkDiagnostics.md](ChunkDiagnostics.md) | `voxi chunks` ring buffer, RMS/acoustic-gate fields, the Braille LEVEL sparkline (dual-column packing, log-scale calibration pitfalls), and `--color` |
-| [LiveMicMeter.md](LiveMicMeter.md) | `audiolevel` package: capture, two-sided ballistics easing, decoupled paint/collect/capture cadences, truecolor gradient rendering, GNOME mic-indicator suppression, and the `stty`-subprocess perf pitfall |
+| [LiveMicMeter.md](LiveMicMeter.md) | `audiolevel` package: capture, two-sided ballistics easing, decoupled paint/collect/capture cadences, truecolor gradient rendering, GNOME mic-indicator suppression, the `stty`-subprocess perf pitfall, the rolling sparkline export and its `examples/miclevel` loom TUI demo, and `loom` API pitfalls found along the way |
 | [EagerDeliverySafety.md](EagerDeliverySafety.md) | Eager chunk identities, at-most-once delivery ledger, stop/queue semantics, visible failures, and conservative transcript safety limits |
 
 ---

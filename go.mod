@@ -3,6 +3,7 @@ module ubunatic.com/voxi
 go 1.26.5
 
 require (
+	codeberg.org/ubunatic/loom v0.2.1
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/term v0.45.0
 	gopkg.in/yaml.v3 v3.0.1

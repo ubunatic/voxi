@@ -1,10 +1,52 @@
 # 110 — Add `examples/miclevel`: loom TUI Showing Live `audiolevel` Sparkline/Meter
 
-**Status**: Open
+**Status**: Closed
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Feature
-**Related**: `audiolevel/audiolevel.go`, `audiolevel/sparkline.go`, issue 109 (export streaming sparkline), `../loom` (`pane.go` `RunWatch`, `collector/`, `frame.go` `Box.SetRowsValues`), `../loom/examples/monitor`, `../loom/issues/015` (simulated Voxi panels — explicitly scoped to fake data, no real mic)
+**Related**: `audiolevel/audiolevel.go`, `audiolevel/sparkline.go`, issue 109 (export streaming sparkline), `../loom` (`pane.go` `RunWatch`, `collector/`, `frame.go` `Box.SetRowsValues`), `../loom/examples/monitor`, `../loom/issues/015` (simulated Voxi panels — explicitly scoped to fake data, no real mic), `../loom/issues/039` (SubChar boundary-glyph seam, filed from this ticket's own verification), `../harnez/issues/330` (adopt this ticket's sparkline capability into harnez's own mic meter)
+
+---
+
+## Resolution (2026-09-13)
+
+Shipped `examples/miclevel/` (`main.go`, `watch.go`, `spec/miclevel.yaml`,
+`README.md`), wired via a real tagged dependency
+(`codeberg.org/ubunatic/loom v0.2.1` in `go.mod`, no `replace`) plus a
+tracked `go.work.example` (copy to untracked `go.work` for local
+uncommitted-loom-checkout co-development — see
+[docs/Go.md](../docs/Go.md) "Workspace Isolation").
+
+Manually verified against a real microphone (not simulated): the level bar
+and Braille sparkline both respond to ambient room noise/speech and decay
+afterward; the no-backend degrade path (PATH stripped of `parec`/
+`pw-record`) renders a clear message with no panic. `go build`/`go vet`/
+`go test ./...` all green.
+
+Two real bugs were found and fixed along the way (both root-caused before
+being patched — see [docs/LiveMicMeter.md](../docs/LiveMicMeter.md) §12 for
+the full writeup, kept there rather than only in this closed ticket since
+the pitfalls are `loom`-API-wide, not specific to this one example):
+1. A box with too little declared height for its padding silently dropped
+   **all** child content (not just the dynamic parts) — a `loom` API
+   footgun (`Box.Draw`'s `padding < (h-1)/2` guard), not anything specific
+   to this ticket's YAML.
+2. `SparklineStream.Sparkline()` returns a space-*padded* string (not `""`)
+   before its buffer has real data — an easy off-by-assumption bug in any
+   consumer, not just this one.
+
+One cosmetic `loom` gap (`graph.RenderBar`'s `SubChar` boundary glyph shows
+a terminal-font-rendering seam without `ANSI`+`BackgroundANSI` styling) was
+filed upstream as `../loom` issue 039 rather than worked around locally —
+per explicit user direction, `examples/miclevel` keeps `SubChar: true` to
+match `examples/monitor`'s own established convention and lives with the
+seam until loom addresses it.
+
+Also filed `../harnez` issue 330: harnez already shares this same
+`audiolevel.Meter`/`Manager` for its own scalar mic-level bar and is a
+natural adopter of the new sparkline capability this ticket demonstrated —
+blocked on a new voxi release tag past v0.1.7 (which predates the
+sparkline export).
 
 ---
 
@@ -73,16 +115,16 @@ gives `loom` its first real (non-simulated) external-source integration test.
 
 ## 3. Acceptance Criteria
 
-- [ ] `go run ./examples/miclevel` opens an inline loom pane showing a live
+- [x] `go run ./examples/miclevel` opens an inline loom pane showing a live
       scalar level and scrolling Braille sparkline that visibly respond to
       real microphone input (manually verified against a real mic, not just
       unit-tested).
-- [ ] Gracefully degrades (visible "unavailable" state, no panic) when no
+- [x] Gracefully degrades (visible "unavailable" state, no panic) when no
       capture backend (`parec`/`pw-record`) is present.
-- [ ] `q`/Ctrl-C exits cleanly and restores the terminal.
-- [ ] `examples/miclevel/README.md` documents how to run it and what it
+- [x] `q`/Ctrl-C exits cleanly and restores the terminal.
+- [x] `examples/miclevel/README.md` documents how to run it and what it
       demonstrates.
-- [ ] `go build ./...`, `go vet ./...`, `go test ./...` stay green with the
+- [x] `go build ./...`, `go vet ./...`, `go test ./...` stay green with the
       new example in the tree.
 
 ---

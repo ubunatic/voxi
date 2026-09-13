@@ -1,0 +1,33 @@
+app:
+  height: 9
+  max_width: 60
+view:
+  name: main
+  frame:
+    title: Mic Level
+    status: Live
+    gap: 2
+    actions:
+      - id: quit
+        action: quit
+        key: q
+        hint: '[q]quit'
+      - id: interrupt
+        action: quit
+        key: ctrl-c
+    boxes:
+      - id: mic
+        title: Microphone
+        footer: (live microphone input)
+        width: 54
+        height: 7
+        padding: 1
+        rows:
+          gap: 1
+          ellipsis: '...'
+          columns:
+            - {width: 6, align: left}
+            - {width: 40, align: left}
+          values:
+            - ['Level', '[                    ]   0%']
+            - ['Wave', 'connecting']

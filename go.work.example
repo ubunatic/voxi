@@ -1,0 +1,10 @@
+// Example Go workspace for local voxi + loom co-development.
+// Copy (or symlink) to go.work to build examples/miclevel against an
+// uncommitted, in-progress ../loom checkout instead of the go.mod-pinned
+// release. Untracked (see .gitignore); see docs/Go.md "Workspace Isolation".
+go 1.26.5
+
+use (
+	.
+	../loom
+)

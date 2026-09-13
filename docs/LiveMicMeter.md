@@ -199,11 +199,101 @@ Tests: `audiolevel/audiolevel_test.go` (ballistics both directions, `Tick`/`Upda
 continuity, `PwRecordCommand` suppression-tag args), `spec/monitor_test.go` (spec
 validation, derived duration/byte-size helpers), `internal/monitor/monitor_test.go`.
 
-## 11. Related issues
+## 12. Sparkline export and external consumption (`examples/miclevel`, issues 109/110)
+
+`audiolevel` grew a second, independent capability on the same `Meter`/
+`Manager` this doc's §2 describes: `Meter.EnableSparkline`/
+`Manager.Sparkline()` (issue 109), a rolling Braille time-chart fed by the
+same capture stream (`RunCapture` calls `WritePCM` with every chunk it
+already reads for the scalar level — no second subprocess, no second
+capture stream). `SparklineStream` keeps only the last `Window`'s worth of
+raw PCM bytes and re-renders the whole visible width from that buffer on
+every call — cheap enough to call once per redraw frame directly, no
+caching needed.
+
+`examples/miclevel` (issue 110) demonstrates this end to end against a real
+microphone via `codeberg.org/ubunatic/loom`'s TUI primitives
+(`Pane.RunWatch`, `Box.SetRowsValues`) — the first proof that `audiolevel`'s
+public API is consumable by an external Go program, not just voxi's own
+`internal/monitor`. It pins a real tagged `loom` release in `go.mod` (no
+`replace`); a tracked `go.work.example` (copy to untracked `go.work`) opts
+into building against an uncommitted local `../loom` checkout instead, per
+[Go.md](Go.md) "Workspace Isolation".
+
+### Pitfalls found while building it (all reproduced and root-caused, not guessed)
+
+- **A `loom` `Box` with too little declared `height` for its `padding`
+  silently drops *all* child content, not just what's clipped.**
+  `Box.Draw` only paints its `Child` when
+  `padding < (w-1)/2 && padding < (h-1)/2`; for `height: 4, padding: 1`,
+  `1 < (4-1)/2` integer-divides to `1 < 1`, which is false, so the guard
+  skips drawing entirely — even the box's *static* YAML-declared rows never
+  appear, which reads exactly like a data-plumbing bug (Go code not calling
+  `SetRowsValues`) rather than a sizing bug. Confirmed via a throwaway
+  `_test.go` calling `loom.BuildWidget`/`loom.Render` directly (no TTY,
+  no PTY hackery needed) and printing `Box.Child`/`Box.Rows` — that isolated
+  it to layout, not data. Fix: size the box for
+  `border(2) + padding*2 + content_rows + (1 if Footer != "")` — `Box.Measure`
+  already computes this correctly, but only if the box is `Dynamic: true`;
+  a manually-declared `height` gets no such check and must be sized by
+  hand. A box's static `footer` field, if present, occupies one of those
+  content rows too — sizing for content only (forgetting `+1` for footer)
+  silently overlaps the footer text onto the last content row instead of
+  erroring.
+- **`SparklineStream.Sparkline()` returns a space-*padded* string, not `""`,
+  before its rolling buffer has real data.** A consumer checking
+  `sparkline == ""` to show a "connecting" placeholder never sees that
+  branch fire — it always gets 32 (or however many `Width`) literal spaces
+  instead. Check `strings.TrimSpace(sparkline) == ""` instead.
+- **PTY-based manual verification needs the terminal's cursor-position
+  reply, or nothing renders at all.** `loom.New` queries cursor position
+  via DSR (`\x1b[6n`) and falls back to `cy = termRows` on no/invalid
+  reply — a naive Python PTY harness that doesn't answer the query gets a
+  Loom pane that positions its redraws somewhere off-screen, rendering as
+  "just the title, nothing else," which looks exactly like a rendering bug
+  but is a test-harness gap. `loom`'s own `scripts/check-watch-pty.py`
+  answers `\x1b[6n` with a fixed `\x1b[24;1R`; matching that convention
+  fixed the false negative here too. A plain `loom.BuildWidget`/
+  `loom.Render` call from a `_test.go` (no TTY at all) is the faster, more
+  reliable check when only widget/layout logic — not real terminal
+  behavior — is in question; save PTY simulation for confirming actual
+  live rendering.
+- **`graph.RenderBar`'s `SubChar: true` boundary glyph can show a visible
+  cosmetic seam without `ANSI`+`BackgroundANSI` styling**, on terminals
+  (confirmed on GNOME Terminal/VTE with Adwaita Mono — font glyph coverage
+  for the whole eighth-block Unicode range was verified present via
+  `fontTools`, ruling out a missing-glyph explanation) that procedurally
+  render the basic block/shade characters (`█ ▓ ▒ ░`) for pixel-perfect
+  tiling but fall back to the font's own glyph outline (with its own
+  baked-in bearing) for the finer eighth-block fractional characters
+  (`▏▎▍▌▋▊▉`) `SubChar` uses at the fill/empty boundary. Not a bug in
+  `graph`'s glyph-selection math. Filed as
+  [`../loom` issue 039](../../loom/issues/039-graph-renderbar-subchar-boundary-glyph-shows-a-visible-seam-without-ansi-background-styling.md)
+  rather than worked around locally — user's explicit call: `examples/miclevel`
+  keeps `SubChar: true` to match `examples/monitor`'s own established
+  convention and lives with the cosmetic seam until `loom` documents or
+  fixes it upstream, rather than accumulating one-off flag differences
+  from the reference example per consumer.
+
+### Cross-project follow-up
+
+`../harnez` already imports this same `audiolevel.Meter`/`Manager` for its
+own scalar mic-level bar (`internal/usage/miclive.go`, ported from there
+originally — see §2) but has never adopted the sparkline capability. Filed
+as `../harnez` issue 330 — blocked on a new voxi release tag past v0.1.7,
+which predates the sparkline export commit (per
+[GoRelease.md](GoRelease.md)'s sibling-module repin convention: tag/release
+the producer before a consumer can pick up a new exported API).
+
+## 13. Related issues
 
 [084](../issues/084-add-live-mic-input-level-meter-and-volume-display-to-voxi-monitor.md)
 (original feature request, closed here), 
 [086](../issues/086-detailed-view-always-show-live-mic-loudness-even-when-not-recording.md)
 (`status_icon.always_show_loudness`, closed),
 [087](../issues/087-voxi-monitor-lights-up-gnome-mic-in-use-indicator-even-while-idle-suppression-tags-don-t-work-unimplemented.md)
-(privacy-indicator suppression, open — GNOME-source-confirmed, live-canary pending).
+(privacy-indicator suppression, open — GNOME-source-confirmed, live-canary pending),
+[109](../issues/109-export-streaming-audio-sparkline-and-time-chart-in-audiolevel.md)
+(sparkline export, closed),
+[110](../issues/110-add-examples-miclevel-loom-tui-showing-live-audiolevel-sparkline-meter.md)
+(`examples/miclevel`, closed — see §12 for the pitfalls found building it).
