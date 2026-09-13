@@ -70,13 +70,14 @@ install-crispasr: ⚙️  # download official CrispASR release binary (crispasr,
 		*) echo "❌ install-crispasr: unsupported architecture $$arch (CrispASR has no prebuilt release for it)"; exit 1 ;; \
 	esac; \
 	dir="$(HOME)/.local/lib/voxi/crispasr"; \
-	mkdir -p "$$dir" "$(HOME)/go/bin"; \
-	tmp="$$(mktemp -d)"; \
-	trap 'rm -rf "$$tmp"' EXIT; \
-	echo "Downloading $$asset from CrispStrobe/CrispASR latest release..."; \
-	curl -fL -o "$$tmp/$$asset" "https://github.com/CrispStrobe/CrispASR/releases/latest/download/$$asset" || \
-		(echo "❌ install-crispasr: download failed"; exit 1); \
-	tar -xzf "$$tmp/$$asset" -C "$$dir" --strip-components=1; \
+	cache="$(HOME)/.cache/voxi/$$asset"; \
+	mkdir -p "$$dir" "$(HOME)/go/bin" "$$(dirname "$$cache")"; \
+	if [ ! -s "$$cache" ] || ! tar -tzf "$$cache" >/dev/null 2>&1; then \
+		echo "Downloading $$asset from CrispStrobe/CrispASR latest release..."; \
+		curl -fL -o "$$cache" "https://github.com/CrispStrobe/CrispASR/releases/latest/download/$$asset" || \
+			(echo "❌ install-crispasr: download failed. Place $$asset into $$cache manually or run 'voxi install'."; exit 1); \
+	fi; \
+	tar -xzf "$$cache" -C "$$dir" --strip-components=1; \
 	ln -sf "$$dir/crispasr" "$(HOME)/go/bin/crispasr"; \
 	"$(HOME)/go/bin/crispasr" --version
 

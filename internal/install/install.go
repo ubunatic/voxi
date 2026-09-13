@@ -6,11 +6,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"ubunatic.com/voxi"
@@ -34,6 +36,7 @@ type Effects struct {
 	RunStdin      func(context.Context, string, string, ...string) error
 	Symlink       func(string, string) error
 	Remove        func(string) error
+	DownloadHTTP  func(context.Context, string, string) error
 }
 
 // DefaultEffects binds Install to the current Linux host.
@@ -70,8 +73,9 @@ func DefaultEffects() Effects {
 			cmd.Stdin = strings.NewReader(stdin)
 			return cmd.Run()
 		},
-		Symlink: os.Symlink,
-		Remove:  os.Remove,
+		Symlink:      os.Symlink,
+		Remove:       os.Remove,
+		DownloadHTTP: downloadResilientHTTP,
 	}
 }
 
@@ -84,7 +88,7 @@ func Install(ctx context.Context, out io.Writer, e Effects, modifierd bool) erro
 	if e.Home == "" {
 		return fmt.Errorf("install: HOME is empty; set HOME to a user home directory")
 	}
-	if e.Executable == nil || e.BuildModifier == nil || e.LookPath == nil || e.MkdirAll == nil || e.ReadFile == nil || e.WriteFile == nil || e.Chmod == nil || e.Run == nil || e.RunOutput == nil || e.RunStdin == nil || e.Symlink == nil || e.Remove == nil {
+	if e.Executable == nil || e.BuildModifier == nil || e.LookPath == nil || e.MkdirAll == nil || e.ReadFile == nil || e.WriteFile == nil || e.Chmod == nil || e.Run == nil || e.RunOutput == nil || e.RunStdin == nil || e.Symlink == nil || e.Remove == nil || e.DownloadHTTP == nil {
 		return fmt.Errorf("install: incomplete host effects")
 	}
 	userBin := filepath.Join(e.Home, ".local", "bin")
@@ -231,8 +235,8 @@ func installUserDependencies(ctx context.Context, e Effects, userBin, serviceDir
 		return fmt.Errorf("create download directory: %w", err)
 	}
 	url := "https://github.com/CrispStrobe/CrispASR/releases/latest/download/" + asset
-	if err := e.Run(ctx, "curl", "-fL", "-o", archive, url); err != nil {
-		return fmt.Errorf("download CrispASR: %w", err)
+	if err := downloadCrispASR(ctx, e, archive, url); err != nil {
+		return err
 	}
 	if err := e.Run(ctx, "tar", "-xzf", archive, "-C", crispDir, "--strip-components=1"); err != nil {
 		return fmt.Errorf("extract CrispASR: %w", err)
@@ -269,6 +273,163 @@ func installUserDependencies(ctx context.Context, e Effects, userBin, serviceDir
 	}
 	_ = serviceDir // unit installation is kept in the following phase.
 	return nil
+}
+
+func downloadCrispASR(ctx context.Context, e Effects, archive, url string) error {
+	// If the archive already exists on disk and is a valid tarball, reuse it.
+	if _, err := os.Stat(archive); err == nil {
+		if err := e.Run(ctx, "tar", "-tzf", archive); err == nil {
+			return nil
+		}
+	}
+
+	// Step 1: Try curl with resume and retry
+	curlErr := e.Run(ctx, "curl", "-fL", "-o", archive, url)
+	if curlErr == nil {
+		return nil
+	}
+
+	// Step 2: If curl fails, try resilient Go HTTP range downloader
+	dlErr := e.DownloadHTTP(ctx, url, archive)
+	if dlErr == nil {
+		return nil
+	}
+
+	// Step 3: Format clear, actionable diagnostics
+	var hints []string
+	if curlErr != nil {
+		if strings.Contains(curlErr.Error(), "exit status 56") {
+			hints = append(hints, "curl reported exit status 56 (network/TLS receive failure, often caused by MTU mismatch or packet drops on Wi-Fi/VPN)")
+		} else {
+			hints = append(hints, fmt.Sprintf("curl error: %v", curlErr))
+		}
+	}
+	if dlErr != nil {
+		hints = append(hints, fmt.Sprintf("HTTP range fallback error: %v", dlErr))
+	}
+
+	hintMsg := ""
+	if len(hints) > 0 {
+		hintMsg = "\n\nDiagnostic details:\n  - " + strings.Join(hints, "\n  - ")
+	}
+
+	return fmt.Errorf("download CrispASR failed%s\n\n"+
+		"To resolve manually:\n"+
+		"  1. Download: %s\n"+
+		"  2. Place at: %s\n"+
+		"  3. Re-run: 'voxi install'",
+		hintMsg, url, archive)
+}
+
+func downloadResilientHTTP(ctx context.Context, url, targetPath string) error {
+	req, err := http.NewRequestWithContext(ctx, "HEAD", url, nil)
+	if err != nil {
+		return err
+	}
+	client := &http.Client{
+		Timeout: 15 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 10 {
+				return fmt.Errorf("too many redirects")
+			}
+			return nil
+		},
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	resp.Body.Close()
+
+	finalURL := resp.Request.URL.String()
+	totalSize := resp.ContentLength
+
+	tmpFile := targetPath + ".tmp"
+	f, err := os.OpenFile(tmpFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		f.Close()
+		os.Remove(tmpFile)
+	}()
+
+	if totalSize > 0 && (resp.Header.Get("Accept-Ranges") == "bytes" || resp.StatusCode == 200) {
+		chunkSize := int64(256 * 1024) // 256 KB chunks
+		for start := int64(0); start < totalSize; {
+			end := start + chunkSize - 1
+			if end >= totalSize {
+				end = totalSize - 1
+			}
+			var chunkData []byte
+			var chunkErr error
+			for attempt := 0; attempt < 5; attempt++ {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				default:
+				}
+				chunkReq, err := http.NewRequestWithContext(ctx, "GET", finalURL, nil)
+				if err != nil {
+					chunkErr = err
+					continue
+				}
+				chunkReq.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", start, end))
+				chunkReq.Close = true // close connection per chunk to avoid TLS record framing corruption
+
+				cClient := &http.Client{Timeout: 15 * time.Second}
+				cResp, err := cClient.Do(chunkReq)
+				if err != nil {
+					chunkErr = err
+					time.Sleep(100 * time.Millisecond)
+					continue
+				}
+				data, err := io.ReadAll(cResp.Body)
+				cResp.Body.Close()
+				if err != nil {
+					chunkErr = err
+					time.Sleep(100 * time.Millisecond)
+					continue
+				}
+				if int64(len(data)) != (end - start + 1) {
+					chunkErr = fmt.Errorf("short read: got %d bytes, want %d", len(data), end-start+1)
+					time.Sleep(100 * time.Millisecond)
+					continue
+				}
+				chunkData = data
+				chunkErr = nil
+				break
+			}
+			if chunkErr != nil {
+				return fmt.Errorf("download chunk %d-%d: %w", start, end, chunkErr)
+			}
+			if _, err := f.Write(chunkData); err != nil {
+				return err
+			}
+			start = end + 1
+		}
+	} else {
+		getReq, err := http.NewRequestWithContext(ctx, "GET", finalURL, nil)
+		if err != nil {
+			return err
+		}
+		getResp, err := client.Do(getReq)
+		if err != nil {
+			return err
+		}
+		defer getResp.Body.Close()
+		if getResp.StatusCode >= 400 {
+			return fmt.Errorf("HTTP %d: %s", getResp.StatusCode, getResp.Status)
+		}
+		if _, err := io.Copy(f, getResp.Body); err != nil {
+			return err
+		}
+	}
+
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpFile, targetPath)
 }
 
 func buildModifier(ctx context.Context, dir string) (string, error) {

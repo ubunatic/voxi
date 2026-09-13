@@ -51,6 +51,9 @@ func testEffects(t *testing.T) (*Effects, *[]string) {
 		commands = append(commands, strings.Join(append([]string{name}, args...), " ")+" [stdin:"+string(stdin)+"]")
 		return nil
 	}
+	e.DownloadHTTP = func(_ context.Context, _, _ string) error {
+		return errors.New("mock download disabled")
+	}
 	return &e, &commands
 }
 
@@ -165,3 +168,74 @@ func TestInstallCommandHelpExplainsSafetyBoundary(t *testing.T) {
 		t.Fatalf("help = %s", help)
 	}
 }
+
+func TestInstallCachedArchiveSkipsDownload(t *testing.T) {
+	e, commands := testEffects(t)
+	// Create cached archive on disk
+	archivePath := filepath.Join(e.Home, ".cache/voxi/crispasr-linux-x86_64.tar.gz")
+	if err := os.MkdirAll(filepath.Dir(archivePath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(archivePath, []byte("fake tar content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	var out strings.Builder
+	if err := Install(context.Background(), &out, *e, false); err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(*commands, "\n")
+	if strings.Contains(joined, "curl -fL") {
+		t.Fatalf("expected curl to be skipped when archive is cached, got commands: %s", joined)
+	}
+}
+
+func TestInstallDownloadFallsBackToResilientHTTPOnCurlFailure(t *testing.T) {
+	e, commands := testEffects(t)
+	fallbackCalled := false
+	e.Run = func(_ context.Context, name string, args ...string) error {
+		*commands = append(*commands, strings.Join(append([]string{name}, args...), " "))
+		if name == "curl" {
+			return errors.New("exit status 56")
+		}
+		return nil
+	}
+	e.DownloadHTTP = func(_ context.Context, url, target string) error {
+		fallbackCalled = true
+		return nil
+	}
+	var out strings.Builder
+	if err := Install(context.Background(), &out, *e, false); err != nil {
+		t.Fatalf("expected install to succeed via fallback, got error: %v", err)
+	}
+	if !fallbackCalled {
+		t.Fatal("expected fallback DownloadHTTP to be invoked when curl failed")
+	}
+}
+
+func TestInstallDownloadFailureProvidesActionableRemediation(t *testing.T) {
+	e, _ := testEffects(t)
+	e.Run = func(_ context.Context, name string, args ...string) error {
+		if name == "curl" {
+			return errors.New("exit status 56")
+		}
+		if name == "tar" && len(args) > 0 && args[0] == "-tzf" {
+			return errors.New("invalid archive")
+		}
+		return nil
+	}
+	e.DownloadHTTP = func(_ context.Context, _, _ string) error {
+		return errors.New("HTTP range connection reset")
+	}
+	var out strings.Builder
+	err := Install(context.Background(), &out, *e, false)
+	if err == nil {
+		t.Fatal("expected install to fail when download fails")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "download CrispASR failed") || !strings.Contains(msg, "exit status 56") || !strings.Contains(msg, "To resolve manually:") || !strings.Contains(msg, "voxi install") {
+		t.Fatalf("expected detailed actionable error message, got: %s", msg)
+	}
+}
+
+
+
