@@ -304,6 +304,42 @@ type Meter struct {
 	lastUpdate     time.Time
 	lastTarget     float64
 	displayedLevel float64
+	sparkline      *SparklineStream
+}
+
+// EnableSparkline turns on a rolling Braille time-chart alongside this
+// Meter's scalar level, fed by the same capture loop (RunCapture calls
+// WritePCM with every chunk it reads) — no extra subprocess or capture
+// stream is started. Safe to call at any time; passing SparklineOptions{}
+// applies its defaults. Calling it again replaces the previous stream
+// (discarding its accumulated window).
+func (m *Meter) EnableSparkline(opts SparklineOptions) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.sparkline = NewSparklineStream(opts)
+}
+
+// WritePCM feeds raw PCM16LE mono samples into the rolling sparkline
+// window, if EnableSparkline has been called. A no-op otherwise.
+func (m *Meter) WritePCM(pcm []byte) {
+	m.mu.Lock()
+	s := m.sparkline
+	m.mu.Unlock()
+	if s != nil {
+		s.WritePCM(pcm)
+	}
+}
+
+// Sparkline renders the current rolling Braille time-chart, or "" if
+// EnableSparkline was never called.
+func (m *Meter) Sparkline() string {
+	m.mu.Lock()
+	s := m.sparkline
+	m.mu.Unlock()
+	if s == nil {
+		return ""
+	}
+	return s.Sparkline()
 }
 
 // Update folds one new raw amplitude reading into the meter's rolling
@@ -455,6 +491,7 @@ func RunCapture(ctx context.Context, cmd *exec.Cmd, m *Meter, chunkBytes int, mi
 			level := AmplitudeFromPCM16LE(buf[:n], minDBFS)
 			metric, window, attack, decay := spec()
 			reading := m.Update(level, true, time.Now(), metric, window, attack, decay)
+			m.WritePCM(buf[:n])
 			if onSample != nil {
 				onSample(reading)
 			}
@@ -550,4 +587,22 @@ func (m *Manager) Tick(now time.Time, attack, decay time.Duration) Reading {
 		return Reading{}
 	}
 	return m.meter.Tick(now, attack, decay)
+}
+
+// EnableSparkline turns on the underlying Meter's rolling Braille
+// time-chart — see Meter.EnableSparkline. Safe on nil (no-op).
+func (m *Manager) EnableSparkline(opts SparklineOptions) {
+	if m == nil {
+		return
+	}
+	m.meter.EnableSparkline(opts)
+}
+
+// Sparkline returns the underlying Meter's current rolling Braille
+// time-chart, or "" if EnableSparkline was never called or on nil.
+func (m *Manager) Sparkline() string {
+	if m == nil {
+		return ""
+	}
+	return m.meter.Sparkline()
 }

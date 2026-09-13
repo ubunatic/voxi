@@ -537,7 +537,9 @@ func TestRunCapture_ParecAndPwRecordAgree(t *testing.T) {
 	var got []Reading
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	spec := func() (Metric, time.Duration, time.Duration, time.Duration) { return MetricLive, 100 * time.Millisecond, 0, 0 }
+	spec := func() (Metric, time.Duration, time.Duration, time.Duration) {
+		return MetricLive, 100 * time.Millisecond, 0, 0
+	}
 	RunCapture(ctx, PwRecordCommand(ctx, 0), &m, DefaultChunkBytes, DefaultMinDBFS, spec, func(r Reading) { got = append(got, r) })
 
 	if len(got) != 1 {
