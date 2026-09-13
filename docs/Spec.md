@@ -3,6 +3,7 @@ title: Spec System Reference
 weight: 30
 ---
 
+<!-- harnez:bundled -->
 # Spec-Driven Architecture — Authoritative Reference
 
 The `spec/` directory is **application code**, not runtime user configuration. Treat spec files with the same rigour as source code: every change must be intentional, every object must be consumed, and specs must always be validated against formal schemas.

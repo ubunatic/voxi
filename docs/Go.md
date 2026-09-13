@@ -20,7 +20,7 @@ weight: 60
 ## Language & Deps
 - **Modern Go**: Leverage current features like `any` and generics, but only where they explicitly reduce boilerplate/noise.
 - **Minimise external deps**: Default to the Go Standard Library. If you need an external library, get approval first.
-- **Allowed CLI & Config Libraries**: `github.com/spf13/cobra` for CLI tools, `gopkg.in/yaml.v3` for config files.
+- **Allowed & Recommended Libraries**: `github.com/spf13/cobra` for CLI tools, `gopkg.in/yaml.v3` for YAML config/spec files, and `github.com/google/jsonschema-go/jsonschema` for JSON Schema validation and schema-aware tooling. Use the latter with `yaml.v3` when validating YAML documents against JSON Schemas.
 - **No Heavy Frameworks**: No ORMs (write raw SQL), no logging frameworks (use standard `log`), no Dependency Injection (DI) containers (pass dependencies explicitly).
 
 ## Project Layout
@@ -36,6 +36,28 @@ weight: 60
   ```
   Use the `BINARY` variable from the Makefile as the canonical name so the `.gitignore` entry and the build output always match.
 
+## Workspace Isolation
+
+- Go automatically applies the nearest enclosing `go.work` to every descendant directory. A
+  persistent workspace for sibling-module development can therefore break an unrelated nested
+  repository whose modules are absent from that workspace.
+- `harnez init` probes `go env GOWORK` and the active workspace's parsed module list. When an
+  enclosing workspace omits any Go module found in the target repository, init creates a minimal
+  project-local `go.work` that uses all of the repository's modules. Existing local workspaces are
+  always preserved, and init creates nothing when there is no module or no demonstrated hazard.
+- A project-local workspace is the normal isolation boundary. To deliberately use a different
+  cross-repository workspace for one command, select it explicitly, for example
+  `GOWORK=/path/to/go.work go test ./...`. Release builds still use their separate
+  `GOWORK=off` policy unless `harnez release --allow-workspace` is passed.
+- When a module has a local `replace` pointing at a sibling module, include both modules in the
+  project-local workspace (for example, `use ( ./ ../loom )`). A workspace does not make a
+  relative replacement path portable: copied projects still need the sibling directory, or a
+  published module version. Keep the `replace` in `go.mod` when `GOWORK=off` builds still need the
+  local fallback.
+- After copying a project, validate every relative replacement with `go list ./...`. A missing
+  sibling replacement can make `gopls` repeatedly diagnose the module and make editor saves
+  appear to hang while the workspace is loading.
+
 ## Spec-Driven Apps
 - Avoid hard-coding application configuration, UI labels, controls, text, icons, or layout variables in Go code.
 - Define them in YAML specs under `spec/` (e.g. `spec/strings.yaml`, `spec/layout.yaml`, `spec/controls.yaml`) with `$schema` in `spec/schemas/`.
@@ -47,6 +69,7 @@ weight: 60
 - Use `RunE` instead of `Run` — return errors, don't `os.Exit` inside commands.
 - Set `SilenceUsage: true` on commands where error is not a usage mistake.
 - **Version Wiring**: Keep `var Version = "..."` in `version.go` (synced automatically by `harnez release` from `version.yaml`) and wire `rootCmd.Version = Version`.
+- **Man Pages**: Provide `<tool> man` (stdout roff) and `<tool> man --install` (writes `.1` files to `~/.local/share/man/man1` or `/usr/local/share/man/man1`) via `cobra/doc` so `go install` users get man pages. Only read `@docs/ManPages.md` when first implementing or troubleshooting man page setup.
 - **Releases**: Provide a thin `release: check ⚙️` recipe that delegates to `harnez release`. See `@docs/GoRelease.md`.
 
 ## State Management
@@ -62,6 +85,13 @@ weight: 60
 - Unexported types for internal results; exported only when crossing package boundary.
 - Pointer fields (`*bool`, `*int`) for optional struct values; add `boolPtr`/`intPtr` helpers.
 - Section banners: `// ── Section name ────────────────────────────────────────────`
+
+## Strings, Runes & Terminal Width
+- Never index or slice a string by byte offset (`s[i:j]`) for human-readable text or aligned output.
+- Never use `len(s)` as a visual column count: it measures bytes, not terminal cells.
+- Use `[]rune(s)` for character-count logic and `runewidth.StringWidth` for terminal width.
+- Strip ANSI escapes before measuring width; test rendered cell width, not rune count.
+- The existing `internal/usage` width assertions are the canonical pattern for TUI output.
 - Doc comments on all exported symbols.
 
 ## Output Discipline

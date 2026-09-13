@@ -120,7 +120,8 @@ Add `make check-fast` when full checks are slow; it should keep broad coverage b
 
 Any project with mutating provisioners (pushes a binary, config, or schedule to a remote host)
 must expose the same four self-documenting targets, so deploy/verify is never ad hoc SSH
-one-liners. See [docs/practices/DeploymentTransparency.md](../practices/DeploymentTransparency.md)
+one-liners. For projects with remote deployment, install the optional
+`deployment-transparency` practice
 for why the query targets (`run`/`status`) must probe the live host rather than assume success
 from a completed `deploy`.
 
@@ -144,4 +145,4 @@ backup: ⚙️  # sync state snapshots from the remote host
 - `make backup` — sync state snapshots (config overlays, data) down from the remote host before a
   risky deploy.
 - Every target here queries or mutates a real remote host — treat it like `make smoke` (see
-  `docs/practices/AgenticLoop.md`): safe to define, but only run when you intend the live effect.
+  `@docs/AgenticLoop.md`): safe to define, but only run when you intend the live effect.
