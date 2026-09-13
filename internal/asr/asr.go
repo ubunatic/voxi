@@ -130,12 +130,23 @@ func normalizeSentence(text string) string {
 // YouTube outros, subtitle credits) from otherwise-genuine speech, using
 // the active model's stop-word patterns (see spec/models.yaml).
 func StripTrailingHallucinations(text string, stopWords []string) string {
+	clean, _ := StripTrailingHallucinationsWithAudit(text, stopWords)
+	return clean
+}
+
+// StripTrailingHallucinationsWithAudit cleans trailing hallucinated tokens and
+// returns the cleaned text along with any matched stop-word patterns.
+func StripTrailingHallucinationsWithAudit(text string, stopWords []string) (string, []string) {
 	clean := text
+	var matched []string
 	for _, w := range stopWords {
 		re := regexp.MustCompile(`(?i)\s*` + w + `\s*[.!]*`)
-		clean = re.ReplaceAllString(clean, "")
+		if re.MatchString(clean) {
+			matched = append(matched, w)
+			clean = re.ReplaceAllString(clean, "")
+		}
 	}
-	return strings.TrimSpace(clean)
+	return strings.TrimSpace(clean), matched
 }
 
 // StripLeadingHallucinations cleans a leading hallucinated prefix (e.g. a
@@ -144,12 +155,23 @@ func StripTrailingHallucinations(text string, stopWords []string) string {
 // StripTrailingHallucinations, the match is anchored to the start of the
 // text so a stop-word-like substring occurring mid-sentence is left alone.
 func StripLeadingHallucinations(text string, stopWords []string) string {
+	clean, _ := StripLeadingHallucinationsWithAudit(text, stopWords)
+	return clean
+}
+
+// StripLeadingHallucinationsWithAudit cleans a leading hallucinated prefix and
+// returns the cleaned text along with any matched stop-word patterns.
+func StripLeadingHallucinationsWithAudit(text string, stopWords []string) (string, []string) {
 	clean := text
+	var matched []string
 	for _, w := range stopWords {
 		re := regexp.MustCompile(`(?i)^\s*` + w + `\s*[.!,]*\s*`)
-		clean = re.ReplaceAllString(clean, "")
+		if re.MatchString(clean) {
+			matched = append(matched, w)
+			clean = re.ReplaceAllString(clean, "")
+		}
 	}
-	return strings.TrimSpace(clean)
+	return strings.TrimSpace(clean), matched
 }
 
 // CollapseRepeatedTrailingClause removes a two-word suffix repeated
@@ -240,7 +262,15 @@ func StripLeadingDashFragment(text string) string {
 // discarding ANSI escape codes, diagnostic logs, timestamps, model metadata, and hallucinations.
 // stopWords are the active model's hallucination patterns (see spec/models.yaml).
 func CleanWhisperTranscript(output string, stopWords []string) string {
+	clean, _ := CleanWhisperTranscriptWithAudit(output, stopWords)
+	return clean
+}
+
+// CleanWhisperTranscriptWithAudit behaves like CleanWhisperTranscript, but additionally
+// returns any stop-word patterns that matched or were stripped from the transcript.
+func CleanWhisperTranscriptWithAudit(output string, stopWords []string) (string, []string) {
 	clean := StripANSI(output)
+	var allMatched []string
 
 	// Strategy 1: Look for Voxtype's explicit canonical summary line:
 	// 'Transcription completed in 1.25s: "the quick brown fox"'
@@ -252,11 +282,20 @@ func CleanWhisperTranscript(output string, stopWords []string) string {
 		// remaining text's start clean for readability if a caller
 		// inspects the intermediate candidate.
 		candidate = StripLeadingDashFragment(candidate)
-		candidate = StripLeadingHallucinations(candidate, stopWords)
-		candidate = StripTrailingHallucinations(candidate, stopWords)
+		var leadMatched, trailMatched []string
+		candidate, leadMatched = StripLeadingHallucinationsWithAudit(candidate, stopWords)
+		candidate, trailMatched = StripTrailingHallucinationsWithAudit(candidate, stopWords)
+		allMatched = append(allMatched, leadMatched...)
+		allMatched = append(allMatched, trailMatched...)
 		candidate = CollapseRepeatedTrailingClause(candidate)
+		for _, w := range stopWords {
+			re := regexp.MustCompile(`(?i)^\s*(` + w + `)\s*[.!]?\s*$`)
+			if re.MatchString(candidate) {
+				allMatched = append(allMatched, w)
+			}
+		}
 		if IsSafeToType(candidate, stopWords) {
-			return candidate
+			return candidate, dedupeStrings(allMatched)
 		}
 	}
 
@@ -286,12 +325,36 @@ func CleanWhisperTranscript(output string, stopWords []string) string {
 			continue
 		}
 		trimmed = StripLeadingDashFragment(trimmed)
-		trimmed = StripLeadingHallucinations(trimmed, stopWords)
-		trimmed = StripTrailingHallucinations(trimmed, stopWords)
+		var leadMatched, trailMatched []string
+		trimmed, leadMatched = StripLeadingHallucinationsWithAudit(trimmed, stopWords)
+		trimmed, trailMatched = StripTrailingHallucinationsWithAudit(trimmed, stopWords)
+		allMatched = append(allMatched, leadMatched...)
+		allMatched = append(allMatched, trailMatched...)
 		trimmed = CollapseRepeatedTrailingClause(trimmed)
+		for _, w := range stopWords {
+			re := regexp.MustCompile(`(?i)^\s*(` + w + `)\s*[.!]?\s*$`)
+			if re.MatchString(trimmed) {
+				allMatched = append(allMatched, w)
+			}
+		}
 		if IsSafeToType(trimmed, stopWords) {
 			resultLines = append(resultLines, trimmed)
 		}
 	}
-	return strings.Join(resultLines, " ")
+	return strings.Join(resultLines, " "), dedupeStrings(allMatched)
+}
+
+func dedupeStrings(items []string) []string {
+	if len(items) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool, len(items))
+	var out []string
+	for _, item := range items {
+		if !seen[item] {
+			seen[item] = true
+			out = append(out, item)
+		}
+	}
+	return out
 }

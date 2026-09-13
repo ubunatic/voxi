@@ -344,6 +344,13 @@ type replacementMatch struct {
 // whitespace run. Matches embedded in Unicode words are rejected;
 // punctuation remains adjacent and unchanged.
 func ApplyReplacements(text string, rules []Replacement) string {
+	res, _ := ApplyReplacementsWithAudit(text, rules)
+	return res
+}
+
+// ApplyReplacementsWithAudit behaves like ApplyReplacements, but additionally
+// returns the slice of rules that actually matched and were applied to the text.
+func ApplyReplacementsWithAudit(text string, rules []Replacement) (string, []Replacement) {
 	var matches []replacementMatch
 	for _, rule := range rules {
 		parts := strings.Split(rule.From, " ")
@@ -358,7 +365,7 @@ func ApplyReplacements(text string, rules []Replacement) string {
 		}
 	}
 	if len(matches) == 0 {
-		return text
+		return text, nil
 	}
 	sort.SliceStable(matches, func(i, j int) bool {
 		if matches[i].start != matches[j].start {
@@ -372,6 +379,7 @@ func ApplyReplacements(text string, rules []Replacement) string {
 	})
 	var b strings.Builder
 	pos := 0
+	var applied []Replacement
 	for _, match := range matches {
 		if match.start < pos {
 			continue
@@ -383,9 +391,10 @@ func ApplyReplacements(text string, rules []Replacement) string {
 		}
 		b.WriteString(repl)
 		pos = match.end
+		applied = append(applied, match.rule)
 	}
 	b.WriteString(text[pos:])
-	return b.String()
+	return b.String(), applied
 }
 
 func replacementBoundary(text string, start, end int) bool {

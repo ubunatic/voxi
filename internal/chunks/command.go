@@ -61,22 +61,24 @@ func NewCommand(d deps.Dependencies, buf *Buffer) *cobra.Command {
 				{Header: "RTF", Width: 5},
 				{Header: "RMS", Width: 5, Right: true},
 				{Header: "LEVEL", Width: 12},
-				{Header: "STATUS", Width: 10},
-				{Header: "TRANSCRIPT", Width: 0},
+				{Header: "STATUS", Width: 12},
+				{Header: "TRANSCRIPT / REASON", Width: 0},
 			}
 			rows := make([][]string, 0, len(chunks))
 			for _, c := range chunks {
-				status := "accepted"
-				if !c.Accepted {
-					if c.RejectionReason != "" {
-						status = "rej:" + c.RejectionReason
-					} else {
-						status = "rejected"
+				status := FormatStatusBadges(c)
+				var text string
+				if c.Accepted {
+					text = c.CleanedTranscript
+					if text == "" && c.RawTranscript != "" {
+						text = "[" + c.RawTranscript + "]"
 					}
-				}
-				text := c.CleanedTranscript
-				if text == "" && c.RawTranscript != "" {
-					text = "[" + c.RawTranscript + "]"
+				} else {
+					if c.RejectionReason != "" {
+						text = "(" + c.RejectionReason + ")"
+					} else {
+						text = "(rejected)"
+					}
 				}
 				if len(text) > 40 {
 					text = text[:37] + "..."
@@ -152,27 +154,154 @@ func NewCommand(d deps.Dependencies, buf *Buffer) *cobra.Command {
 	return cmd
 }
 
-// FormatChunkDetails outputs human-readable chunk diagnostic fields.
+// FormatStatusBadges formats the outcome (✓ or ✗) and effective pipeline stage badges for a chunk.
+func FormatStatusBadges(c Chunk) string {
+	var badges []string
+	if c.Accepted {
+		badges = append(badges, "✓")
+	} else {
+		badges = append(badges, "✗")
+	}
+
+	// Engine badge: only show if transcription actually ran / produced a transcript
+	if c.TranscribeDurationSec > 0 || c.RawTranscript != "" {
+		if c.Engine == "whisper" || isWhisperModel(c.Model) {
+			badges = append(badges, "👂")
+		} else {
+			badges = append(badges, "⚡")
+		}
+	}
+
+	// Deterministic replacements applied
+	if len(c.AppliedReplacements) > 0 {
+		badges = append(badges, "⇄")
+	}
+
+	// LLM post-processing cleaner modified text
+	if c.LLMCleanup != nil && c.LLMCleanup.Modified {
+		badges = append(badges, "🤖")
+	}
+
+	// Stop-word hallucination pattern matched or stripped
+	if len(c.StopWordsMatched) > 0 || strings.HasPrefix(c.RejectionReason, "stop_word") {
+		badges = append(badges, "✂")
+	}
+
+	// Transcript safety breaker tripped
+	if isSafetyRejection(c.RejectionReason) {
+		badges = append(badges, "🛡")
+	}
+
+	return strings.Join(badges, " ")
+}
+
+func isWhisperModel(model string) bool {
+	if model == "" {
+		return false
+	}
+	return strings.Contains(model, "whisper") || model == "base.en" || model == "small.en" || model == "large-v3-turbo"
+}
+
+func isSafetyRejection(reason string) bool {
+	switch reason {
+	case "output_too_long", "token_too_long", "pathological_repetition":
+		return true
+	default:
+		return false
+	}
+}
+
+// FormatChunkDetails outputs human-readable chunk diagnostic fields and pipeline trace.
 func FormatChunkDetails(w io.Writer, c Chunk) {
-	fmt.Fprintf(w, "Index:                  %d\n", c.Index)
-	if c.SessionID != "" {
-		fmt.Fprintf(w, "Session ID:             %s\n", c.SessionID)
-		fmt.Fprintf(w, "Chunk ID:               %s\n", c.ChunkID)
+	fmt.Fprintf(w, "Chunk #%d Diagnostics & Pipeline Summary:\n", c.Index)
+	fmt.Fprintln(w, "==================================================================")
+	fmt.Fprintf(w, "Timestamp:              %s (Audio: %.2fs, RTF: %.2f)\n", c.Timestamp.Local().Format("2006-01-02 15:04:05"), c.AudioDurationSecs, c.RTF)
+
+	engineDesc := ""
+	if c.Engine == "cohere-transcribe" {
+		model := c.Model
+		if model == "" {
+			model = "cohere-transcribe-03-2026"
+		}
+		engineDesc = fmt.Sprintf("%s (via crispasr)", model)
+	} else if c.Engine == "whisper" || isWhisperModel(c.Model) {
+		model := c.Model
+		if model == "" {
+			model = "whisper"
+		}
+		engineDesc = fmt.Sprintf("%s (via voxtype)", model)
+	} else if c.Model != "" {
+		if c.Engine != "" {
+			engineDesc = fmt.Sprintf("%s (%s)", c.Model, c.Engine)
+		} else {
+			engineDesc = c.Model
+		}
+	} else if c.Engine != "" {
+		engineDesc = c.Engine
+	} else {
+		engineDesc = "unknown"
 	}
-	fmt.Fprintf(w, "Timestamp:              %s\n", c.Timestamp.Local().Format("2006-01-02 15:04:05"))
-	fmt.Fprintf(w, "Audio Duration:         %.2fs\n", c.AudioDurationSecs)
-	fmt.Fprintf(w, "PCM Bytes:              %d\n", c.PCMBytes)
-	fmt.Fprintf(w, "Mean / Peak RMS:        %d / %d\n", c.MeanRMS, c.PeakRMS)
-	fmt.Fprintf(w, "Voiced Ratio:           %.3f\n", c.VoicedRatio)
-	fmt.Fprintf(w, "Probable Silence:       %t\n", c.ProbableSilence)
-	fmt.Fprintf(w, "Transcribe Duration:    %.2fs\n", c.TranscribeDurationSec)
-	fmt.Fprintf(w, "Transcript Word Count:  %d\n", c.TranscriptWordCount)
-	fmt.Fprintf(w, "RTF:                    %.2f\n", c.RTF)
-	fmt.Fprintf(w, "Accepted:               %t\n", c.Accepted)
-	if c.RejectionReason != "" {
-		fmt.Fprintf(w, "Rejection Reason:       %s\n", c.RejectionReason)
+	fmt.Fprintf(w, "ASR Engine:             %s\n", engineDesc)
+
+	if c.Accepted {
+		fmt.Fprintln(w, "Status:                 ACCEPTED")
+	} else if c.RejectionReason != "" {
+		fmt.Fprintf(w, "Status:                 REJECTED (%s)\n", c.RejectionReason)
+	} else {
+		fmt.Fprintln(w, "Status:                 REJECTED")
 	}
-	fmt.Fprintf(w, "Raw Transcript:         %s\n", c.RawTranscript)
-	fmt.Fprintf(w, "Cleaned Transcript:     %s\n", c.CleanedTranscript)
-	fmt.Fprintf(w, "WAV File:               %s\n", c.WAVFile)
+
+	fmt.Fprintln(w, "\nPipeline Transformations:")
+	fmt.Fprintln(w, "------------------------------------------------------------------")
+	if c.RawTranscript != "" {
+		fmt.Fprintf(w, "1. Raw ASR Output:      %q\n", c.RawTranscript)
+	} else {
+		fmt.Fprintln(w, "1. Raw ASR Output:      (none)")
+	}
+
+	if len(c.AppliedReplacements) > 0 {
+		var repls []string
+		for _, r := range c.AppliedReplacements {
+			repls = append(repls, fmt.Sprintf("%q -> %q", r.From, r.To))
+		}
+		fmt.Fprintf(w, "2. Replacements:        %s\n", strings.Join(repls, ", "))
+	} else {
+		fmt.Fprintln(w, "2. Replacements:        (none)")
+	}
+
+	if c.LLMCleanup != nil && c.LLMCleanup.Enabled {
+		model := c.LLMCleanup.Model
+		if model == "" {
+			model = "qwen3-4b-instruct-2507-q4"
+		}
+		fmt.Fprintf(w, "3. LLM Cleanup:         %s (via lmcoder)\n", model)
+		fmt.Fprintf(w, "   LLM Output:          %q\n", c.LLMCleanup.Output)
+	} else {
+		fmt.Fprintln(w, "3. LLM Cleanup:         (disabled)")
+	}
+
+	if c.Accepted {
+		fmt.Fprintf(w, "4. Final Committed:     %q\n", c.CleanedTranscript)
+	} else if c.RejectionReason != "" {
+		fmt.Fprintf(w, "4. Final Committed:     (rejected: %s)\n", c.RejectionReason)
+	} else {
+		fmt.Fprintln(w, "4. Final Committed:     (rejected)")
+	}
+
+	fmt.Fprintln(w, "\nInjection:")
+	fmt.Fprintln(w, "------------------------------------------------------------------")
+	if c.Accepted {
+		fmt.Fprintln(w, "Destination:            Focused Window via dotool (type_delay_ms = 0ms)")
+	} else {
+		fmt.Fprintln(w, "Destination:            (none - rejected)")
+	}
+
+	if !c.TypingStartedAt.IsZero() && !c.TypingEndedAt.IsZero() {
+		typingDur := c.TypingEndedAt.Sub(c.TypingStartedAt)
+		typeMs := typingDur.Milliseconds()
+		totalDurSec := c.TranscribeDurationSec + typingDur.Seconds()
+		fmt.Fprintf(w, "Latency:                %.2fs transcribe + %dms typing = %.2fs total\n", c.TranscribeDurationSec, typeMs, totalDurSec)
+	} else if c.TranscribeDurationSec > 0 {
+		fmt.Fprintf(w, "Latency:                %.2fs transcribe\n", c.TranscribeDurationSec)
+	}
 }

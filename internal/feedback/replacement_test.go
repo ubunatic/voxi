@@ -197,3 +197,31 @@ func TestReplacementCleanupCommand(t *testing.T) {
 		t.Fatalf("loaded after cleanup = %#v, err = %v", loaded, err)
 	}
 }
+
+func TestApplyReplacementsWithAudit(t *testing.T) {
+	rules := []Replacement{
+		{From: "Voxy", To: "voxi"},
+		{From: "AI assistant", To: "assistant"},
+		{From: "not applied", To: "other"},
+	}
+
+	text := "Testing Voxy with an AI assistant today."
+	gotText, applied := ApplyReplacementsWithAudit(text, rules)
+
+	wantText := "Testing Voxi with an assistant today."
+	if gotText != wantText {
+		t.Errorf("got text %q, want %q", gotText, wantText)
+	}
+
+	if len(applied) != 2 {
+		t.Fatalf("expected 2 applied rules, got %d: %+v", len(applied), applied)
+	}
+	if applied[0].From != "Voxy" || applied[1].From != "AI assistant" {
+		t.Errorf("unexpected applied rules: %+v", applied)
+	}
+
+	noMatchText, noApplied := ApplyReplacementsWithAudit("Just a normal sentence.", rules)
+	if noMatchText != "Just a normal sentence." || len(noApplied) != 0 {
+		t.Errorf("expected no applied rules on unmatched text, got %v (%+v)", noMatchText, noApplied)
+	}
+}

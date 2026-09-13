@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -20,6 +21,7 @@ import (
 	"ubunatic.com/voxi/internal/asr"
 	"ubunatic.com/voxi/internal/audio"
 	"ubunatic.com/voxi/internal/chunks"
+	"ubunatic.com/voxi/internal/config"
 	"ubunatic.com/voxi/internal/deps"
 	"ubunatic.com/voxi/internal/eager/notify"
 	"ubunatic.com/voxi/internal/feedback"
@@ -503,6 +505,7 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 			fmt.Fprintf(d.Stdout, "Warning: cannot load Cohere transcript replacements; continuing without them: %v\n", err)
 		}
 	}
+	userSettings, _ := config.LoadUserSettings(d.Getenv("HOME"))
 	transcribeBinPath, weightsPath, err := requireEngineBinary(ctx, d, modelName, engine)
 	if err != nil {
 		return err
@@ -580,6 +583,8 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 					CleanedTranscript:     "",
 					Accepted:              false,
 					RejectionReason:       rejReason,
+					Model:                 modelName,
+					Engine:                engine,
 				}
 				_, _ = chunkBuf.AddExistingWAV(chunkMeta, wavPath, true)
 				_ = os.Remove(wavPath)
@@ -607,8 +612,22 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 			writeVoxtypeState("recording")
 
 			rawText := outBuf.String()
-			text := asr.CleanWhisperTranscript(rawText, stopWords)
-			text = applyEngineReplacements(engine, text, replacements)
+			text, matchedStopWords := asr.CleanWhisperTranscriptWithAudit(rawText, stopWords)
+			var appliedReplacements []chunks.ReplacementSummary
+			if engine == cohereTranscribeEngine {
+				var appliedRules []feedback.Replacement
+				text, appliedRules = feedback.ApplyReplacementsWithAudit(text, replacements)
+				for _, r := range appliedRules {
+					appliedReplacements = append(appliedReplacements, chunks.ReplacementSummary{
+						From: r.From,
+						To:   r.To,
+					})
+				}
+			}
+			var llmRecord *chunks.LLMCleanupRecord
+			if userSettings != nil && userSettings.LLMCleaner {
+				text, llmRecord = cleanWithLLM(drain.ctx, text, userSettings)
+			}
 			accepted := acceptTranscript(err, text, stopWords, silenceArtifacts)
 			safety := asr.CheckTranscriptSafety(text, modelSpec.TranscriptSafety)
 			if safety.Reason != "" {
@@ -662,6 +681,11 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 				TranscriptDigest:       safety.Digest,
 				RepeatUnit:             safety.RepeatUnit,
 				RepeatCount:            safety.RepeatCount,
+				Model:                  modelName,
+				Engine:                 engine,
+				AppliedReplacements:    appliedReplacements,
+				LLMCleanup:             llmRecord,
+				StopWordsMatched:       matchedStopWords,
 			}
 			if safety.Reason != "" {
 				// Do not persist a pathological transcript's private, potentially
@@ -972,6 +996,85 @@ func reportEagerFailure(d deps.Dependencies, stage, sessionID, chunkID string, e
 		return
 	}
 	fmt.Fprintf(d.Stdout, "voxi eager: %s failed (session=%s chunk=%s): %v\n", stage, sessionID, chunkID, err)
+}
+
+func cleanWithLLM(ctx context.Context, text string, settings *config.UserSettings) (string, *chunks.LLMCleanupRecord) {
+	if settings == nil || !settings.LLMCleaner {
+		return text, nil
+	}
+	model := settings.CleanupModel
+	if model == "" {
+		model = "qwen3-4b-instruct-2507-q4"
+	}
+	baseURL := settings.OpenAIBaseURL
+	if baseURL == "" {
+		baseURL = "http://127.0.0.1:8734/v1"
+	}
+	record := &chunks.LLMCleanupRecord{
+		Enabled: true,
+		Model:   model,
+		Output:  text,
+	}
+
+	reqURL := strings.TrimRight(baseURL, "/") + "/chat/completions"
+	reqPayload := map[string]any{
+		"model": model,
+		"messages": []map[string]string{
+			{
+				"role":    "system",
+				"content": "You are a speech transcription cleanup assistant. Fix capitalization, punctuation, spelling, and obvious speech-to-text transcription artifacts. Do not add commentary or extra sentences. Output only the cleaned transcript.",
+			},
+			{
+				"role":    "user",
+				"content": text,
+			},
+		},
+		"temperature": 0.1,
+	}
+	reqData, err := json.Marshal(reqPayload)
+	if err != nil {
+		return text, record
+	}
+
+	reqCtx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
+	defer cancel()
+
+	httpReq, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqURL, bytes.NewReader(reqData))
+	if err != nil {
+		return text, record
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 1500 * time.Millisecond}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return text, record
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return text, record
+	}
+
+	var respPayload struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&respPayload); err != nil || len(respPayload.Choices) == 0 {
+		return text, record
+	}
+
+	cleaned := strings.TrimSpace(respPayload.Choices[0].Message.Content)
+	if cleaned == "" {
+		return text, record
+	}
+
+	record.Output = cleaned
+	record.Modified = (cleaned != text)
+	return cleaned, record
 }
 
 func applyEngineReplacements(engine, text string, rules []feedback.Replacement) string {

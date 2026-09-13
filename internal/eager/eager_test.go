@@ -6,6 +6,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
@@ -18,6 +20,7 @@ import (
 
 	"ubunatic.com/voxi/internal/audio"
 	"ubunatic.com/voxi/internal/chunks"
+	"ubunatic.com/voxi/internal/config"
 	"ubunatic.com/voxi/internal/deps"
 	"ubunatic.com/voxi/internal/feedback"
 	"ubunatic.com/voxi/internal/telemetry"
@@ -1476,5 +1479,54 @@ func TestModifierBufferScheduleNotifyPlaysWithoutFlush(t *testing.T) {
 	}
 	if !played.Load() {
 		t.Fatal("notification did not play within the deadline when nothing canceled it")
+	}
+}
+
+func TestCleanWithLLM(t *testing.T) {
+	// 1. Disabled
+	disabledSettings := &config.UserSettings{LLMCleaner: false}
+	gotText, record := cleanWithLLM(context.Background(), "raw text", disabledSettings)
+	if gotText != "raw text" || record != nil {
+		t.Errorf("disabled cleanWithLLM failed: gotText=%q, record=%+v", gotText, record)
+	}
+
+	// 2. Successful cleanup with mock OpenAI server
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/chat/completions" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintln(w, `{"choices": [{"message": {"content": "Cleaned LLM transcript."}}]}`)
+	}))
+	defer ts.Close()
+
+	enabledSettings := &config.UserSettings{
+		LLMCleaner:    true,
+		OpenAIBaseURL: ts.URL,
+		CleanupModel:  "test-model",
+	}
+
+	gotText, record = cleanWithLLM(context.Background(), "raw llm transcript", enabledSettings)
+	if gotText != "Cleaned LLM transcript." {
+		t.Errorf("cleanWithLLM output = %q, want %q", gotText, "Cleaned LLM transcript.")
+	}
+	if record == nil || !record.Enabled || record.Model != "test-model" || !record.Modified || record.Output != "Cleaned LLM transcript." {
+		t.Errorf("cleanWithLLM record mismatch: %+v", record)
+	}
+
+	// 3. Server unreachable/error fallback
+	brokenSettings := &config.UserSettings{
+		LLMCleaner:    true,
+		OpenAIBaseURL: "http://127.0.0.1:1", // guaranteed unreachable port
+		CleanupModel:  "test-model",
+	}
+
+	fallbackText, fallbackRecord := cleanWithLLM(context.Background(), "original text", brokenSettings)
+	if fallbackText != "original text" {
+		t.Errorf("fallback output = %q, want %q", fallbackText, "original text")
+	}
+	if fallbackRecord == nil || !fallbackRecord.Enabled || fallbackRecord.Modified {
+		t.Errorf("fallback record mismatch: %+v", fallbackRecord)
 	}
 }

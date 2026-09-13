@@ -208,3 +208,36 @@ func TestCollapseRepeatedTrailingClause(t *testing.T) {
 		})
 	}
 }
+
+func TestCleanWhisperTranscriptWithAudit(t *testing.T) {
+	out := `
+[2026-09-13T10:00:00Z INFO] Loading audio file: /tmp/utt_001.wav
+Transcription completed in 0.45s: "Subs byuk, hello team, let's start the standup. Thank you for watching"
+`
+	stopWords := []string{"subs byuk", "thank you for watching"}
+	cleaned, matched := CleanWhisperTranscriptWithAudit(out, stopWords)
+	want := "hello team, let's start the standup."
+	if cleaned != want {
+		t.Fatalf("CleanWhisperTranscriptWithAudit() = %q, want %q", cleaned, want)
+	}
+	if len(matched) != 2 {
+		t.Fatalf("expected 2 matched stop words, got %d: %v", len(matched), matched)
+	}
+	if matched[0] != "subs byuk" || matched[1] != "thank you for watching" {
+		t.Errorf("unexpected matched stop words: %v", matched)
+	}
+}
+
+func TestStripHallucinationsWithAudit(t *testing.T) {
+	stopWords := []string{"subs byuk", "thank you for watching"}
+
+	leadClean, leadMatched := StripLeadingHallucinationsWithAudit("Subs byuk, testing one two", stopWords)
+	if leadClean != "testing one two" || len(leadMatched) != 1 || leadMatched[0] != "subs byuk" {
+		t.Errorf("leading audit mismatch: clean=%q, matched=%v", leadClean, leadMatched)
+	}
+
+	trailClean, trailMatched := StripTrailingHallucinationsWithAudit("testing one two thank you for watching.", stopWords)
+	if trailClean != "testing one two" || len(trailMatched) != 1 || trailMatched[0] != "thank you for watching" {
+		t.Errorf("trailing audit mismatch: clean=%q, matched=%v", trailClean, trailMatched)
+	}
+}

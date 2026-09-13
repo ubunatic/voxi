@@ -22,36 +22,55 @@ const (
 	manifestFileName  = "manifest.json"
 )
 
+// ReplacementSummary records a single deterministic replacement applied to a chunk.
+type ReplacementSummary struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
+// LLMCleanupRecord captures LLM post-processing telemetry for a chunk.
+type LLMCleanupRecord struct {
+	Enabled  bool   `json:"enabled"`
+	Model    string `json:"model,omitempty"`
+	Output   string `json:"output,omitempty"`
+	Modified bool   `json:"modified"`
+}
+
 // Chunk represents one recorded audio slice and its transcription diagnostics.
 type Chunk struct {
-	Index                  int       `json:"index"`
-	Timestamp              time.Time `json:"timestamp"`
-	SessionID              string    `json:"session_id,omitempty"`
-	ChunkID                string    `json:"chunk_id,omitempty"`
-	FinalizedAt            time.Time `json:"finalized_at,omitempty"`
-	TranscriptionStartedAt time.Time `json:"transcription_started_at,omitempty"`
-	TranscriptionEndedAt   time.Time `json:"transcription_ended_at,omitempty"`
-	TypingStartedAt        time.Time `json:"typing_started_at,omitempty"`
-	TypingEndedAt          time.Time `json:"typing_ended_at,omitempty"`
-	AudioDurationSecs      float64   `json:"audio_duration_secs"`
-	PCMBytes               int       `json:"pcm_bytes,omitempty"`
-	MeanRMS                int       `json:"mean_rms,omitempty"`
-	PeakRMS                int       `json:"peak_rms,omitempty"`
-	VolumeSparkline        string    `json:"volume_sparkline,omitempty"` // fixed-width Braille level-over-time sparkline, precomputed at finalize time
-	VoicedRatio            float64   `json:"voiced_ratio,omitempty"`
-	ProbableSilence        bool      `json:"probable_silence"`
-	TranscribeDurationSec  float64   `json:"transcribe_duration_secs"`
-	TranscriptWordCount    int       `json:"transcript_word_count,omitempty"`
-	RTF                    float64   `json:"rtf"`
-	RawTranscript          string    `json:"raw_transcript"`
-	CleanedTranscript      string    `json:"cleaned_transcript"`
-	Accepted               bool      `json:"accepted"`
-	RejectionReason        string    `json:"rejection_reason,omitempty"`
-	TranscriptChars        int       `json:"transcript_chars,omitempty"`
-	TranscriptDigest       string    `json:"transcript_digest,omitempty"`
-	RepeatUnit             string    `json:"repeat_unit,omitempty"`
-	RepeatCount            int       `json:"repeat_count,omitempty"`
-	WAVFile                string    `json:"wav_file"` // relative filename in chunks dir, e.g. "chunk_0001.wav"
+	Index                  int                  `json:"index"`
+	Timestamp              time.Time            `json:"timestamp"`
+	SessionID              string               `json:"session_id,omitempty"`
+	ChunkID                string               `json:"chunk_id,omitempty"`
+	FinalizedAt            time.Time            `json:"finalized_at,omitempty"`
+	TranscriptionStartedAt time.Time            `json:"transcription_started_at,omitempty"`
+	TranscriptionEndedAt   time.Time            `json:"transcription_ended_at,omitempty"`
+	TypingStartedAt        time.Time            `json:"typing_started_at,omitempty"`
+	TypingEndedAt          time.Time            `json:"typing_ended_at,omitempty"`
+	AudioDurationSecs      float64              `json:"audio_duration_secs"`
+	PCMBytes               int                  `json:"pcm_bytes,omitempty"`
+	MeanRMS                int                  `json:"mean_rms,omitempty"`
+	PeakRMS                int                  `json:"peak_rms,omitempty"`
+	VolumeSparkline        string               `json:"volume_sparkline,omitempty"` // fixed-width Braille level-over-time sparkline, precomputed at finalize time
+	VoicedRatio            float64              `json:"voiced_ratio,omitempty"`
+	ProbableSilence        bool                 `json:"probable_silence"`
+	TranscribeDurationSec  float64              `json:"transcribe_duration_secs"`
+	TranscriptWordCount    int                  `json:"transcript_word_count,omitempty"`
+	RTF                    float64              `json:"rtf"`
+	RawTranscript          string               `json:"raw_transcript"`
+	CleanedTranscript      string               `json:"cleaned_transcript"`
+	Accepted               bool                 `json:"accepted"`
+	RejectionReason        string               `json:"rejection_reason,omitempty"`
+	TranscriptChars        int                  `json:"transcript_chars,omitempty"`
+	TranscriptDigest       string               `json:"transcript_digest,omitempty"`
+	RepeatUnit             string               `json:"repeat_unit,omitempty"`
+	RepeatCount            int                  `json:"repeat_count,omitempty"`
+	Model                  string               `json:"model,omitempty"`
+	Engine                 string               `json:"engine,omitempty"`
+	AppliedReplacements    []ReplacementSummary `json:"applied_replacements,omitempty"`
+	LLMCleanup             *LLMCleanupRecord    `json:"llm_cleanup,omitempty"`
+	StopWordsMatched       []string             `json:"stop_words_matched,omitempty"`
+	WAVFile                string               `json:"wav_file"` // relative filename in chunks dir, e.g. "chunk_0001.wav"
 }
 
 // Manifest is the serialized list of chunks currently in the ring buffer.

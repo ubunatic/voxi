@@ -218,3 +218,45 @@ func TestRingBufferConcurrency(t *testing.T) {
 		t.Fatalf("expected at most 5 chunks, got %d", len(chunks))
 	}
 }
+
+func TestChunkJSONSerializationWithPipelineMetadata(t *testing.T) {
+	c := Chunk{
+		Index:               10,
+		Model:               "cohere-transcribe-03-2026",
+		Engine:              "cohere-transcribe",
+		AppliedReplacements: []ReplacementSummary{{From: "Voxy", To: "voxi"}},
+		LLMCleanup: &LLMCleanupRecord{
+			Enabled:  true,
+			Model:    "qwen3-4b-instruct-2507-q4",
+			Output:   "Hello from Voxi",
+			Modified: true,
+		},
+		StopWordsMatched: []string{"thank you"},
+		Accepted:         true,
+	}
+
+	dir := t.TempDir()
+	buf := NewBuffer(dir, 5)
+	added, err := buf.Add(c, make([]byte, 640), 16000)
+	if err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+
+	got, err := buf.Get(fmt.Sprintf("%d", added.Index))
+	if err != nil {
+		t.Fatalf("Get failed: %v", err)
+	}
+
+	if got.Model != "cohere-transcribe-03-2026" || got.Engine != "cohere-transcribe" {
+		t.Errorf("model/engine mismatch: got model=%q engine=%q", got.Model, got.Engine)
+	}
+	if len(got.AppliedReplacements) != 1 || got.AppliedReplacements[0].From != "Voxy" || got.AppliedReplacements[0].To != "voxi" {
+		t.Errorf("applied replacements mismatch: %+v", got.AppliedReplacements)
+	}
+	if got.LLMCleanup == nil || !got.LLMCleanup.Enabled || got.LLMCleanup.Model != "qwen3-4b-instruct-2507-q4" || !got.LLMCleanup.Modified {
+		t.Errorf("llm cleanup mismatch: %+v", got.LLMCleanup)
+	}
+	if len(got.StopWordsMatched) != 1 || got.StopWordsMatched[0] != "thank you" {
+		t.Errorf("stop words matched mismatch: %+v", got.StopWordsMatched)
+	}
+}
