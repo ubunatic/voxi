@@ -289,21 +289,25 @@
         <div class="step-card">
           <div class="step-num">1</div>
           <div class="step-content">
-            <h3>Clone and Install</h3>
+            <h3>Install Voxi</h3>
             <p>
-              Compile user binaries and install systemd user service units. No Go toolchain?
-              Grab a prebuilt binary from the
-              <a href="https://codeberg.org/ubunatic/voxi/releases/latest" rel="noopener" target="_blank">latest release</a>
-              instead &mdash; the systemd unit files below still come from the repo checkout.
+              Use the official one-line installer to configure the binary, dependencies (<code>crispasr</code>, <code>dotoold</code>), and systemd user services:
             </p>
             <div class="code-block">
               <button class="copy-code-btn" title="Copy code">copy</button>
-              <pre><code><span class="prompt">$</span> git clone https://codeberg.org/ubunatic/voxi.git
-<span class="prompt">$</span> cd voxi
+              <pre><code><span class="prompt">$</span> curl -fsSL https://codeberg.org/ubunatic/voxi/raw/branch/main/scripts/install.sh | bash
+<span class="comment"># (Optional) Include privileged physical modifier gating setup</span>
+<span class="prompt">$</span> curl -fsSL https://codeberg.org/ubunatic/voxi/raw/branch/main/scripts/install.sh | bash -s -- --modifierd</code></pre>
+            </div>
+            <p style="margin-top: 1rem;">
+              Or build from source and run the automated user installer:
+            </p>
+            <div class="code-block">
+              <button class="copy-code-btn" title="Copy code">copy</button>
+              <pre><code><span class="prompt">$</span> git clone https://codeberg.org/ubunatic/voxi.git &amp;&amp; cd voxi
 <span class="prompt">$</span> make install
-<span class="prompt">$</span> make install-user-services
-<span class="comment"># (Optional) Install physical modifier gating daemon</span>
-<span class="prompt">$</span> sudo make install-modifierd</code></pre>
+<span class="prompt">$</span> voxi install               <span class="comment"># User-scoped setup, no sudo required</span>
+<span class="prompt">$</span> voxi install --modifierd  <span class="comment"># Optional system-wide modifier daemon (needs sudo)</span></code></pre>
             </div>
           </div>
         </div>
@@ -311,11 +315,11 @@
         <div class="step-card">
           <div class="step-num">2</div>
           <div class="step-content">
-            <h3>Enable Background Agent</h3>
-            <p>Start the unified background voice service with systemd:</p>
+            <h3>Verify Background Agent</h3>
+            <p>Ensure the background voice service is active:</p>
             <div class="code-block">
               <button class="copy-code-btn" title="Copy code">copy</button>
-              <pre><code><span class="prompt">$</span> systemctl --user enable --now voxi-agent.service</code></pre>
+              <pre><code><span class="prompt">$</span> systemctl --user is-active voxi-agent.service</code></pre>
             </div>
           </div>
         </div>
@@ -439,6 +443,7 @@
 
         <h3 class="mp-sh">Synopsis</h3>
         <pre class="mp-syn"><b>voxi</b> <i>command</i> [<i>subcommand</i>] [<i>flags</i>]
+<b>voxi install</b> [--modifierd]
 <b>voxi mode</b> [batch|streaming|eager]
 <b>voxi record</b> {toggle|start|stop|status}
 <b>voxi eager</b> [--type] [--history] [--daemon] [--model <i>name</i>] [<i>flags</i>...]
@@ -453,6 +458,9 @@
 
         <h3 class="mp-sh">Commands</h3>
         <dl class="mp-opts">
+          <dt>install [--modifierd]</dt>
+          <dd>Configure user binaries, dependency runtime tools (<code>crispasr</code>, <code>dotool</code>, <code>dotoold</code>), and systemd user services. With <code>--modifierd</code>, also builds and installs the privileged kernel evdev modifier daemon.</dd>
+
           <dt>mode [batch|streaming|eager]</dt>
           <dd>Show the active voice-input mode, or switch to one of the three transcription strategies. With no argument, prints the current mode.</dd>
 
@@ -539,7 +547,7 @@
         </p>
 
         <div class="mp-bar">
-          <span>voxi 0.1</span>
+          <span>voxi 0.1.4</span>
           <span>Linux / Wayland Engine</span>
           <span>VOXI(1)</span>
         </div>
