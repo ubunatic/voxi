@@ -49,6 +49,7 @@ func TestRingBufferAddAndRotation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
+	// List returns only the last `capacity` (3) entries.
 	if len(chunks) != 3 {
 		t.Fatalf("expected 3 chunks, got %d", len(chunks))
 	}
@@ -56,19 +57,19 @@ func TestRingBufferAddAndRotation(t *testing.T) {
 		t.Fatalf("unexpected chunk indices: %v, %v, %v", chunks[0].Index, chunks[1].Index, chunks[2].Index)
 	}
 
-	// Verify pruned files are deleted
+	// Shadow-deleted chunks (1 and 2) must still exist on disk (storageCapacity=100 by default).
 	for i := 1; i <= 2; i++ {
 		oldWav := filepath.Join(dir, fmt.Sprintf("chunk_%04d.wav", i))
-		if _, err := os.Stat(oldWav); !os.IsNotExist(err) {
-			t.Errorf("expected %s to be deleted, but it exists", oldWav)
+		if _, err := os.Stat(oldWav); err != nil {
+			t.Errorf("expected shadow-deleted %s to remain on disk: %v", oldWav, err)
 		}
 		oldSidecar := filepath.Join(dir, fmt.Sprintf("chunk_%04d.json", i))
-		if _, err := os.Stat(oldSidecar); !os.IsNotExist(err) {
-			t.Errorf("expected %s to be deleted, but it exists", oldSidecar)
+		if _, err := os.Stat(oldSidecar); err != nil {
+			t.Errorf("expected shadow-deleted %s to remain on disk: %v", oldSidecar, err)
 		}
 	}
 
-	// Verify current files exist
+	// Verify visible files exist
 	for i := 3; i <= 5; i++ {
 		wav := filepath.Join(dir, fmt.Sprintf("chunk_%04d.wav", i))
 		if _, err := os.Stat(wav); err != nil {
@@ -97,9 +98,13 @@ func TestRingBufferAddAndRotation(t *testing.T) {
 		t.Fatalf("unexpected c4: %+v", c4)
 	}
 
-	_, err = buf.Get("1")
-	if err == nil {
-		t.Fatalf("expected error getting pruned chunk 1, got nil")
+	// Shadow-deleted chunks are still accessible via Get by index.
+	c1, err := buf.Get("1")
+	if err != nil {
+		t.Fatalf("expected shadow-deleted chunk 1 to be accessible via Get, got error: %v", err)
+	}
+	if c1.Index != 1 {
+		t.Fatalf("expected index 1, got %d", c1.Index)
 	}
 
 	// Test ReadWAV
@@ -109,6 +114,53 @@ func TestRingBufferAddAndRotation(t *testing.T) {
 	}
 	if len(wavBytes) < 44 { // RIFF header size
 		t.Fatalf("wavBytes too small: %d", len(wavBytes))
+	}
+}
+
+// TestPhysicalPruning verifies that chunks are physically deleted once storageCapacity is exceeded.
+func TestPhysicalPruning(t *testing.T) {
+	dir := t.TempDir()
+	// Use WithStorageCapacity to set a tight physical limit for this test.
+	buf := NewBuffer(dir, 2).WithStorageCapacity(3)
+
+	dummyPCM := make([]byte, 3200)
+
+	for i := 1; i <= 4; i++ {
+		c := Chunk{
+			Timestamp:         time.Now(),
+			AudioDurationSecs: 0.1,
+			RawTranscript:     fmt.Sprintf("text %d", i),
+			Accepted:          true,
+		}
+		if _, err := buf.Add(c, dummyPCM, 16000); err != nil {
+			t.Fatalf("Add chunk %d failed: %v", i, err)
+		}
+	}
+
+	// After 4 adds with storageCapacity=3, chunk 1 should be physically deleted.
+	oldWav := filepath.Join(dir, "chunk_0001.wav")
+	if _, err := os.Stat(oldWav); !os.IsNotExist(err) {
+		t.Errorf("expected chunk_0001.wav to be physically deleted, but it exists")
+	}
+
+	// Chunks 2, 3, 4 should still be on disk.
+	for i := 2; i <= 4; i++ {
+		wav := filepath.Join(dir, fmt.Sprintf("chunk_%04d.wav", i))
+		if _, err := os.Stat(wav); err != nil {
+			t.Errorf("expected %s to exist: %v", wav, err)
+		}
+	}
+
+	// List shows only last 2 (capacity=2).
+	chunks, err := buf.List(false)
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	if len(chunks) != 2 {
+		t.Fatalf("expected 2 chunks in list, got %d", len(chunks))
+	}
+	if chunks[0].Index != 3 || chunks[1].Index != 4 {
+		t.Fatalf("unexpected list indices: %d, %d", chunks[0].Index, chunks[1].Index)
 	}
 }
 

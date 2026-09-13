@@ -18,8 +18,14 @@ import (
 )
 
 const (
+	// DefaultBufferSize is the number of chunks shown by `voxi chunks list`.
 	DefaultBufferSize = 10
-	manifestFileName  = "manifest.json"
+	// DefaultStorageCapacity is the number of chunks kept on disk before physical deletion.
+	// Chunks beyond DefaultBufferSize but within DefaultStorageCapacity are shadow-deleted:
+	// they remain on disk and in the manifest but are hidden from the list view, making them
+	// available for post-hoc debugging (e.g. replaying audio to reproduce transcription bugs).
+	DefaultStorageCapacity = 100
+	manifestFileName       = "manifest.json"
 )
 
 // ReplacementSummary records a single deterministic replacement applied to a chunk.
@@ -100,21 +106,50 @@ func StorageDir(xdgRuntimeDir, homeDir string) string {
 }
 
 // Buffer manages saving, reading, listing, and pruning chunks on disk.
+//
+// Two capacity limits govern the ring buffer:
+//   - capacity: the number of chunks shown by List(); older chunks are hidden ("shadow-deleted")
+//   - storageCapacity: the number of chunks kept on disk; chunks beyond this limit are physically deleted
+//
+// This separation lets the system retain a large on-disk history for debugging while exposing only
+// the most recent chunks in the list view.
 type Buffer struct {
-	dir      string
-	capacity int
-	mu       sync.Mutex
+	dir             string
+	capacity        int // list/show view limit
+	storageCapacity int // physical delete threshold
+	mu              sync.Mutex
 }
 
-// NewBuffer returns a Buffer operating on dir with the given capacity.
+// NewBuffer returns a Buffer operating on dir with the given list capacity.
 // If capacity <= 0, DefaultBufferSize (10) is used.
+// The physical storage capacity is set to DefaultStorageCapacity (100).
+// Use WithStorageCapacity to override it.
 func NewBuffer(dir string, capacity int) *Buffer {
 	if capacity <= 0 {
 		capacity = DefaultBufferSize
 	}
+	storageCapacity := DefaultStorageCapacity
+	if storageCapacity < capacity {
+		storageCapacity = capacity
+	}
 	return &Buffer{
-		dir:      dir,
-		capacity: capacity,
+		dir:             dir,
+		capacity:        capacity,
+		storageCapacity: storageCapacity,
+	}
+}
+
+// WithStorageCapacity returns a copy of the buffer with a custom physical storage capacity.
+// storageCapacity must be >= capacity; if smaller, it is clamped to capacity.
+func (b *Buffer) WithStorageCapacity(storageCapacity int) *Buffer {
+	if storageCapacity < b.capacity {
+		storageCapacity = b.capacity
+	}
+	return &Buffer{
+		dir:             b.dir,
+		capacity:        b.capacity,
+		storageCapacity: storageCapacity,
+		mu:              sync.Mutex{},
 	}
 }
 
@@ -128,9 +163,16 @@ func (b *Buffer) Dir() string {
 	return b.dir
 }
 
-// Capacity returns the maximum number of chunks kept in the buffer.
+// Capacity returns the number of chunks shown by List().
+// Older chunks beyond this limit are shadow-deleted (still on disk, hidden from the list view).
 func (b *Buffer) Capacity() int {
 	return b.capacity
+}
+
+// StorageCapacity returns the physical storage limit.
+// Chunks beyond this limit are permanently deleted from disk.
+func (b *Buffer) StorageCapacity() int {
+	return b.storageCapacity
 }
 
 // ensureDir ensures the chunks directory exists with 0700 permissions.
@@ -262,9 +304,11 @@ func (b *Buffer) Add(c Chunk, pcmAudio []byte, sampleRate int) (Chunk, error) {
 
 	m.Chunks = append(m.Chunks, c)
 
-	// Prune if over capacity
-	if len(m.Chunks) > b.capacity {
-		excess := len(m.Chunks) - b.capacity
+	// Physically prune chunks that exceed the storage capacity.
+	// Chunks beyond capacity but within storageCapacity are shadow-deleted:
+	// they remain on disk and are simply dropped from List() output.
+	if len(m.Chunks) > b.storageCapacity {
+		excess := len(m.Chunks) - b.storageCapacity
 		toPrune := m.Chunks[:excess]
 		m.Chunks = m.Chunks[excess:]
 
@@ -325,8 +369,8 @@ func (b *Buffer) AddExistingWAV(c Chunk, srcWAVPath string, move bool) (Chunk, e
 
 	m.Chunks = append(m.Chunks, c)
 
-	if len(m.Chunks) > b.capacity {
-		excess := len(m.Chunks) - b.capacity
+	if len(m.Chunks) > b.storageCapacity {
+		excess := len(m.Chunks) - b.storageCapacity
 		toPrune := m.Chunks[:excess]
 		m.Chunks = m.Chunks[excess:]
 
@@ -376,7 +420,9 @@ func (b *Buffer) Update(c Chunk) (Chunk, error) {
 	return Chunk{}, fmt.Errorf("chunk correlation ID %q not found", c.ChunkID)
 }
 
-// List returns all chunks in the buffer, ordered from oldest to newest (or newest first if reverse is true).
+// List returns the most recent chunks up to the buffer's capacity, ordered oldest-first
+// (or newest-first if reverse is true). Chunks beyond capacity that are still on disk
+// (shadow-deleted) are not included; use Get with an explicit index to access them.
 func (b *Buffer) List(reverse bool) ([]Chunk, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -385,8 +431,13 @@ func (b *Buffer) List(reverse bool) ([]Chunk, error) {
 	if err != nil {
 		return nil, err
 	}
-	chunks := make([]Chunk, len(m.Chunks))
-	copy(chunks, m.Chunks)
+	all := m.Chunks
+	// Apply the list-view capacity window: show only the most recent `capacity` entries.
+	if len(all) > b.capacity {
+		all = all[len(all)-b.capacity:]
+	}
+	chunks := make([]Chunk, len(all))
+	copy(chunks, all)
 
 	if reverse {
 		for i, j := 0, len(chunks)-1; i < j; i, j = i+1, j-1 {
