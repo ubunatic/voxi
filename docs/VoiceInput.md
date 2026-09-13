@@ -98,6 +98,8 @@ voxi config set type-delay-ms <MS> # edit type_delay_ms preserving comments
 voxi feedback replacement add Voxy voxi # exact post-transcription Cohere correction
 voxi feedback replacement list         # HEARD<TAB>WRITTEN mappings
 voxi feedback replacement remove Voxy  # exact-case source removal
+voxi settings                 # interactive TUI for LLM cleaner, models, typing delay, history
+voxi settings --test          # verify all configured features & dependencies (JSON: --json)
 voxi daemon modifier-service      # run voxi-modifierd directly (normally a system service)
 ```
 

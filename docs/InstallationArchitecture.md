@@ -45,25 +45,46 @@ The implementation now stages the canonical unit in the user's cache and gives
 `sudo install` a regular source path. This keeps authentication input separate
 from service-file input and is the pattern to use for future privileged copies.
 
-## Verification
+## Zero `input` Group Requirement & Security Model
 
-After the user-scoped install:
+Adding the desktop user to the Linux `input` group is a common anti-pattern in Linux
+voice-typing tools, but it creates a standing security vulnerability: any user-level
+process could read raw `/dev/input/event*` devices and log all keystrokes.
+
+Voxi avoids this entirely through its system service architecture:
+1. **Isolated Daemon**: `voxi-modifierd.service` runs as a locked-down system service
+   under systemd with `SupplementaryGroups=input` and `DeviceAllow=char-input r`.
+2. **Atomic State File**: The daemon continuously reads physical modifier keys
+   (Ctrl, Alt, Super, Shift) and writes a single 1-byte bitmask to `/run/voxi/modifiers`
+   (mode `0755`/`0644`). Non-modifier keystrokes are never recorded.
+3. **Unprivileged User Access**: The user-space Voxi engine (`voxi`, `voxi-agent.service`,
+   `dotool`) reads `/run/voxi/modifiers` without needing `sudo`, root, or `input` group
+   membership.
+
+## Verification & Diagnostic Probes
+
+Verify individual unit states:
 
 ```sh
 systemctl --user is-enabled voxi-agent.service
 systemctl --user is-active voxi-agent.service
+systemctl is-enabled voxi-modifierd.service  # only after --modifierd
+systemctl is-active voxi-modifierd.service   # only after --modifierd
 ```
 
-After the optional modifier install:
+Or run the end-to-end diagnostic suite:
 
 ```sh
-systemctl is-enabled voxi-modifierd.service
-systemctl is-active voxi-modifierd.service
+voxi settings --test
 ```
 
-The live validation for this feature confirmed both services enabled and active
-on the development machine. Automated coverage checks command construction,
-privilege gating, staged service content, and error reporting.
+`voxi settings --test` automatically probes:
+- ASR engine binary availability (`crispasr` / `voxtype`) and GPU render node presence.
+- LLM post-processing cleaner HTTP reachability and model responses.
+- Keystroke injection via `dotool` and `type_delay_ms` configuration.
+- Modifier daemon status via `/run/voxi/modifiers` and systemd unit health.
+- Dictation history storage permissions.
+- Background `voxi-agent.service` lifecycle.
 
 ## Session and workflow learnings
 
@@ -78,4 +99,5 @@ review plus live checks supplied the final confidence gate.
 For a narrow future ticket, use the lean fresh-handoff loop. Reserve the full
 five-phase sprint for cross-cutting install, service, security, or architecture
 changes where independent review can uncover integration failures.
+
 
