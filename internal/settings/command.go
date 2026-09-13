@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -15,6 +16,28 @@ func NewCommand(d deps.Dependencies, availableASRModels []string) *cobra.Command
 	var dump bool
 	var asJSON bool
 	var format string
+	var testMode bool
+
+	runTest := func(ctx context.Context, home string, asJSON bool) error {
+		s, err := config.LoadUserSettings(home)
+		if err != nil {
+			return fmt.Errorf("load settings: %w", err)
+		}
+		report := RunDiagnostics(ctx, d, home, s)
+		if asJSON || format == "json" {
+			out, err := RenderDiagnosticJSON(report)
+			if err != nil {
+				return fmt.Errorf("encode diagnostic json: %w", err)
+			}
+			fmt.Fprintln(d.Stdout, out)
+		} else {
+			fmt.Fprint(d.Stdout, RenderDiagnosticReport(report))
+		}
+		if report.Failed > 0 {
+			return fmt.Errorf("%d diagnostic check(s) failed", report.Failed)
+		}
+		return nil
+	}
 
 	cmd := &cobra.Command{
 		Use:   "settings",
@@ -26,8 +49,8 @@ func NewCommand(d deps.Dependencies, availableASRModels []string) *cobra.Command
 			"  • Keystroke Delay (type_delay_ms)\n" +
 			"  • Dictation History\n" +
 			"  • Modifier Key Gating (voxi-modifierd)\n\n" +
-			"When run without a terminal (e.g. piped or in scripts), settings are printed\n" +
-			"as formatted text or JSON.",
+			"Pass --test (or 'voxi settings test') to verify that all configured features\n" +
+			"and host dependencies are working.",
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -36,6 +59,10 @@ func NewCommand(d deps.Dependencies, availableASRModels []string) *cobra.Command
 				if h, err := os.UserHomeDir(); err == nil {
 					home = h
 				}
+			}
+
+			if testMode {
+				return runTest(cmd.Context(), home, asJSON)
 			}
 
 			isTTY := isOutputTerminal(d)
@@ -61,9 +88,28 @@ func NewCommand(d deps.Dependencies, availableASRModels []string) *cobra.Command
 		},
 	}
 
+	testSubCmd := &cobra.Command{
+		Use:   "test",
+		Short: "Run end-to-end diagnostic checks on all configured settings and dependencies",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			home := d.Getenv("HOME")
+			if home == "" {
+				if h, err := os.UserHomeDir(); err == nil {
+					home = h
+				}
+			}
+			return runTest(cmd.Context(), home, asJSON)
+		},
+	}
+	testSubCmd.Flags().BoolVar(&asJSON, "json", false, "output diagnostic results as JSON")
+	testSubCmd.Flags().StringVar(&format, "format", "text", "output format: text or json")
+	cmd.AddCommand(testSubCmd)
+
 	cmd.Flags().BoolVarP(&dump, "dump", "d", false, "print current settings non-interactively")
-	cmd.Flags().BoolVar(&asJSON, "json", false, "output current settings as JSON")
-	cmd.Flags().StringVar(&format, "format", "text", "output format for non-interactive dump: text or json")
+	cmd.Flags().BoolVarP(&testMode, "test", "t", false, "run end-to-end diagnostic checks on all configured settings and dependencies")
+	cmd.Flags().BoolVar(&asJSON, "json", false, "output current settings or test results as JSON")
+	cmd.Flags().StringVar(&format, "format", "text", "output format: text or json")
 
 	return cmd
 }

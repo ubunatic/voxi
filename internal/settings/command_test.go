@@ -2,6 +2,7 @@ package settings
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 
@@ -74,5 +75,66 @@ func TestSettingsCommandJSON(t *testing.T) {
 	}
 	if !strings.Contains(out, `"cohere-transcribe-03-2026"`) {
 		t.Errorf("expected default asr model in json, got: %s", out)
+	}
+}
+
+func TestSettingsCommandTestFlag(t *testing.T) {
+	home := t.TempDir()
+	var stdout bytes.Buffer
+	d := deps.DefaultDependencies(strings.NewReader(""), &stdout)
+	d.Getenv = func(k string) string {
+		if k == "HOME" {
+			return home
+		}
+		return ""
+	}
+	d.LookPath = func(file string) (string, error) {
+		return "/usr/bin/" + file, nil
+	}
+	d.RunOutput = func(ctx context.Context, name string, args ...string) (string, error) {
+		return "active\n", nil
+	}
+
+	cmd := NewCommand(d, nil)
+	cmd.SetArgs([]string{"--test"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("cmd.Execute() --test failed: %v", err)
+	}
+
+	out := stdout.String()
+	if !strings.Contains(out, "Voxi Configuration & Component Diagnostics:") {
+		t.Errorf("expected diagnostics header, got: %s", out)
+	}
+	if !strings.Contains(out, "ASR Engine:") {
+		t.Errorf("expected ASR Engine check, got: %s", out)
+	}
+}
+
+func TestSettingsCommandTestSubcommand(t *testing.T) {
+	home := t.TempDir()
+	var stdout bytes.Buffer
+	d := deps.DefaultDependencies(strings.NewReader(""), &stdout)
+	d.Getenv = func(k string) string {
+		if k == "HOME" {
+			return home
+		}
+		return ""
+	}
+	d.LookPath = func(file string) (string, error) {
+		return "/usr/bin/" + file, nil
+	}
+	d.RunOutput = func(ctx context.Context, name string, args ...string) (string, error) {
+		return "active\n", nil
+	}
+
+	cmd := NewCommand(d, nil)
+	cmd.SetArgs([]string{"test", "--json"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("cmd.Execute() test --json failed: %v", err)
+	}
+
+	out := stdout.String()
+	if !strings.Contains(out, `"name": "ASR Engine"`) {
+		t.Errorf("expected diagnostic JSON, got: %s", out)
 	}
 }
