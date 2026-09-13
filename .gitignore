@@ -26,3 +26,7 @@ testdata/speech-context/*.wav
 # local Go workspace (untracked)
 /go.work
 /go.work.sum
+
+# Release build artifacts
+/dist/
+
