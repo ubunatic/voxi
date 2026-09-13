@@ -1,6 +1,6 @@
 # 107 — Interactive Settings TUI for Feature Toggles and Configuration
 
-**Status**: Open
+**Status**: Closed
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Feature
@@ -66,11 +66,11 @@ Keep the initial catalog focused on essential user switches:
 
 ## 4. Acceptance Criteria
 
-- [ ] `voxi settings` launches an interactive terminal menu when run in a TTY.
-- [ ] Users can toggle LLM cleaner, select models, adjust typing delay, and toggle history/modifier gating.
-- [ ] Saving writes changes atomically to user configuration files.
-- [ ] Non-TTY invocations gracefully dump current configuration without crashing.
-- [ ] All unit tests pass and `make check` succeeds.
+- [x] `voxi settings` launches an interactive terminal menu when run in a TTY.
+- [x] Users can toggle LLM cleaner, select models, adjust typing delay, and toggle history/modifier gating.
+- [x] Saving writes changes atomically to user configuration files.
+- [x] Non-TTY invocations gracefully dump current configuration without crashing.
+- [x] All unit tests pass and `make check` succeeds.
 
 ---
 
