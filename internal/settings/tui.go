@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"golang.org/x/term"
 	"ubunatic.com/voxi/internal/config"
@@ -43,11 +44,11 @@ func RunInteractive(ctx context.Context, d deps.Dependencies, home string, asrMo
 	}
 	defer func() {
 		_ = term.Restore(fd, oldState)
-		fmt.Fprint(d.Stdout, "\033[?25h\r\n")
+		fmt.Fprint(d.Stdout, "\033[?25h\033[?1049l")
 	}()
 
-	// Hide cursor and clear screen
-	fmt.Fprint(d.Stdout, "\033[?25l\033[2J")
+	// Switch to alternate screen buffer, hide cursor, and clear screen
+	fmt.Fprint(d.Stdout, "\033[?1049h\033[?25l\033[2J\033[H")
 
 	getTermWidth := func() int {
 		if outF, ok := d.Stdout.(*os.File); ok {
@@ -61,7 +62,8 @@ func RunInteractive(ctx context.Context, d deps.Dependencies, home string, asrMo
 	render := func() {
 		width := getTermWidth()
 		frame := RenderMenu(model, width)
-		fmt.Fprint(d.Stdout, "\033[H\033[J"+frame)
+		crlfFrame := strings.ReplaceAll(strings.ReplaceAll(frame, "\r\n", "\n"), "\n", "\r\n")
+		fmt.Fprint(d.Stdout, "\033[H\033[2J"+crlfFrame)
 	}
 
 	render()
@@ -87,7 +89,7 @@ func RunInteractive(ctx context.Context, d deps.Dependencies, home string, asrMo
 			updated := model.ToUserSettings(initialSettings)
 			// Restore terminal before printing success message
 			_ = term.Restore(fd, oldState)
-			fmt.Fprint(d.Stdout, "\033[?25h\033[2J\033[H")
+			fmt.Fprint(d.Stdout, "\033[?25h\033[?1049l")
 
 			if err := config.SaveUserSettings(home, updated); err != nil {
 				return fmt.Errorf("save user settings: %w", err)
@@ -98,7 +100,7 @@ func RunInteractive(ctx context.Context, d deps.Dependencies, home string, asrMo
 
 		if model.Closed {
 			_ = term.Restore(fd, oldState)
-			fmt.Fprint(d.Stdout, "\033[?25h\033[2J\033[H")
+			fmt.Fprint(d.Stdout, "\033[?25h\033[?1049l")
 			return nil
 		}
 
