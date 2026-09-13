@@ -13,6 +13,7 @@ In-depth references for architecture, decisions, and operations of the Voxi Linu
 | [ChunkDiagnostics.md](ChunkDiagnostics.md) | `voxi chunks` ring buffer, RMS/acoustic-gate fields, the Braille LEVEL sparkline (dual-column packing, log-scale calibration pitfalls), and `--color` |
 | [LiveMicMeter.md](LiveMicMeter.md) | `audiolevel` package: capture, two-sided ballistics easing, decoupled paint/collect/capture cadences, truecolor gradient rendering, GNOME mic-indicator suppression, the `stty`-subprocess perf pitfall, the rolling sparkline export and its `examples/miclevel` loom TUI demo, and `loom` API pitfalls found along the way |
 | [EagerDeliverySafety.md](EagerDeliverySafety.md) | Eager chunk identities, at-most-once delivery ledger, stop/queue semantics, visible failures, and conservative transcript safety limits |
+| [LLMTranscriptCleanup.md](LLMTranscriptCleanup.md) | Local LLM cleanup request contract, chunk context, fallback behavior, and real-model validation limits |
 
 ---
 
