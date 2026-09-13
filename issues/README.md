@@ -94,3 +94,4 @@
 | 110 | [110-add-examples-miclevel-loom-tui-showing-live-audiolevel-sparkline-meter.md](110-add-examples-miclevel-loom-tui-showing-live-audiolevel-sparkline-meter.md) | Add `examples/miclevel`: loom TUI Showing Live `audiolevel` Sparkline/Meter | Closed |
 | 111 | [111-define-llm-cleanup-audio-context-and-evaluate-transcript-fidelity.md](111-define-llm-cleanup-audio-context-and-evaluate-transcript-fidelity.md) | Define LLM cleanup audio context and evaluate transcript fidelity | Closed — evaluation complete; multiline fidelity failure documented |
 | 112 | [112-preserve-multiline-transcript-fidelity-through-llm-cleanup.md](112-preserve-multiline-transcript-fidelity-through-llm-cleanup.md) | Preserve multiline transcript fidelity through LLM cleanup | Open |
+| 113 | [113-wire-saved-asr-history-and-modifier-settings-into-runtime.md](113-wire-saved-asr-history-and-modifier-settings-into-runtime.md) | Wire saved ASR, history, and modifier settings into runtime | Open |
