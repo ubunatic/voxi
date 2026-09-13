@@ -85,15 +85,43 @@ Following advisor review (Codex / Astra), the fix requires addressing context ow
 
 ---
 
-## 4. Lifecycle Regression Test Matrix
+## 4. Comprehensive Edge Case Test Matrix
 
-1. **Multi-Chunk Buffered Drain Beyond Stop Timeout**:
-   - Verify that 2+ chunks taking >5.0s to transcribe in `modifierBuffer` complete and are injected in order, exactly once, without being canceled by `drain.ctx`.
-2. **Context Cancellation Isolation**:
-   - Verify that `drain.cancel()` does not abort in-flight or post-drain `TypeTextObserved` calls.
-3. **Rapid Stop -> Start Sequencing**:
-   - Test rapid Stop/Start with overlapping transcription; assert delivery ledger claims prevent duplicate or interleaved text.
-4. **LLM Cleanup Timeout Fallback & Diagnostic Emission**:
-   - Test LLM latency >1500ms; verify fallback to raw/ASR transcript, diagnostic telemetry emitted, and successful typing.
-5. **Metadata & Telemetry Consistency**:
-   - Verify `voxi chunks show` reports correct `TypingStartedAt` / `TypingEndedAt` for flushed chunks.
+To guarantee rock-solid behavior across all timing and lifecycle boundaries, the implementation must add dedicated unit and integration tests covering these exact scenarios:
+
+### Edge Case 1: Trailing Multi-Chunk Buffered Drain Exceeding Stop Timeout (Live Bug Repro)
+- **Setup**: A session processes 2 valid speech chunks. During transcription of chunk 1, the user taps `Super` and then `Super+X` (Stop).
+- **Condition**: Total sequential transcription and LLM processing takes >5.0s (e.g. 6.5s) after the stop request timestamp.
+- **Assertion**:
+  - `drain.cancel()` fires after 5s without aborting the transcription or injection of the buffered chunks.
+  - All buffered chunks are injected into the target window in exact chronological sequence.
+  - Zero `delivery_stale` telemetry events are emitted for valid chunks.
+
+### Edge Case 2: Rapid `Stop` -> `Start` Session Interleaving
+- **Setup**: Session A (with a slow draining chunk in `modifierBuffer`) is stopped, and Session B immediately starts and produces a chunk.
+- **Condition**: Session B finishes capturing and transcribing before Session A's background worker finishes draining.
+- **Assertion**:
+  - Session A's flush does not overwrite or interleave mid-word with Session B's typing stream.
+  - Delivery claims prevent duplicate typing.
+  - Session A's `modifierBuffer` state does not leak into Session B (session isolation).
+
+### Edge Case 3: LLM Cleaner Timeout & Degradation Fallbacks
+- **Setup**: LLM post-processing server hangs or responds after >1500ms.
+- **Assertion**:
+  - Context timeout cancels the HTTP request after 1500ms.
+  - Subprocess / HTTP client connection is closed immediately (no leaking sockets/goroutines).
+  - The pipeline immediately falls back to the clean ASR transcript (0ms extra delay).
+  - Diagnostic event `llm_cleanup_fallback` with reason `timeout` is logged.
+  - Text is typed normally into the focused window without dropping.
+
+### Edge Case 4: Acoustic Transient Short-Circuit during Stop Drain
+- **Setup**: Trailing audio after speech contains only silence, breathing, or key clicks (`!job.Plausible`).
+- **Assertion**:
+  - Chunk is identified as implausible in `<1ms` and discarded without invoking Whisper/CrispASR or LLM.
+  - Session shutdown and post-drain flush proceed immediately without waiting for unnecessary subprocesses.
+
+### Edge Case 5: Full Metadata & Telemetry Integrity
+- **Setup**: Inspect `chunkBuf` manifest and sidecar JSONs after a buffered flush.
+- **Assertion**:
+  - `typing_started_at` and `typing_ended_at` are properly populated with real timestamps instead of zero values (`0001-01-01T00:00:00Z`).
+  - `voxi chunks show <N>` reflects `ACCEPTED` status and accurate latency breakdown.
