@@ -1,6 +1,6 @@
 # 109 — Export Streaming Audio Sparkline and Continuous Time-Chart in `audiolevel`
 
-**Status**: In Progress
+**Status**: Closed — implemented and verified: audiolevel.RenderSparkline, SparklineStream, Meter/Manager integration, tests passing
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Feature
@@ -65,7 +65,34 @@ Allow `audiolevel.Meter` to optionally maintain and update a rolling `SparklineS
 
 ## 4. Acceptance Criteria
 
-- [ ] `audiolevel.RenderSparkline` is exported and produces identical 2x-resolution Braille sparklines as `internal/audio.RenderVolumeSparkline`.
-- [ ] `audiolevel.NewSparklineStream` accepts streaming PCM frames and returns sliding-window Braille strings.
-- [ ] External consumers (like `harnez`) can import `ubunatic.com/voxi/audiolevel` and display live scrolling speech waveforms.
-- [ ] Unit tests verify time window sliding, zero-allocation rendering paths where applicable, and logarithmic scaling accuracy.
+- [x] `audiolevel.RenderSparkline` is exported and produces identical 2x-resolution Braille sparklines as `internal/audio.RenderVolumeSparkline`.
+- [x] `audiolevel.NewSparklineStream` accepts streaming PCM frames and returns sliding-window Braille strings.
+- [x] External consumers (like `harnez`) can import `ubunatic.com/voxi/audiolevel` and display live scrolling speech waveforms.
+- [x] Unit tests verify time window sliding, zero-allocation rendering paths where applicable, and logarithmic scaling accuracy.
+
+---
+
+## 5. Resolution
+
+Implemented in `audiolevel/sparkline.go`:
+- `RenderSparkline(pcmData []byte, width int) string` — standalone Braille
+  sparkline, duplicating `internal/audio.RenderVolumeSparkline`'s glyph/RMS
+  math (not calling it directly — `audiolevel` already imports
+  `internal/audio` for `ComputeAudioRMS`, so the reverse import would cycle).
+  Verified byte-identical to `internal/audio.RenderVolumeSparkline` across
+  silence/quiet/loud/short/odd-length inputs and multiple widths.
+- `SparklineOptions` / `SparklineStream` (`NewSparklineStream`, `WritePCM`,
+  `Sparkline`) — thread-safe sliding-window PCM accumulator capped at
+  `SampleRate * Window` bytes; old samples evict as new ones arrive.
+- `Meter.EnableSparkline` / `Meter.WritePCM` / `Meter.Sparkline`, with
+  `Manager` passthroughs (nil-safe) — `RunCapture`'s existing read loop now
+  also feeds each chunk into the meter's `SparklineStream` when enabled, no
+  extra subprocess or capture stream.
+
+Tests added in `audiolevel/sparkline_test.go`: equivalence against
+`internal/audio.RenderVolumeSparkline`, default-option filling, sliding-
+window eviction, live-audio reflection, `Meter`/`Manager` wiring and nil
+safety, plus allocation-reporting benchmarks (`go test -bench` with
+`-benchmem`). Full repo `go build ./...`, `go vet ./...`, and `go test ./...`
+pass; `make install` run per project convention (no live-daemon code path
+touched, so no `make restart-service` needed).
