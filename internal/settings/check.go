@@ -63,7 +63,7 @@ func RunDiagnostics(ctx context.Context, d deps.Dependencies, home string, s *co
 	report.addItem(typingItem)
 
 	// 4. Modifier Key Gating Daemon
-	modifierItem := checkModifierGating(d, s.ModifierGating)
+	modifierItem := checkModifierGating(ctx, d, s.ModifierGating)
 	report.addItem(modifierItem)
 
 	// 5. Dictation History Storage
@@ -218,7 +218,7 @@ func checkTypingInjection(d deps.Dependencies, home string, typeDelayMs int) Dia
 	return item
 }
 
-func checkModifierGating(d deps.Dependencies, enabled bool) DiagnosticItem {
+func checkModifierGating(ctx context.Context, d deps.Dependencies, enabled bool) DiagnosticItem {
 	item := DiagnosticItem{Name: "Modifier Gating"}
 	if !enabled {
 		item.Status = StatusSkip
@@ -226,43 +226,37 @@ func checkModifierGating(d deps.Dependencies, enabled bool) DiagnosticItem {
 		return item
 	}
 
+	// 1. Check if the world-readable modifier state file is present and readable
+	const statePath = "/run/voxi/modifiers"
+	if _, err := d.Stat(statePath); err == nil {
+		if _, err := d.ReadFile(statePath); err == nil {
+			item.Status = StatusPass
+			item.Summary = "active (system daemon exporting to " + statePath + ")"
+			return item
+		}
+	}
+
+	// 2. Check system service status
+	out, err := d.RunOutput(ctx, "systemctl", "is-active", "voxi-modifierd.service")
+	trimmed := strings.TrimSpace(out)
+	if err == nil && trimmed == "active" {
+		item.Status = StatusPass
+		item.Summary = "voxi-modifierd.service is active (system daemon)"
+		return item
+	}
+
+	// 3. If service is not active, check binary and provide appropriate sudo instructions
 	path, err := d.LookPath("voxi-modifierd")
 	if err != nil {
 		item.Status = StatusWarn
 		item.Summary = "voxi-modifierd binary not found on PATH or ~/.local/bin"
-		item.Detail = "Run 'make install' to build and install voxi-modifierd"
+		item.Detail = "Build and install with: make install && sudo voxi install"
 		return item
 	}
 
-	// Probe /dev/input permissions
-	entries, err := os.ReadDir("/dev/input")
-	if err != nil {
-		item.Status = StatusWarn
-		item.Summary = fmt.Sprintf("voxi-modifierd at %s, but /dev/input cannot be read: %v", path, err)
-		item.Detail = "Ensure user is in 'input' group: sudo usermod -aG input $USER"
-		return item
-	}
-
-	readableEvents := 0
-	for _, e := range entries {
-		if strings.HasPrefix(e.Name(), "event") {
-			fullPath := filepath.Join("/dev/input", e.Name())
-			if f, err := os.Open(fullPath); err == nil {
-				_ = f.Close()
-				readableEvents++
-			}
-		}
-	}
-
-	if readableEvents == 0 && len(entries) > 0 {
-		item.Status = StatusWarn
-		item.Summary = fmt.Sprintf("voxi-modifierd at %s, but /dev/input/event* devices are not readable", path)
-		item.Detail = "Add user to 'input' group for evdev hotkey gating: sudo usermod -aG input $USER"
-		return item
-	}
-
-	item.Status = StatusPass
-	item.Summary = fmt.Sprintf("voxi-modifierd at %s (/dev/input evdev access OK)", path)
+	item.Status = StatusWarn
+	item.Summary = fmt.Sprintf("voxi-modifierd at %s, but service is not running", path)
+	item.Detail = "Enable system daemon: sudo systemctl enable --now voxi-modifierd.service"
 	return item
 }
 
