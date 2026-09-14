@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>voxi — Developer Docs</title>
+  <meta name="description" content="voxi developer docs: spec-driven architecture, contribution workflow, and the private dev sample recorder used for accuracy canaries.">
+
+  <link rel="icon" type="image/svg+xml" href="../logo.svg">
+  <link rel="stylesheet" href="../index.css">
+  <script src="../index.js" defer></script>
+</head>
+<body>
+  <header class="site-head">
+    <nav class="wrap nav" aria-label="Main navigation">
+      <a class="brand" href="../index.html#top">
+        <img class="brand-icon" src="../logo.svg" alt="voxi logo" width="28" height="28">
+        <span>voxi</span>
+      </a>
+      <div class="nav-links">
+        <a href="../index.html#top">Home</a>
+        <a href="#spec">Spec-Driven Architecture</a>
+        <a href="#contributing">Contributing</a>
+        <a href="#samples">Dev Samples &amp; Canaries</a>
+        <a href="../man/index.html">Full Reference</a>
+        <a class="btn btn-outline" href="https://codeberg.org/ubunatic/voxi" rel="noopener" target="_blank">Codeberg</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="top">
+    <div class="wrap hero-shell">
+      <section class="hero-intro" aria-label="voxi developer docs overview">
+        <h1><span class="name">voxi</span> developer docs.</h1>
+        <p class="lede">
+          voxi is a small, spec-driven Go codebase: configuration and model behavior live in
+          version-controlled YAML, not scattered constants, and the accuracy work behind its
+          ASR defaults is backed by real recorded-speech fixtures rather than guesswork. This
+          page covers the parts of voxi that matter to contributors, not to everyday dictation
+          &mdash; for that, see the <a href="../index.html#top">main voxi page</a>.
+        </p>
+        <div class="actions">
+          <a class="btn btn-primary" href="https://codeberg.org/ubunatic/voxi" rel="noopener" target="_blank">Source Code</a>
+          <a class="btn btn-secondary" href="https://codeberg.org/ubunatic/voxi/src/branch/main/CONTRIBUTING.md" rel="noopener" target="_blank">CONTRIBUTING.md</a>
+          <a class="btn btn-secondary" href="https://codeberg.org/ubunatic/voxi/src/branch/main/issues" rel="noopener" target="_blank">Issue Tracker</a>
+        </div>
+      </section>
+    </div>
+
+    <!-- Spec-Driven Architecture -->
+    <section id="spec" class="wrap section-wrap" aria-label="Spec-Driven Architecture">
+      <div class="section-heading">
+        <h2>Spec-Driven Architecture</h2>
+        <p class="section-desc">
+          Spec files are the single source of truth &mdash; application code must not duplicate
+          or shadow spec values. Every YAML file is embedded directly into the binary and
+          validated against a companion JSON Schema.
+        </p>
+      </div>
+
+      <div class="spec-tree-wrap">
+        <div class="code-block">
+          <pre><code>spec/
+├── actions.yaml  <span class="comment"># voxi monitor hotkeys &amp; display labels</span>
+├── models.yaml   <span class="comment"># ASR model registry &amp; hallucination filters</span>
+├── monitor.yaml  <span class="comment"># redraw rate &amp; live mic-level ballistics</span>
+└── schemas
+    ├── actions.schema.json
+    ├── models.schema.json
+    └── monitor.schema.json</code></pre>
+        </div>
+        <p class="section-desc" style="margin-top: 1.5rem; text-align: left;">
+          <code>spec/models.yaml</code> names every ASR model voxi can drive and its per-model
+          hallucination stop-words. <code>spec/actions.yaml</code> is the single source for
+          <code>voxi monitor</code>'s hotkeys &mdash; box titles and footer badges resolve their
+          key letters from it, so they can never drift out of sync with the actual dispatcher.
+          <code>spec/monitor.yaml</code> tunes the live mic-loudness meter (paint FPS, capture
+          rate, attack/decay ballistics) without touching Go code. Run <code>make validate-spec</code>
+          to check every spec file against its JSON Schema before committing.
+        </p>
+      </div>
+    </section>
+
+    <!-- Contributing & Workflow -->
+    <section id="contributing" class="wrap section-wrap" aria-label="Contributing">
+      <div class="section-heading">
+        <h2>Contributing &amp; Workflow</h2>
+        <p class="section-desc">
+          voxi is a solo/hobby project on a single default branch (<code>main</code>), with no
+          PR-triage web workflow &mdash; proposals, bugs, and architectural changes are tracked
+          as Markdown files under <code>issues/</code> in the repository itself.
+        </p>
+      </div>
+
+      <div class="table-card">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Area</th>
+              <th>Convention</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Commits</td>
+              <td><a href="https://www.conventionalcommits.org/en/v1.0.0/" rel="noopener" target="_blank">Conventional Commits</a> (<code>feat</code>, <code>fix</code>, <code>docs</code>, <code>refactor</code>, <code>test</code>, <code>chore</code>)</td>
+            </tr>
+            <tr>
+              <td>Issues &amp; proposals</td>
+              <td>Markdown files under <code>issues/</code> (e.g. <code>issues/NNN-topic-name.md</code>), submitted via merge requests</td>
+            </tr>
+            <tr>
+              <td>Go style</td>
+              <td>Standard library first; external deps need explicit rationale. Allowed: <code>spf13/cobra</code>, <code>gopkg.in/yaml.v3</code></td>
+            </tr>
+            <tr>
+              <td>Errors &amp; state</td>
+              <td>No <code>panic()</code> outside startup; wrap errors with <code>fmt.Errorf("context: %w", err)</code>; no package-level mutable state</td>
+            </tr>
+            <tr>
+              <td>Tests</td>
+              <td>Standard library <code>testing</code>, table-driven, deterministic and hermetic</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="code-block" style="margin-top: 1.5rem;">
+        <button class="copy-code-btn" title="Copy code">copy</button>
+        <pre><code><span class="prompt">$</span> make help                  <span class="comment"># Show available make targets</span>
+<span class="prompt">$</span> make test                  <span class="comment"># go vet + go test across all packages</span>
+<span class="prompt">$</span> make validate-spec         <span class="comment"># Validate spec/*.yaml against embedded JSON schemas</span>
+<span class="prompt">$</span> make check                 <span class="comment"># Full test suite + spec validations</span>
+<span class="prompt">$</span> make install                <span class="comment"># Install voxi (binary, deps, services, man page) to ~/go/bin</span>
+<span class="prompt">$</span> make man                   <span class="comment"># Generate roff man page to voxi.1</span>
+<span class="prompt">$</span> make website-manual        <span class="comment"># Regenerate website/man/ from the live Cobra tree</span></code></pre>
+      </div>
+    </section>
+
+    <!-- Dev Samples & Accuracy Canaries -->
+    <section id="samples" class="wrap section-wrap" aria-label="Dev Samples & Accuracy Canaries">
+      <div class="section-heading">
+        <h2>Dev Samples &amp; Accuracy Canaries</h2>
+        <p class="section-desc">
+          Accuracy work on voxi's ASR defaults is backed by real recorded speech, not just
+          synthesized fixtures. This is a private, contributor-only capability &mdash; it plays
+          no part in everyday dictation.
+        </p>
+      </div>
+
+      <div class="code-block">
+        <button class="copy-code-btn" title="Copy code">copy</button>
+        <pre><code><span class="prompt">$</span> voxi feedback sample record &lt;name&gt;   <span class="comment"># Record one utterance + corrected transcript</span>
+<span class="prompt">$</span> voxi feedback sample list             <span class="comment"># List recorded dev samples</span>
+<span class="prompt">$</span> voxi feedback sample play &lt;name&gt;      <span class="comment"># Replay a recorded sample</span>
+<span class="prompt">$</span> voxi feedback sample promote &lt;name&gt;   <span class="comment"># Promote a noise-only sample into the public corpus</span>
+<span class="prompt">$</span> voxi config import &lt;dir&gt; --only samples  <span class="comment"># Bring a sample set over from another machine</span></code></pre>
+      </div>
+
+      <p class="section-desc" style="margin-top: 1.5rem; text-align: left;">
+        Each sample pairs a WAV recording with a manually corrected ground-truth transcript,
+        stored privately under <code>~/.config/voxi/samples/</code> &mdash; never swept into any
+        sync or backup tooling, since it holds real recorded speech. A sample confirmed to
+        contain no real speech (keyboard clacks, mouse or ambient noise) can be deliberately
+        promoted into <code>testdata/noise-samples/</code>, the repository's public, git-tracked
+        corpus used for noise-vs-speech classification fixtures.
+      </p>
+    </section>
+  </main>
+
+  <footer class="site-foot">
+    <div class="wrap foot-row">
+      <div class="foot-brand">
+        <img class="brand-icon" src="../logo.svg" alt="voxi logo" width="20" height="20">
+        <span>voxi &mdash; &copy; <span id="year"></span> Uwe Jugel &lt;uwe@ubunatic.com&gt; &middot; AGPL-3.0-or-later</span>
+      </div>
+      <div class="foot-links">
+        <a href="https://codeberg.org/ubunatic/voxi" rel="noopener" target="_blank">Codeberg Repository</a>
+        <a href="../index.html#top">Back to voxi ↑</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

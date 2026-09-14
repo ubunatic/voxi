@@ -23,6 +23,8 @@
         <a href="#prereqs">Prerequisites</a>
         <a href="#monitor">Monitor</a>
         <a href="#manual">Manual &amp; CLI</a>
+        <a href="man/index.html">Full Reference</a>
+        <a href="dev/index.html">Developers</a>
         <a class="btn btn-outline" href="https://codeberg.org/ubunatic/voxi" rel="noopener" target="_blank">Codeberg</a>
       </div>
     </nav>
@@ -233,39 +235,6 @@
       </p>
     </section>
 
-    <!-- Spec-Driven Architecture -->
-    <section id="spec" class="wrap section-wrap" aria-label="Spec-Driven Architecture">
-      <div class="section-heading">
-        <h2>Spec-Driven Architecture</h2>
-        <p class="section-desc">
-          Spec files are the single source of truth &mdash; application code must not duplicate
-          or shadow spec values. Every YAML file is embedded directly into the binary and
-          validated against a companion JSON Schema.
-        </p>
-      </div>
-
-      <div class="spec-tree-wrap">
-        <div class="code-block">
-          <pre><code>spec/
-├── actions.yaml  <span class="comment"># voxi monitor hotkeys &amp; display labels</span>
-├── models.yaml   <span class="comment"># ASR model registry &amp; hallucination filters</span>
-├── monitor.yaml  <span class="comment"># redraw rate &amp; live mic-level ballistics</span>
-└── schemas
-    ├── actions.schema.json
-    ├── models.schema.json
-    └── monitor.schema.json</code></pre>
-        </div>
-        <p class="section-desc" style="margin-top: 1.5rem; text-align: left;">
-          <code>spec/models.yaml</code> names every ASR model voxi can drive and its per-model
-          hallucination stop-words. <code>spec/actions.yaml</code> is the single source for
-          <code>voxi monitor</code>'s hotkeys &mdash; box titles and footer badges resolve their
-          key letters from it, so they can never drift out of sync with the actual dispatcher.
-          <code>spec/monitor.yaml</code> tunes the live mic-loudness meter (paint FPS, capture
-          rate, attack/decay ballistics) without touching Go code.
-        </p>
-      </div>
-    </section>
-
     <section class="wrap section-wrap" aria-labelledby="why-title">
       <div class="section-heading">
         <h2 id="why-title">Why Cohere Transcribe?</h2>
@@ -295,9 +264,9 @@
             </p>
             <div class="code-block">
               <button class="copy-code-btn" title="Copy code">copy</button>
-              <pre><code><span class="prompt">$</span> curl -fsSL https://codeberg.org/ubunatic/voxi/raw/branch/main/scripts/install.sh | bash
+              <pre><code><span class="prompt">$</span> curl -fsSL https://ubunatic.com/voxi/install.sh | bash
 <span class="comment"># (Optional) Include privileged physical modifier gating setup</span>
-<span class="prompt">$</span> curl -fsSL https://codeberg.org/ubunatic/voxi/raw/branch/main/scripts/install.sh | bash -s -- --modifierd</code></pre>
+<span class="prompt">$</span> curl -fsSL https://ubunatic.com/voxi/install.sh | bash -s -- --modifierd</code></pre>
             </div>
             <p style="margin-top: 1rem;">
               Or install from source with Go, then run the same user setup:
@@ -428,7 +397,12 @@
     <section id="manual" class="wrap section-wrap" aria-label="voxi manual page">
       <div class="section-heading">
         <h2>Command-Line Reference</h2>
-        <p class="section-desc">Complete manual page specification and CLI parameters.</p>
+        <p class="section-desc">
+          A curated tour of the everyday commands. For every command and flag, generated
+          straight from the CLI itself, see the <a href="man/index.html">full command
+          reference</a> (also available offline via <code>man voxi</code> after <code>voxi
+          install</code>, or <code>voxi man --install</code>).
+        </p>
       </div>
 
       <article class="manpage">
@@ -454,7 +428,9 @@
 <b>voxi shortcut</b> {setup|remove}
 <b>voxi feedback</b> {stop-word|silence-artifact|vocabulary|replacement} {add|remove|list} ...
 <b>voxi config</b> {get|set} type-delay-ms [<i>MS</i>]
-<b>voxi daemon modifier-service</b> [--state-file <i>path</i>] [--interval <i>dur</i>]</pre>
+<b>voxi config import</b> <i>DIR</i> [--overwrite] [--only <i>areas</i>]
+<b>voxi daemon modifier-service</b> [--state-file <i>path</i>] [--interval <i>dur</i>]
+<b>voxi man</b> [--install] [--dir <i>path</i>]</pre>
 
         <h3 class="mp-sh">Commands</h3>
         <dl class="mp-opts">
@@ -503,8 +479,14 @@
           <dt>config {get|set} type-delay-ms [<i>MS</i>]</dt>
           <dd>Read or change typing speed in voxtype configuration to adjust keystroke pacing for legacy or latency-sensitive applications.</dd>
 
+          <dt>config import <i>DIR</i> [--overwrite] [--only <i>areas</i>]</dt>
+          <dd>Merge stop-words, replacements, and vocabulary from another machine's local Voxi state (a previously-copied <code>~/.config/voxi</code>-shaped directory, e.g. via <code>rsync</code>) into this one. Colliding entries are skipped unless <code>--overwrite</code> is given; <code>--only</code> restricts the merge to specific areas.</dd>
+
           <dt>daemon modifier-service [flags]</dt>
           <dd>Run the evdev modifier monitoring service directly (normally managed via <b>voxi-modifierd</b> system service).</dd>
+
+          <dt>man [--install] [--dir <i>path</i>]</dt>
+          <dd>Print the generated roff man page for every command to stdout, or install the full man tree with <code>--install</code> (into <code>~/.local/share/man/man1</code>, or <code>/usr/local/share/man/man1</code> as root). Run automatically by <code>make install</code> and the one-line installer script; run manually to refresh pages after an upgrade.</dd>
         </dl>
 
         <h3 class="mp-sh">Eager Options</h3>
@@ -547,7 +529,7 @@
         </p>
 
         <div class="mp-bar">
-          <span>voxi 0.1.4</span>
+          <span>voxi 0.1.8</span>
           <span>Linux / Wayland Engine</span>
           <span>VOXI(1)</span>
         </div>
@@ -563,6 +545,8 @@
       </div>
       <div class="foot-links">
         <a href="https://codeberg.org/ubunatic/voxi" rel="noopener" target="_blank">Codeberg Repository</a>
+        <a href="man/index.html">Full Command Reference</a>
+        <a href="dev/index.html">Developer Docs</a>
         <a href="#top">Back to top ↑</a>
       </div>
     </div>

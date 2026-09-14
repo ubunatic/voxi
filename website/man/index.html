@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>voxi &mdash; Full Command Reference</title>
+  <meta name="description" content="Generated, always-in-sync voxi command reference, produced directly from the CLI's own Cobra command tree.">
+
+  <link rel="icon" type="image/svg+xml" href="../logo.svg">
+  <link rel="stylesheet" href="../index.css">
+  <script src="../index.js" defer></script>
+  <style>
+    .manual-toc ul { list-style: none; margin: 0; padding-left: 1.1rem; }
+    .manual-toc > ul { padding-left: 0; }
+    .manual-toc a { font-family: var(--mono); font-size: 0.86rem; }
+    .manual-entry { margin-bottom: 1.75rem; }
+  </style>
+</head>
+<body>
+  <header class="site-head">
+    <nav class="wrap nav" aria-label="Main navigation">
+      <a class="brand" href="../index.html#top">
+        <img class="brand-icon" src="../logo.svg" alt="voxi logo" width="28" height="28">
+        <span>voxi</span>
+      </a>
+      <div class="nav-links">
+        <a href="../index.html#top">Home</a>
+        <a href="../dev/index.html">Developers</a>
+        <a class="btn btn-outline" href="https://codeberg.org/ubunatic/voxi" rel="noopener" target="_blank">Codeberg</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="top">
+    <div class="wrap hero-shell">
+      <section class="hero-intro" aria-label="voxi full command reference overview">
+        <h1><span class="name">voxi</span> full command reference.</h1>
+        <p class="lede">
+          Generated directly from voxi's own Cobra command tree (<code>voxi man --html</code>)
+          &mdash; the same source that produces <code>voxi man --install</code>'s roff pages, so
+          this page can't drift from the real CLI the way a hand-written summary can. For a
+          curated tour of the everyday commands, see the <a href="../index.html#manual">main
+          page's Command-Line Reference</a> instead.
+        </p>
+      </section>
+    </div>
+
+    <section class="wrap section-wrap" aria-label="Full command reference">
+      <nav class="manual-toc" aria-label="Command index">
+        <h2>Commands</h2>
+<ul><li><a href="#voxi"><code>voxi</code></a><ul><li><a href="#voxi-agent"><code>voxi agent</code></a><ul><li><a href="#voxi-agent-record"><code>voxi agent record</code></a></li></ul><ul><li><a href="#voxi-agent-set-mode"><code>voxi agent set-mode</code></a></li></ul><ul><li><a href="#voxi-agent-status"><code>voxi agent status</code></a></li></ul></li></ul><ul><li><a href="#voxi-bench"><code>voxi bench</code></a></li></ul><ul><li><a href="#voxi-chunks"><code>voxi chunks</code></a><ul><li><a href="#voxi-chunks-list"><code>voxi chunks list</code></a></li></ul><ul><li><a href="#voxi-chunks-play"><code>voxi chunks play</code></a></li></ul><ul><li><a href="#voxi-chunks-show"><code>voxi chunks show</code></a></li></ul></li></ul><ul><li><a href="#voxi-completion"><code>voxi completion</code></a><ul><li><a href="#voxi-completion-bash"><code>voxi completion bash</code></a></li></ul><ul><li><a href="#voxi-completion-fish"><code>voxi completion fish</code></a></li></ul><ul><li><a href="#voxi-completion-powershell"><code>voxi completion powershell</code></a></li></ul><ul><li><a href="#voxi-completion-zsh"><code>voxi completion zsh</code></a></li></ul></li></ul><ul><li><a href="#voxi-config"><code>voxi config</code></a><ul><li><a href="#voxi-config-get"><code>voxi config get</code></a></li></ul><ul><li><a href="#voxi-config-import"><code>voxi config import</code></a></li></ul><ul><li><a href="#voxi-config-set"><code>voxi config set</code></a></li></ul></li></ul><ul><li><a href="#voxi-daemon"><code>voxi daemon</code></a><ul><li><a href="#voxi-daemon-modifier-service"><code>voxi daemon modifier-service</code></a></li></ul></li></ul><ul><li><a href="#voxi-eager"><code>voxi eager</code></a></li></ul><ul><li><a href="#voxi-feedback"><code>voxi feedback</code></a><ul><li><a href="#voxi-feedback-replacement"><code>voxi feedback replacement</code></a><ul><li><a href="#voxi-feedback-replacement-add"><code>voxi feedback replacement add</code></a></li></ul><ul><li><a href="#voxi-feedback-replacement-cleanup"><code>voxi feedback replacement cleanup</code></a></li></ul><ul><li><a href="#voxi-feedback-replacement-list"><code>voxi feedback replacement list</code></a></li></ul><ul><li><a href="#voxi-feedback-replacement-remove"><code>voxi feedback replacement remove</code></a></li></ul></li></ul><ul><li><a href="#voxi-feedback-sample"><code>voxi feedback sample</code></a><ul><li><a href="#voxi-feedback-sample-import"><code>voxi feedback sample import</code></a></li></ul><ul><li><a href="#voxi-feedback-sample-list"><code>voxi feedback sample list</code></a></li></ul><ul><li><a href="#voxi-feedback-sample-play"><code>voxi feedback sample play</code></a></li></ul><ul><li><a href="#voxi-feedback-sample-promote"><code>voxi feedback sample promote</code></a></li></ul><ul><li><a href="#voxi-feedback-sample-record"><code>voxi feedback sample record</code></a></li></ul><ul><li><a href="#voxi-feedback-sample-remove"><code>voxi feedback sample remove</code></a></li></ul><ul><li><a href="#voxi-feedback-sample-save-chunk"><code>voxi feedback sample save-chunk</code></a></li></ul><ul><li><a href="#voxi-feedback-sample-save-last"><code>voxi feedback sample save-last</code></a></li></ul></li></ul><ul><li><a href="#voxi-feedback-silence-artifact"><code>voxi feedback silence-artifact</code></a><ul><li><a href="#voxi-feedback-silence-artifact-add"><code>voxi feedback silence-artifact add</code></a></li></ul><ul><li><a href="#voxi-feedback-silence-artifact-list"><code>voxi feedback silence-artifact list</code></a></li></ul><ul><li><a href="#voxi-feedback-silence-artifact-remove"><code>voxi feedback silence-artifact remove</code></a></li></ul></li></ul><ul><li><a href="#voxi-feedback-status"><code>voxi feedback status</code></a></li></ul><ul><li><a href="#voxi-feedback-stop-word"><code>voxi feedback stop-word</code></a><ul><li><a href="#voxi-feedback-stop-word-add"><code>voxi feedback stop-word add</code></a></li></ul><ul><li><a href="#voxi-feedback-stop-word-disable"><code>voxi feedback stop-word disable</code></a></li></ul><ul><li><a href="#voxi-feedback-stop-word-enable"><code>voxi feedback stop-word enable</code></a></li></ul><ul><li><a href="#voxi-feedback-stop-word-list"><code>voxi feedback stop-word list</code></a></li></ul><ul><li><a href="#voxi-feedback-stop-word-remove"><code>voxi feedback stop-word remove</code></a></li></ul></li></ul><ul><li><a href="#voxi-feedback-vocabulary"><code>voxi feedback vocabulary</code></a><ul><li><a href="#voxi-feedback-vocabulary-add"><code>voxi feedback vocabulary add</code></a></li></ul><ul><li><a href="#voxi-feedback-vocabulary-list"><code>voxi feedback vocabulary list</code></a></li></ul><ul><li><a href="#voxi-feedback-vocabulary-remove"><code>voxi feedback vocabulary remove</code></a></li></ul></li></ul></li></ul><ul><li><a href="#voxi-history"><code>voxi history</code></a><ul><li><a href="#voxi-history-clear"><code>voxi history clear</code></a></li></ul><ul><li><a href="#voxi-history-copy"><code>voxi history copy</code></a></li></ul><ul><li><a href="#voxi-history-list"><code>voxi history list</code></a></li></ul><ul><li><a href="#voxi-history-record"><code>voxi history record</code></a></li></ul><ul><li><a href="#voxi-history-retype"><code>voxi history retype</code></a></li></ul></li></ul><ul><li><a href="#voxi-install"><code>voxi install</code></a></li></ul><ul><li><a href="#voxi-man"><code>voxi man</code></a></li></ul><ul><li><a href="#voxi-mode"><code>voxi mode</code></a></li></ul><ul><li><a href="#voxi-monitor"><code>voxi monitor</code></a></li></ul><ul><li><a href="#voxi-record"><code>voxi record</code></a><ul><li><a href="#voxi-record-start"><code>voxi record start</code></a></li></ul><ul><li><a href="#voxi-record-status"><code>voxi record status</code></a></li></ul><ul><li><a href="#voxi-record-stop"><code>voxi record stop</code></a></li></ul><ul><li><a href="#voxi-record-toggle"><code>voxi record toggle</code></a></li></ul></li></ul><ul><li><a href="#voxi-settings"><code>voxi settings</code></a><ul><li><a href="#voxi-settings-test"><code>voxi settings test</code></a></li></ul></li></ul><ul><li><a href="#voxi-shortcut"><code>voxi shortcut</code></a><ul><li><a href="#voxi-shortcut-remove"><code>voxi shortcut remove</code></a></li></ul><ul><li><a href="#voxi-shortcut-setup"><code>voxi shortcut setup</code></a></li></ul></li></ul><ul><li><a href="#voxi-telemetry"><code>voxi telemetry</code></a><ul><li><a href="#voxi-telemetry-query"><code>voxi telemetry query</code></a></li></ul><ul><li><a href="#voxi-telemetry-stats"><code>voxi telemetry stats</code></a></li></ul></li></ul></li></ul>      </nav>
+      <div class="manual-entries">
+<article class="manpage manual-entry" id="voxi">
+  <div class="mp-bar"><span>VOXI</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi</code></h3>
+  <p class="mp-body">Standalone Linux voice input, continuous eager streaming, and desktop typing engine</p>
+  <p class="mp-body">Voxi is a high-performance voice input and typing engine for Linux/Wayland.<br>It provides continuous eager sentence streaming with local Cohere Transcribe by default,<br>modifier key gating daemon for hotkey safety, synthetic typing injection, and a btop-style monitor.</p>
+</article>
+<article class="manpage manual-entry" id="voxi-agent">
+  <div class="mp-bar"><span>VOXI-AGENT</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi agent</code></h3>
+  <p class="mp-body">Run or control the unified Voxi voice-input agent</p>
+  <dl class="mp-opts">
+  <dt><code>--daemon</code></dt><dd>run the agent daemon and control socket</dd>
+  <dt><code>--socket</code></dt><dd>Unix socket path (default: XDG runtime dir)</dd>
+  <dt><code>--state</code></dt><dd>persistent mode-state path</dd>
+  </dl>
+</article>
+<article class="manpage manual-entry" id="voxi-agent-record">
+  <div class="mp-bar"><span>VOXI-AGENT-RECORD</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi agent record [toggle|start|stop]</code></h3>
+  <p class="mp-body">Control recording through the agent</p>
+</article>
+<article class="manpage manual-entry" id="voxi-agent-set-mode">
+  <div class="mp-bar"><span>VOXI-AGENT-SET-MODE</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi agent set-mode [batch|streaming|eager]</code></h3>
+  <p class="mp-body">Set the agent&#39;s selected voice-input backend</p>
+</article>
+<article class="manpage manual-entry" id="voxi-agent-status">
+  <div class="mp-bar"><span>VOXI-AGENT-STATUS</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi agent status</code></h3>
+  <p class="mp-body">Print the agent&#39;s selected mode and recording state</p>
+</article>
+<article class="manpage manual-entry" id="voxi-bench">
+  <div class="mp-bar"><span>VOXI-BENCH</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi bench [flags]</code></h3>
+  <p class="mp-body">Benchmark CPU vs GPU transcription speed across configured Whisper models</p>
+  <p class="mp-body">Transcribes one audio clip through every whisper-engine model in spec/models.yaml<br>(driven via voxtype) on each requested backend, reporting the real-time factor (RTF)<br>and speedup for each model x backend pair. Non-whisper engines (e.g. cohere-transcribe)<br>are reported as skipped rather than benched. By default it uses a fixed reference clip<br>downloaded on demand into the user cache dir (never committed to the repo); pass<br>--record for a live microphone clip or --file for a local WAV.</p>
+  <dl class="mp-opts">
+  <dt><code>--backends</code></dt><dd>comma-separated backends to bench: cpu, gpu (default: gpu,cpu) (default: <code>[gpu,cpu]</code>)</dd>
+  <dt><code>--duration</code></dt><dd>seconds of microphone audio to record when --record is set (default: <code>8</code>)</dd>
+  <dt><code>--file</code></dt><dd>use this 16kHz mono WAV instead of the reference clip or recording</dd>
+  <dt><code>--json</code></dt><dd>write the full bench report as JSON to this path</dd>
+  <dt><code>--models</code></dt><dd>comma-separated model names to bench (default: every whisper-engine model in spec/models.yaml; non-whisper models are reported as skipped)</dd>
+  <dt><code>--record</code></dt><dd>record live microphone audio instead of using the downloaded reference clip</dd>
+  <dt><code>--threads</code></dt><dd>CPU threads passed to voxtype (default: <code>6</code>)</dd>
+  </dl>
+</article>
+<article class="manpage manual-entry" id="voxi-chunks">
+  <div class="mp-bar"><span>VOXI-CHUNKS</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi chunks</code></h3>
+  <p class="mp-body">Inspect, play, and debug recent recorded audio chunks and transcription metadata</p>
+</article>
+<article class="manpage manual-entry" id="voxi-chunks-list">
+  <div class="mp-bar"><span>VOXI-CHUNKS-LIST</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi chunks list [flags]</code></h3>
+  <p class="mp-body">List recent recorded chunks and their transcription outcomes</p>
+  <dl class="mp-opts">
+  <dt><code>--color</code></dt><dd>colorize the LEVEL sparkline by loudness: auto, always, or never (default: <code>auto</code>)</dd>
+  <dt><code>--format</code></dt><dd>output format (text or json) (default: <code>text</code>)</dd>
+  <dt><code>-r, --reverse</code></dt><dd>list newest chunks first</dd>
+  </dl>
+</article>
+<article class="manpage manual-entry" id="voxi-chunks-play">
+  <div class="mp-bar"><span>VOXI-CHUNKS-PLAY</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi chunks play [INDEX|last]</code></h3>
+  <p class="mp-body">Play audio of a recorded chunk (defaults to last)</p>
+</article>
+<article class="manpage manual-entry" id="voxi-chunks-show">
+  <div class="mp-bar"><span>VOXI-CHUNKS-SHOW</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi chunks show [INDEX|last] [flags]</code></h3>
+  <p class="mp-body">Show detailed diagnostics for a chunk (defaults to last)</p>
+  <dl class="mp-opts">
+  <dt><code>--format</code></dt><dd>output format (json or text) (default: <code>json</code>)</dd>
+  </dl>
+</article>
+<article class="manpage manual-entry" id="voxi-completion">
+  <div class="mp-bar"><span>VOXI-COMPLETION</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi completion</code></h3>
+  <p class="mp-body">Generate the autocompletion script for the specified shell</p>
+  <p class="mp-body">Generate the autocompletion script for voxi for the specified shell.<br>See each sub-command&#39;s help for details on how to use the generated script.<br></p>
+</article>
+<article class="manpage manual-entry" id="voxi-completion-bash">
+  <div class="mp-bar"><span>VOXI-COMPLETION-BASH</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi completion bash</code></h3>
+  <p class="mp-body">Generate the autocompletion script for bash</p>
+  <p class="mp-body">Generate the autocompletion script for the bash shell.<br><br>This script depends on the &#39;bash-completion&#39; package.<br>If it is not installed already, you can install it via your OS&#39;s package manager.<br><br>To load completions in your current shell session:<br><br>	source &lt;(voxi completion bash)<br><br>To load completions for every new session, execute once:<br><br>#### Linux:<br><br>	voxi completion bash &gt; /etc/bash_completion.d/voxi<br><br>#### macOS:<br><br>	voxi completion bash &gt; $(brew --prefix)/etc/bash_completion.d/voxi<br><br>You will need to start a new shell for this setup to take effect.<br></p>
+  <dl class="mp-opts">
+  <dt><code>--no-descriptions</code></dt><dd>disable completion descriptions</dd>
+  </dl>
+</article>
+<article class="manpage manual-entry" id="voxi-completion-fish">
+  <div class="mp-bar"><span>VOXI-COMPLETION-FISH</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi completion fish [flags]</code></h3>
+  <p class="mp-body">Generate the autocompletion script for fish</p>
+  <p class="mp-body">Generate the autocompletion script for the fish shell.<br><br>To load completions in your current shell session:<br><br>	voxi completion fish | source<br><br>To load completions for every new session, execute once:<br><br>	voxi completion fish &gt; ~/.config/fish/completions/voxi.fish<br><br>You will need to start a new shell for this setup to take effect.<br></p>
+  <dl class="mp-opts">
+  <dt><code>--no-descriptions</code></dt><dd>disable completion descriptions</dd>
+  </dl>
+</article>
+<article class="manpage manual-entry" id="voxi-completion-powershell">
+  <div class="mp-bar"><span>VOXI-COMPLETION-POWERSHELL</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi completion powershell [flags]</code></h3>
+  <p class="mp-body">Generate the autocompletion script for powershell</p>
+  <p class="mp-body">Generate the autocompletion script for powershell.<br><br>To load completions in your current shell session:<br><br>	voxi completion powershell | Out-String | Invoke-Expression<br><br>To load completions for every new session, add the output of the above command<br>to your powershell profile.<br></p>
+  <dl class="mp-opts">
+  <dt><code>--no-descriptions</code></dt><dd>disable completion descriptions</dd>
+  </dl>
+</article>
+<article class="manpage manual-entry" id="voxi-completion-zsh">
+  <div class="mp-bar"><span>VOXI-COMPLETION-ZSH</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi completion zsh [flags]</code></h3>
+  <p class="mp-body">Generate the autocompletion script for zsh</p>
+  <p class="mp-body">Generate the autocompletion script for the zsh shell.<br><br>If shell completion is not already enabled in your environment you will need<br>to enable it.  You can execute the following once:<br><br>	echo &#34;autoload -U compinit; compinit&#34; &gt;&gt; ~/.zshrc<br><br>To load completions in your current shell session:<br><br>	source &lt;(voxi completion zsh)<br><br>To load completions for every new session, execute once:<br><br>#### Linux:<br><br>	voxi completion zsh &gt; &#34;${fpath[1]}/_voxi&#34;<br><br>#### macOS:<br><br>	voxi completion zsh &gt; $(brew --prefix)/share/zsh/site-functions/_voxi<br><br>You will need to start a new shell for this setup to take effect.<br></p>
+  <dl class="mp-opts">
+  <dt><code>--no-descriptions</code></dt><dd>disable completion descriptions</dd>
+  </dl>
+</article>
+<article class="manpage manual-entry" id="voxi-config">
+  <div class="mp-bar"><span>VOXI-CONFIG</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi config</code></h3>
+  <p class="mp-body">Read or change select voxtype config.toml fields</p>
+</article>
+<article class="manpage manual-entry" id="voxi-config-get">
+  <div class="mp-bar"><span>VOXI-CONFIG-GET</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi config get type-delay-ms</code></h3>
+  <p class="mp-body">Print current type_delay_ms value</p>
+</article>
+<article class="manpage manual-entry" id="voxi-config-import">
+  <div class="mp-bar"><span>VOXI-CONFIG-IMPORT</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi config import DIR [flags]</code></h3>
+  <p class="mp-body">Merge stop-words, replacements, vocabulary, and dev samples from another machine&#39;s local Voxi state</p>
+  <p class="mp-body">Merge stop-words.json, replacements.json, vocabulary.txt, and samples/ from DIR --<br>a local, previously-copied ~/.config/voxi-shaped directory -- into this machine&#39;s<br>local Voxi state. DIR must already be a local directory (e.g. copied over with<br>scp/rsync/USB beforehand) -- import performs no transfer of its own.<br><br>config.yaml and env are intentionally not imported: they hold machine-specific<br>settings (paths, device IDs) that don&#39;t safely carry over between machines.</p>
+  <dl class="mp-opts">
+  <dt><code>--only</code></dt><dd>import only these areas: stop-words,replacements,vocabulary,samples (default: all found in DIR)</dd>
+  <dt><code>--overwrite</code></dt><dd>replace a colliding replacement entry instead of skipping it (stop-words, vocabulary, and samples are always additive/skip-on-collision)</dd>
+  </dl>
+</article>
+<article class="manpage manual-entry" id="voxi-config-set">
+  <div class="mp-bar"><span>VOXI-CONFIG-SET</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi config set type-delay-ms MS</code></h3>
+  <p class="mp-body">Set type_delay_ms, preserving comments and other settings</p>
+</article>
+<article class="manpage manual-entry" id="voxi-daemon">
+  <div class="mp-bar"><span>VOXI-DAEMON</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi daemon</code></h3>
+  <p class="mp-body">Run background services managed by voxi</p>
+</article>
+<article class="manpage manual-entry" id="voxi-daemon-modifier-service">
+  <div class="mp-bar"><span>VOXI-DAEMON-MODIFIER-SERVICE</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi daemon modifier-service [flags]</code></h3>
+  <p class="mp-body">Dedicated evdev modifier key state monitoring daemon</p>
+  <p class="mp-body">Monitors physical modifier keys (Ctrl, Alt, Super, Shift) across all /dev/input/event* keyboards,<br>and exports an atomic 1-byte bitmask state to a world-readable file (/run/voxi/modifiers).<br>Never captures or records non-modifier keycodes, preserving strict privacy.</p>
+  <dl class="mp-opts">
+  <dt><code>--interval</code></dt><dd>polling and update interval (default: 10ms) (default: <code>10ms</code>)</dd>
+  <dt><code>--state-file</code></dt><dd>path to world-readable modifier state file (default: /run/voxi/modifiers) (default: <code>/run/voxi/modifiers</code>)</dd>
+  </dl>
+</article>
+<article class="manpage manual-entry" id="voxi-eager">
+  <div class="mp-bar"><span>VOXI-EAGER</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi eager [flags]</code></h3>
+  <p class="mp-body">Continuous eager sentence streaming dictation into focused window</p>
+  <p class="mp-body">Continuously captures audio from the microphone with a circular pre-roll buffer.<br>Segments speech on natural conversational pauses (silence &gt; 800ms) or rolling windows,<br>transcribes completed phrases immediately with the selected model&#39;s engine (Cohere<br>Transcribe via crispasr by default, or Whisper via voxtype for an explicit --model),<br>and types finalized sentences directly into the active application via dotool with zero<br>dropped words across pauses. crispasr is required for the default engine; voxtype is only<br>required when an explicit Whisper --model is selected.</p>
+  <dl class="mp-opts">
+  <dt><code>--daemon</code></dt><dd>run as background systemd daemon listening for toggle control</dd>
+  <dt><code>--history</code></dt><dd>record transcribed utterances into local dictation history (default: <code>true</code>)</dd>
+  <dt><code>--max-window</code></dt><dd>maximum window length in ms before forcing a phrase chunk (default: 8000) (default: <code>8000</code>)</dd>
+  <dt><code>--min-speech</code></dt><dd>minimum speech duration in ms to ignore noise (default: 200) (default: <code>200</code>)</dd>
+  <dt><code>--model</code></dt><dd>model name, see spec/models.yaml (default: cohere-transcribe-03-2026, engine cohere-transcribe via crispasr; explicit whisper-engine models need voxtype) (default: <code>cohere-transcribe-03-2026</code>)</dd>
+  <dt><code>--pre-roll</code></dt><dd>pre-speech circular buffer duration in ms to preserve starting phonemes (default: 500) (default: <code>500</code>)</dd>
+  <dt><code>--silence</code></dt><dd>silence duration in ms to finalize an utterance chunk (default: 800) (default: <code>800</code>)</dd>
+  <dt><code>--speech-context</code></dt><dd>bounded local vocabulary hints for Whisper small.en (default: on; ignored by default Cohere; use --speech-context=false to disable) (default: <code>true</code>)</dd>
+  <dt><code>--threshold</code></dt><dd>audio RMS energy threshold to trigger speech detection (default: 150) (default: <code>150</code>)</dd>
+  <dt><code>--type</code></dt><dd>type transcribed sentences directly into the focused window via dotool (default: <code>true</code>)</dd>
+  <dt><code>--vocabulary</code></dt><dd>additional comma-separated speech-context terms (requires --speech-context)</dd>
+  </dl>
+</article>
+<article class="manpage manual-entry" id="voxi-feedback">
+  <div class="mp-bar"><span>VOXI-FEEDBACK</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi feedback</code></h3>
+  <p class="mp-body">Manage local dictation feedback</p>
+</article>
+<article class="manpage manual-entry" id="voxi-feedback-replacement">
+  <div class="mp-bar"><span>VOXI-FEEDBACK-REPLACEMENT</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi feedback replacement</code></h3>
+  <p class="mp-body">Manage exact Cohere transcript corrections</p>
+</article>
+<article class="manpage manual-entry" id="voxi-feedback-replacement-add">
+  <div class="mp-bar"><span>VOXI-FEEDBACK-REPLACEMENT-ADD</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi feedback replacement add HEARD WRITTEN [flags]</code></h3>
+  <p class="mp-body">Add a heard-form to written-form mapping, case-insensitive and case-adaptive</p>
+  <dl class="mp-opts">
+  <dt><code>--fixed-case</code></dt><dd>always write WRITTEN exactly as given, regardless of how HEARD was cased (use for domains and the like)</dd>
+  </dl>
+</article>
+<article class="manpage manual-entry" id="voxi-feedback-replacement-cleanup">
+  <div class="mp-bar"><span>VOXI-FEEDBACK-REPLACEMENT-CLEANUP</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi feedback replacement cleanup [flags]</code></h3>
+  <p class="mp-body">Remove case-variant duplicates now redundant under case-insensitive matching</p>
+  <dl class="mp-opts">
+  <dt><code>--dry-run</code></dt><dd>preview duplicates without writing changes</dd>
+  </dl>
+</article>
+<article class="manpage manual-entry" id="voxi-feedback-replacement-list">
+  <div class="mp-bar"><span>VOXI-FEEDBACK-REPLACEMENT-LIST</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi feedback replacement list</code></h3>
+  <p class="mp-body">List exact Cohere transcript corrections</p>
+</article>
+<article class="manpage manual-entry" id="voxi-feedback-replacement-remove">
+  <div class="mp-bar"><span>VOXI-FEEDBACK-REPLACEMENT-REMOVE</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi feedback replacement remove HEARD</code></h3>
+  <p class="mp-body">Remove an exact heard-form mapping</p>
+</article>
+<article class="manpage manual-entry" id="voxi-feedback-sample">
+  <div class="mp-bar"><span>VOXI-FEEDBACK-SAMPLE</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi feedback sample</code></h3>
+  <p class="mp-body">Manage private local dev/testing speech samples (not used by dictation)</p>
+</article>
+<article class="manpage manual-entry" id="voxi-feedback-sample-import">
+  <div class="mp-bar"><span>VOXI-FEEDBACK-SAMPLE-IMPORT</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi feedback sample import PATH [flags]</code></h3>
+  <p class="mp-body">Merge samples from another machine&#39;s local sample directory into this one</p>
+  <p class="mp-body">Merge every sample listed in PATH&#39;s corpus.tsv-compatible manifest into this<br>machine&#39;s private sample library, copying each referenced WAV. PATH must already<br>be a local directory (e.g. copied over with scp/rsync/USB beforehand) -- import<br>performs no transfer of its own.</p>
+  <dl class="mp-opts">
+  <dt><code>--overwrite</code></dt><dd>replace an existing local sample with the same name instead of skipping it</dd>
+  </dl>
+</article>
+<article class="manpage manual-entry" id="voxi-feedback-sample-list">
+  <div class="mp-bar"><span>VOXI-FEEDBACK-SAMPLE-LIST</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi feedback sample list [flags]</code></h3>
+  <p class="mp-body">List recorded dev samples (private, and public/promoted with --all)</p>
+  <dl class="mp-opts">
+  <dt><code>--all</code></dt><dd>include the public/promoted corpus (testdata/noise-samples) alongside the private one</dd>
+  <dt><code>--color</code></dt><dd>colorize the LEVEL sparkline by loudness in --full output: auto, always, or never (default: <code>auto</code>)</dd>
+  <dt><code>--full</code></dt><dd>show a richer, chunks-list-style table (timestamp, on-the-fly duration/RMS/sparkline, full transcript)</dd>
+  <dt><code>--process</code></dt><dd>also run each listed sample through the cohere-transcribe engine and show the fresh transcript next to the stored ground truth (requires --full)</dd>
+  <dt><code>--short</code></dt><dd>show the compact table (default; explicit form of the default)</dd>
+  </dl>
+</article>
+<article class="manpage manual-entry" id="voxi-feedback-sample-play">
+  <div class="mp-bar"><span>VOXI-FEEDBACK-SAMPLE-PLAY</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi feedback sample play NAME</code></h3>
+  <p class="mp-body">Replay a recorded dev sample</p>
+</article>
+<article class="manpage manual-entry" id="voxi-feedback-sample-promote">
+  <div class="mp-bar"><span>VOXI-FEEDBACK-SAMPLE-PROMOTE</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi feedback sample promote NAME [flags]</code></h3>
+  <p class="mp-body">Move a noise-only private sample into the public, git-tracked corpus (testdata/noise-samples)</p>
+  <p class="mp-body">Move a private dev sample into the public, git-tracked corpus at testdata/noise-samples,<br>FLAC-encoding its audio for git-lfs. Only promote samples confirmed to contain no real<br>speech (keyboard/mouse/ambient noise) -- this command does not and cannot verify that.</p>
+  <dl class="mp-opts">
+  <dt><code>--to</code></dt><dd>public samples directory to promote into (run from the repo root) (default: <code>testdata/noise-samples</code>)</dd>
+  </dl>
+</article>
+<article class="manpage manual-entry" id="voxi-feedback-sample-record">
+  <div class="mp-bar"><span>VOXI-FEEDBACK-SAMPLE-RECORD</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi feedback sample record NAME [flags]</code></h3>
+  <p class="mp-body">Record one microphone utterance and its manually corrected transcript</p>
+  <dl class="mp-opts">
+  <dt><code>--force</code></dt><dd>overwrite an existing sample without confirmation</dd>
+  </dl>
+</article>
+<article class="manpage manual-entry" id="voxi-feedback-sample-remove">
+  <div class="mp-bar"><span>VOXI-FEEDBACK-SAMPLE-REMOVE</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi feedback sample remove NAME</code></h3>
+  <p class="mp-body">Delete a recorded dev sample and its transcript</p>
+</article>
+<article class="manpage manual-entry" id="voxi-feedback-sample-save-chunk">
+  <div class="mp-bar"><span>VOXI-FEEDBACK-SAMPLE-SAVE-CHUNK</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi feedback sample save-chunk [INDEX] NAME [flags]</code></h3>
+  <p class="mp-body">Save a recorded audio chunk from the ring buffer into the sample library</p>
+  <dl class="mp-opts">
+  <dt><code>--force</code></dt><dd>overwrite an existing sample without confirmation</dd>
+  </dl>
+</article>
+<article class="manpage manual-entry" id="voxi-feedback-sample-save-last">
+  <div class="mp-bar"><span>VOXI-FEEDBACK-SAMPLE-SAVE-LAST</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi feedback sample save-last NAME [flags]</code></h3>
+  <p class="mp-body">Save the most recent recorded audio chunk into the sample library</p>
+  <dl class="mp-opts">
+  <dt><code>--force</code></dt><dd>overwrite an existing sample without confirmation</dd>
+  </dl>
+</article>
+<article class="manpage manual-entry" id="voxi-feedback-silence-artifact">
+  <div class="mp-bar"><span>VOXI-FEEDBACK-SILENCE-ARTIFACT</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi feedback silence-artifact</code></h3>
+  <p class="mp-body">Manage whole-utterance silence artifacts</p>
+</article>
+<article class="manpage manual-entry" id="voxi-feedback-silence-artifact-add">
+  <div class="mp-bar"><span>VOXI-FEEDBACK-SILENCE-ARTIFACT-ADD</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi feedback silence-artifact add PHRASE</code></h3>
+</article>
+<article class="manpage manual-entry" id="voxi-feedback-silence-artifact-list">
+  <div class="mp-bar"><span>VOXI-FEEDBACK-SILENCE-ARTIFACT-LIST</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi feedback silence-artifact list</code></h3>
+</article>
+<article class="manpage manual-entry" id="voxi-feedback-silence-artifact-remove">
+  <div class="mp-bar"><span>VOXI-FEEDBACK-SILENCE-ARTIFACT-REMOVE</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi feedback silence-artifact remove PHRASE</code></h3>
+</article>
+<article class="manpage manual-entry" id="voxi-feedback-status">
+  <div class="mp-bar"><span>VOXI-FEEDBACK-STATUS</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi feedback status</code></h3>
+  <p class="mp-body">Show a combined summary of local stop-word, silence-artifact, and vocabulary state</p>
+</article>
+<article class="manpage manual-entry" id="voxi-feedback-stop-word">
+  <div class="mp-bar"><span>VOXI-FEEDBACK-STOP-WORD</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi feedback stop-word</code></h3>
+  <p class="mp-body">Manage local ASR stop-word rules</p>
+</article>
+<article class="manpage manual-entry" id="voxi-feedback-stop-word-add">
+  <div class="mp-bar"><span>VOXI-FEEDBACK-STOP-WORD-ADD</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi feedback stop-word add PHRASE</code></h3>
+</article>
+<article class="manpage manual-entry" id="voxi-feedback-stop-word-disable">
+  <div class="mp-bar"><span>VOXI-FEEDBACK-STOP-WORD-DISABLE</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi feedback stop-word disable ID</code></h3>
+</article>
+<article class="manpage manual-entry" id="voxi-feedback-stop-word-enable">
+  <div class="mp-bar"><span>VOXI-FEEDBACK-STOP-WORD-ENABLE</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi feedback stop-word enable ID</code></h3>
+</article>
+<article class="manpage manual-entry" id="voxi-feedback-stop-word-list">
+  <div class="mp-bar"><span>VOXI-FEEDBACK-STOP-WORD-LIST</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi feedback stop-word list</code></h3>
+</article>
+<article class="manpage manual-entry" id="voxi-feedback-stop-word-remove">
+  <div class="mp-bar"><span>VOXI-FEEDBACK-STOP-WORD-REMOVE</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi feedback stop-word remove PHRASE</code></h3>
+</article>
+<article class="manpage manual-entry" id="voxi-feedback-vocabulary">
+  <div class="mp-bar"><span>VOXI-FEEDBACK-VOCABULARY</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi feedback vocabulary</code></h3>
+  <p class="mp-body">Manage persistent speech-context terms</p>
+</article>
+<article class="manpage manual-entry" id="voxi-feedback-vocabulary-add">
+  <div class="mp-bar"><span>VOXI-FEEDBACK-VOCABULARY-ADD</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi feedback vocabulary add TERM</code></h3>
+</article>
+<article class="manpage manual-entry" id="voxi-feedback-vocabulary-list">
+  <div class="mp-bar"><span>VOXI-FEEDBACK-VOCABULARY-LIST</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi feedback vocabulary list</code></h3>
+</article>
+<article class="manpage manual-entry" id="voxi-feedback-vocabulary-remove">
+  <div class="mp-bar"><span>VOXI-FEEDBACK-VOCABULARY-REMOVE</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi feedback vocabulary remove TERM</code></h3>
+</article>
+<article class="manpage manual-entry" id="voxi-history">
+  <div class="mp-bar"><span>VOXI-HISTORY</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi history</code></h3>
+  <p class="mp-body">Recent dictation history (local-only, treat as sensitive)</p>
+</article>
+<article class="manpage manual-entry" id="voxi-history-clear">
+  <div class="mp-bar"><span>VOXI-HISTORY-CLEAR</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi history clear</code></h3>
+  <p class="mp-body">Delete all recorded history</p>
+</article>
+<article class="manpage manual-entry" id="voxi-history-copy">
+  <div class="mp-bar"><span>VOXI-HISTORY-COPY</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi history copy ID</code></h3>
+  <p class="mp-body">Copy a history entry&#39;s text to the clipboard</p>
+</article>
+<article class="manpage manual-entry" id="voxi-history-list">
+  <div class="mp-bar"><span>VOXI-HISTORY-LIST</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi history list [flags]</code></h3>
+  <p class="mp-body">List recent transcripts, most recent first</p>
+  <dl class="mp-opts">
+  <dt><code>--format</code></dt><dd>output format (text or json) (default: <code>text</code>)</dd>
+  <dt><code>--limit</code></dt><dd>show at most N entries (default: all) (default: <code>0</code>)</dd>
+  </dl>
+</article>
+<article class="manpage manual-entry" id="voxi-history-record">
+  <div class="mp-bar"><span>VOXI-HISTORY-RECORD</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi history record</code></h3>
+  <p class="mp-body">Internal: record stdin as a history entry and echo it back unchanged</p>
+</article>
+<article class="manpage manual-entry" id="voxi-history-retype">
+  <div class="mp-bar"><span>VOXI-HISTORY-RETYPE</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi history retype ID</code></h3>
+  <p class="mp-body">Type a history entry&#39;s text into the currently focused window</p>
+</article>
+<article class="manpage manual-entry" id="voxi-install">
+  <div class="mp-bar"><span>VOXI-INSTALL</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi install [flags]</code></h3>
+  <p class="mp-body">Install Voxi for this user (optional: --modifierd needs sudo)</p>
+  <p class="mp-body">Install the CLI and systemd user services under your home directory, then enable and start voxi-agent.service.<br>This default path never invokes sudo or writes system locations.<br><br>Use --modifierd only to install the optional system-wide physical modifier daemon; it requires sudo and Linux systemd.</p>
+  <dl class="mp-opts">
+  <dt><code>--modifierd</code></dt><dd>also install the optional system-wide modifier daemon (requires sudo)</dd>
+  </dl>
+</article>
+<article class="manpage manual-entry" id="voxi-man">
+  <div class="mp-bar"><span>VOXI-MAN</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi man [flags]</code></h3>
+  <p class="mp-body">generate and print or install roff man pages</p>
+  <p class="mp-body">man generates standard roff/troff man pages from voxi&#39;s command tree.<br><br>Without flags, it prints the roff man page to stdout (e.g. voxi man | man -l -).<br>With --install, it writes .1 man pages to ~/.local/share/man/man1<br>(or /usr/local/share/man/man1 if root).<br>With --html, it prints one static HTML page covering every command to stdout.</p>
+  <dl class="mp-opts">
+  <dt><code>-d, --dir</code></dt><dd>custom target directory for man pages (implies --install)</dd>
+  <dt><code>-h, --help</code></dt><dd>help for man</dd>
+  <dt><code>--html</code></dt><dd>print one static HTML page covering every command to stdout</dd>
+  <dt><code>--install</code></dt><dd>install man pages into standard system or user man directory</dd>
+  </dl>
+</article>
+<article class="manpage manual-entry" id="voxi-mode">
+  <div class="mp-bar"><span>VOXI-MODE</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi mode [batch|streaming|eager]</code></h3>
+  <p class="mp-body">Show or switch the active voice-input mode</p>
+</article>
+<article class="manpage manual-entry" id="voxi-monitor">
+  <div class="mp-bar"><span>VOXI-MONITOR</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi monitor [flags]</code></h3>
+  <p class="mp-body">Monitor voice input daemon, GPU acceleration, memory, and subprocess resources</p>
+  <dl class="mp-opts">
+  <dt><code>-i, --interval</code></dt><dd>refresh interval in seconds for --watch (default: <code>1</code>)</dd>
+  <dt><code>-s, --sections</code></dt><dd>comma-separated sections: s(speed), h(hardware), t(transcript), d(daemons) (default: <code>all</code>)</dd>
+  <dt><code>-w, --watch</code></dt><dd>continuously refresh resource metrics</dd>
+  </dl>
+</article>
+<article class="manpage manual-entry" id="voxi-record">
+  <div class="mp-bar"><span>VOXI-RECORD</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi record</code></h3>
+  <p class="mp-body">Start, stop, or toggle active voice dictation recording</p>
+</article>
+<article class="manpage manual-entry" id="voxi-record-start">
+  <div class="mp-bar"><span>VOXI-RECORD-START</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi record start</code></h3>
+  <p class="mp-body">Start dictation recording</p>
+</article>
+<article class="manpage manual-entry" id="voxi-record-status">
+  <div class="mp-bar"><span>VOXI-RECORD-STATUS</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi record status</code></h3>
+  <p class="mp-body">Print recording status (idle or recording)</p>
+</article>
+<article class="manpage manual-entry" id="voxi-record-stop">
+  <div class="mp-bar"><span>VOXI-RECORD-STOP</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi record stop</code></h3>
+  <p class="mp-body">Stop dictation recording</p>
+</article>
+<article class="manpage manual-entry" id="voxi-record-toggle">
+  <div class="mp-bar"><span>VOXI-RECORD-TOGGLE</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi record toggle</code></h3>
+  <p class="mp-body">Toggle dictation recording on or off</p>
+</article>
+<article class="manpage manual-entry" id="voxi-settings">
+  <div class="mp-bar"><span>VOXI-SETTINGS</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi settings [flags]</code></h3>
+  <p class="mp-body">Interactive TUI for Voxi feature toggles and configuration</p>
+  <p class="mp-body">Interactive terminal menu to view and toggle core Voxi settings:<br>  • LLM Post-Processing Cleaner<br>  • Cleanup Model Selection<br>  • ASR Model Selection<br>  • Keystroke Delay (type_delay_ms)<br>  • Dictation History<br>  • Modifier Key Gating (voxi-modifierd)<br><br>Pass --test (or &#39;voxi settings test&#39;) to verify that all configured features<br>and host dependencies are working.</p>
+  <dl class="mp-opts">
+  <dt><code>-d, --dump</code></dt><dd>print current settings non-interactively</dd>
+  <dt><code>--format</code></dt><dd>output format: text or json (default: <code>text</code>)</dd>
+  <dt><code>--json</code></dt><dd>output current settings or test results as JSON</dd>
+  <dt><code>-t, --test</code></dt><dd>run end-to-end diagnostic checks on all configured settings and dependencies</dd>
+  </dl>
+</article>
+<article class="manpage manual-entry" id="voxi-settings-test">
+  <div class="mp-bar"><span>VOXI-SETTINGS-TEST</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi settings test [flags]</code></h3>
+  <p class="mp-body">Run end-to-end diagnostic checks on all configured settings and dependencies</p>
+  <dl class="mp-opts">
+  <dt><code>--format</code></dt><dd>output format: text or json (default: <code>text</code>)</dd>
+  <dt><code>--json</code></dt><dd>output diagnostic results as JSON</dd>
+  </dl>
+</article>
+<article class="manpage manual-entry" id="voxi-shortcut">
+  <div class="mp-bar"><span>VOXI-SHORTCUT</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi shortcut</code></h3>
+  <p class="mp-body">Manage the standard desktop recording shortcut</p>
+</article>
+<article class="manpage manual-entry" id="voxi-shortcut-remove">
+  <div class="mp-bar"><span>VOXI-SHORTCUT-REMOVE</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi shortcut remove</code></h3>
+  <p class="mp-body">Remove the Voxi-owned GNOME shortcut</p>
+</article>
+<article class="manpage manual-entry" id="voxi-shortcut-setup">
+  <div class="mp-bar"><span>VOXI-SHORTCUT-SETUP</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi shortcut setup [flags]</code></h3>
+  <p class="mp-body">Configure Super+X on GNOME</p>
+  <dl class="mp-opts">
+  <dt><code>-f, --force</code></dt><dd>proceed despite an existing Super+X assignment</dd>
+  </dl>
+</article>
+<article class="manpage manual-entry" id="voxi-telemetry">
+  <div class="mp-bar"><span>VOXI-TELEMETRY</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi telemetry</code></h3>
+  <p class="mp-body">Query correlated Eager pipeline telemetry</p>
+</article>
+<article class="manpage manual-entry" id="voxi-telemetry-query">
+  <div class="mp-bar"><span>VOXI-TELEMETRY-QUERY</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi telemetry query [flags]</code></h3>
+  <p class="mp-body">List raw events or correlated lifecycle records</p>
+  <dl class="mp-opts">
+  <dt><code>--chunk</code></dt><dd>filter by chunk ID</dd>
+  <dt><code>--event</code></dt><dd>filter raw events by event type</dd>
+  <dt><code>--format</code></dt><dd>output format: text or json (default: <code>text</code>)</dd>
+  <dt><code>--limit</code></dt><dd>maximum rows to print (0 means all within --max-events) (default: <code>100</code>)</dd>
+  <dt><code>--max-events</code></dt><dd>hard memory bound on valid events in the selected time range (default: <code>100000</code>)</dd>
+  <dt><code>--path</code></dt><dd>telemetry JSONL path (default: Voxi XDG data path)</dd>
+  <dt><code>--post-deactivation</code></dt><dd>filter chunks: any, true, or false (default: <code>any</code>)</dd>
+  <dt><code>--session</code></dt><dd>filter by session ID</dd>
+  <dt><code>--silence</code></dt><dd>filter chunks: any, true, or false (default: <code>any</code>)</dd>
+  <dt><code>--since</code></dt><dd>include timestamps at/after RFC3339 time</dd>
+  <dt><code>--success</code></dt><dd>filter events/chunks: any, true, or false (default: <code>any</code>)</dd>
+  <dt><code>--until</code></dt><dd>include timestamps at/before RFC3339 time</dd>
+  <dt><code>--view</code></dt><dd>view: events, chunks, or sessions (default: <code>chunks</code>)</dd>
+  </dl>
+</article>
+<article class="manpage manual-entry" id="voxi-telemetry-stats">
+  <div class="mp-bar"><span>VOXI-TELEMETRY-STATS</span><span>voxi 0.1.8</span></div>
+  <h3 class="mp-sh"><code>voxi telemetry stats [flags]</code></h3>
+  <p class="mp-body">Summarize latency, backlog, audio, words, and stage outcomes</p>
+  <dl class="mp-opts">
+  <dt><code>--chunk</code></dt><dd>filter by chunk ID</dd>
+  <dt><code>--format</code></dt><dd>output format: text or json (default: <code>text</code>)</dd>
+  <dt><code>--max-events</code></dt><dd>hard memory bound on valid events in the selected time range (default: <code>100000</code>)</dd>
+  <dt><code>--path</code></dt><dd>telemetry JSONL path (default: Voxi XDG data path)</dd>
+  <dt><code>--session</code></dt><dd>filter by session ID</dd>
+  <dt><code>--since</code></dt><dd>include timestamps at/after RFC3339 time</dd>
+  <dt><code>--until</code></dt><dd>include timestamps at/before RFC3339 time</dd>
+  </dl>
+</article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-foot">
+    <div class="wrap foot-row">
+      <div class="foot-brand">
+        <img class="brand-icon" src="../logo.svg" alt="voxi logo" width="20" height="20">
+        <span>voxi &mdash; &copy; <span id="year"></span> Uwe Jugel &lt;uwe@ubunatic.com&gt; &middot; AGPL-3.0-or-later</span>
+      </div>
+      <div class="foot-links">
+        <a href="https://codeberg.org/ubunatic/voxi" rel="noopener" target="_blank">Codeberg Repository</a>
+        <a href="../index.html#top">Back to voxi &uarr;</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
