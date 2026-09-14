@@ -44,6 +44,11 @@ type LLMCleanupRecord struct {
 	// merely no-op one (issue 115). Empty on success.
 	FallbackReason string `json:"fallback_reason,omitempty"`
 	Modified       bool   `json:"modified"`
+	// ElapsedMS is the wall-clock time spent in the cleanup call (request
+	// build through response/timeout), regardless of outcome, so a timeout
+	// fallback can be distinguished from a near-miss vs. a far-miss (issue
+	// 121).
+	ElapsedMS int64 `json:"elapsed_ms,omitempty"`
 }
 
 // Chunk represents one recorded audio slice and its transcription diagnostics.

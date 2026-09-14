@@ -1689,7 +1689,7 @@ func TestCleanWithLLMFallsBackWithReason(t *testing.T) {
 		handler func(stop <-chan struct{}) http.HandlerFunc
 		reason  string
 	}{
-		{"hangs past the 1500ms bound", func(stop <-chan struct{}) http.HandlerFunc {
+		{"hangs past the llmCleanupTimeout bound", func(stop <-chan struct{}) http.HandlerFunc {
 			return func(w http.ResponseWriter, r *http.Request) { <-stop }
 		}, llmFallbackTimeout},
 		{"server error", func(<-chan struct{}) http.HandlerFunc {
@@ -1733,10 +1733,10 @@ func TestCleanWithLLMFallsBackWithReason(t *testing.T) {
 			if record.Modified {
 				t.Error("record marked modified although cleanup fell back")
 			}
-			// A hang must cost the pipeline its own 1500ms bound, not the
-			// server's patience.
+			// A hang must cost the pipeline its own llmCleanupTimeout bound,
+			// not the server's patience.
 			if elapsed > 5*time.Second {
-				t.Errorf("cleanup took %v, want the 1500ms bound to cut it short", elapsed)
+				t.Errorf("cleanup took %v, want the llmCleanupTimeout bound to cut it short", elapsed)
 			}
 		})
 	}

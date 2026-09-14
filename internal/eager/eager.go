@@ -80,6 +80,15 @@ func DefaultEagerOptions() EagerOptions {
 // longest MaxWindowMs utterance on a slow CPU backend.
 const transcribeTimeout = 30 * time.Second
 
+// llmCleanupTimeout bounds the optional LLM cleanup call (local-HTTP or agy
+// backend). Issue 121's original 1500ms budget left near-zero headroom: live
+// telemetry on 2026-09-15 showed successful local-model cleanups routinely
+// landing at 1338-1500ms even without synthetic load, so a chunk with no
+// actual problem would still trip the timeout under everyday background CPU
+// contention. Raised to give real margin; still bounded well under a length
+// that would make cleanup feel laggy to the user.
+const llmCleanupTimeout = 2500 * time.Millisecond
+
 // Drop reasons carried in telemetry.Event.CancelReason and in the
 // user-visible drop message (issue 115).
 const (
@@ -1156,6 +1165,8 @@ func cleanWithLLM(ctx context.Context, text string, settings *config.UserSetting
 		Model:   model,
 		Output:  text,
 	}
+	start := time.Now()
+	defer func() { record.ElapsedMS = time.Since(start).Milliseconds() }()
 	contextData := chunkContext
 	if contextData.AppliedReplacements == nil {
 		contextData.AppliedReplacements = []chunks.ReplacementSummary{}
@@ -1191,7 +1202,7 @@ func cleanWithLLM(ctx context.Context, text string, settings *config.UserSetting
 		return text, llmFallback(record, llmFallbackEncodeError)
 	}
 
-	reqCtx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
+	reqCtx, cancel := context.WithTimeout(ctx, llmCleanupTimeout)
 	defer cancel()
 
 	httpReq, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqURL, bytes.NewReader(reqData))
@@ -1200,7 +1211,7 @@ func cleanWithLLM(ctx context.Context, text string, settings *config.UserSetting
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 1500 * time.Millisecond}
+	client := &http.Client{Timeout: llmCleanupTimeout}
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		// A hung server trips either the request context or the client's own
@@ -1246,9 +1257,9 @@ func cleanWithAGY(ctx context.Context, text, model, userData string, record *chu
 		record.Model = model
 	}
 	prompt := llmCleanupSystemPrompt + "\n\n" + userData
-	reqCtx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
+	reqCtx, cancel := context.WithTimeout(ctx, llmCleanupTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(reqCtx, "agy", "--print="+prompt, "--output-format", "json", "--model", model, "--print-timeout", "1500ms", "--disable-slash-commands")
+	cmd := exec.CommandContext(reqCtx, "agy", "--print="+prompt, "--output-format", "json", "--model", model, "--print-timeout", llmCleanupTimeout.String(), "--disable-slash-commands")
 	output, err := cmd.Output()
 	if err != nil {
 		if errors.Is(reqCtx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
