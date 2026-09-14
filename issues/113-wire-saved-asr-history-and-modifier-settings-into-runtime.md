@@ -28,9 +28,3 @@ The findings are from source inspection; the disabled-history behavior has not y
 - Apply ASR model and modifier gating values in their respective runtime paths, or remove controls that are intentionally unsupported.
 - Make diagnostics report effective behavior rather than merely saved values.
 - Add behavioral tests for each toggle and verify a fresh daemon session uses saved settings. In particular, test that disabled history leaves no new history entry.
-
-**Status**: Draft
-
----
-
-Reserved placeholder ticket.
