@@ -406,3 +406,217 @@ func TestPromoteMovesSampleToPublicCorpusAsFLAC(t *testing.T) {
 		t.Errorf("public flac file missing: %v", err)
 	}
 }
+
+// writeSourceSample creates a fixture WAV + manifest entry in sourceDir, as
+// if it were a directory copied over from another machine, and returns the
+// entry's Timestamp for later assertions.
+func writeSourceSample(t *testing.T, sourceDir, name, text string, ts time.Time) {
+	t.Helper()
+	if err := audio.WriteWAVAudio(WAVPathIn(sourceDir, name), bytes.Repeat([]byte{0, 1}, 8000), 16000); err != nil {
+		t.Fatalf("write fixture wav for %s: %v", name, err)
+	}
+	existing, err := LoadManifestIn(sourceDir)
+	if err != nil {
+		t.Fatalf("LoadManifestIn(sourceDir): %v", err)
+	}
+	entry := Sample{Name: name, WAVFile: name + ".wav", Text: text, Timestamp: ts}
+	if err := SaveManifestIn(sourceDir, Upsert(existing, entry)); err != nil {
+		t.Fatalf("save source manifest: %v", err)
+	}
+}
+
+func TestImportCopiesNewSamplesPreservingTimestamp(t *testing.T) {
+	home := t.TempDir()
+	sourceDir := t.TempDir()
+	ts := time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)
+	writeSourceSample(t, sourceDir, "greeting", "hello there", ts)
+
+	out := &bytes.Buffer{}
+	summary, err := Import(home, sourceDir, false, out)
+	if err != nil {
+		t.Fatalf("Import: %v", err)
+	}
+	if summary.Imported != 1 || summary.Skipped != 0 || summary.Failed != 0 {
+		t.Fatalf("summary = %+v, want {1 0 0}", summary)
+	}
+
+	wavPath := WAVPath(home, "greeting")
+	info, err := os.Stat(wavPath)
+	if err != nil {
+		t.Fatalf("stat wav: %v", err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Errorf("wav perm = %v, want 0600", info.Mode().Perm())
+	}
+
+	srcBytes, err := os.ReadFile(WAVPathIn(sourceDir, "greeting"))
+	if err != nil {
+		t.Fatalf("read source wav: %v", err)
+	}
+	dstBytes, err := os.ReadFile(wavPath)
+	if err != nil {
+		t.Fatalf("read dest wav: %v", err)
+	}
+	if !bytes.Equal(srcBytes, dstBytes) {
+		t.Error("copied wav bytes differ from source")
+	}
+
+	samples, err := LoadManifest(home)
+	if err != nil {
+		t.Fatalf("LoadManifest: %v", err)
+	}
+	s, ok := Find(samples, "greeting")
+	if !ok {
+		t.Fatal("imported sample missing from manifest")
+	}
+	if s.Text != "hello there" {
+		t.Errorf("Text = %q, want %q", s.Text, "hello there")
+	}
+	if !s.Timestamp.Equal(ts) {
+		t.Errorf("Timestamp = %v, want %v (preserved from source, not reset to time.Now)", s.Timestamp, ts)
+	}
+}
+
+func TestImportCollisionWithoutOverwriteSkips(t *testing.T) {
+	home := t.TempDir()
+	sourceDir := t.TempDir()
+
+	if err := os.MkdirAll(SamplesDir(home), 0o700); err != nil {
+		t.Fatalf("create private samples dir: %v", err)
+	}
+	if err := audio.WriteWAVAudio(WAVPath(home, "dup"), bytes.Repeat([]byte{9, 9}, 8000), 16000); err != nil {
+		t.Fatalf("write local fixture wav: %v", err)
+	}
+	if err := SaveManifest(home, []Sample{{Name: "dup", WAVFile: "dup.wav", Text: "local original", Timestamp: time.Now()}}); err != nil {
+		t.Fatalf("save local manifest: %v", err)
+	}
+	localBefore, err := os.ReadFile(WAVPath(home, "dup"))
+	if err != nil {
+		t.Fatalf("read local wav before import: %v", err)
+	}
+
+	writeSourceSample(t, sourceDir, "dup", "source text", time.Now())
+
+	out := &bytes.Buffer{}
+	summary, err := Import(home, sourceDir, false, out)
+	if err != nil {
+		t.Fatalf("Import: %v", err)
+	}
+	if summary.Imported != 0 || summary.Skipped != 1 || summary.Failed != 0 {
+		t.Fatalf("summary = %+v, want {0 1 0}", summary)
+	}
+
+	samples, _ := LoadManifest(home)
+	s, _ := Find(samples, "dup")
+	if s.Text != "local original" {
+		t.Errorf("Text = %q, want local entry left untouched", s.Text)
+	}
+	localAfter, err := os.ReadFile(WAVPath(home, "dup"))
+	if err != nil {
+		t.Fatalf("read local wav after import: %v", err)
+	}
+	if !bytes.Equal(localBefore, localAfter) {
+		t.Error("local wav bytes changed despite skipped collision")
+	}
+	if !strings.Contains(out.String(), "skip") {
+		t.Errorf("expected a skip message in output, got %q", out.String())
+	}
+}
+
+func TestImportCollisionWithOverwriteReplaces(t *testing.T) {
+	home := t.TempDir()
+	sourceDir := t.TempDir()
+
+	if err := os.MkdirAll(SamplesDir(home), 0o700); err != nil {
+		t.Fatalf("create private samples dir: %v", err)
+	}
+	if err := audio.WriteWAVAudio(WAVPath(home, "dup"), bytes.Repeat([]byte{9, 9}, 8000), 16000); err != nil {
+		t.Fatalf("write local fixture wav: %v", err)
+	}
+	if err := SaveManifest(home, []Sample{{Name: "dup", WAVFile: "dup.wav", Text: "local original", Timestamp: time.Now()}}); err != nil {
+		t.Fatalf("save local manifest: %v", err)
+	}
+
+	ts := time.Date(2024, 5, 6, 7, 8, 9, 0, time.UTC)
+	writeSourceSample(t, sourceDir, "dup", "source text", ts)
+
+	out := &bytes.Buffer{}
+	summary, err := Import(home, sourceDir, true, out)
+	if err != nil {
+		t.Fatalf("Import: %v", err)
+	}
+	if summary.Imported != 1 || summary.Skipped != 0 || summary.Failed != 0 {
+		t.Fatalf("summary = %+v, want {1 0 0}", summary)
+	}
+
+	samples, _ := LoadManifest(home)
+	s, ok := Find(samples, "dup")
+	if !ok {
+		t.Fatal("overwritten sample missing from manifest")
+	}
+	if s.Text != "source text" {
+		t.Errorf("Text = %q, want replaced with source text", s.Text)
+	}
+	if !s.Timestamp.Equal(ts) {
+		t.Errorf("Timestamp = %v, want %v", s.Timestamp, ts)
+	}
+
+	srcBytes, _ := os.ReadFile(WAVPathIn(sourceDir, "dup"))
+	dstBytes, _ := os.ReadFile(WAVPath(home, "dup"))
+	if !bytes.Equal(srcBytes, dstBytes) {
+		t.Error("local wav not replaced with source bytes")
+	}
+}
+
+func TestImportNonexistentSourceDirErrorsInsteadOfSilentNoOp(t *testing.T) {
+	home := t.TempDir()
+	sourceDir := filepath.Join(t.TempDir(), "does-not-exist")
+
+	out := &bytes.Buffer{}
+	if _, err := Import(home, sourceDir, false, out); err == nil {
+		t.Fatal("expected Import to error on a nonexistent source directory instead of silently importing nothing")
+	}
+}
+
+func TestImportValidationFailureIsReportedNotSilentlySkipped(t *testing.T) {
+	home := t.TempDir()
+	sourceDir := t.TempDir()
+
+	// A manifest entry whose WAV file does not exist on disk.
+	if err := SaveManifestIn(sourceDir, []Sample{
+		{Name: "missing-wav", WAVFile: "missing-wav.wav", Text: "some text", Timestamp: time.Now()},
+	}); err != nil {
+		t.Fatalf("save source manifest: %v", err)
+	}
+	// A valid entry alongside it, to confirm the bad entry doesn't abort the run.
+	writeSourceSampleAppend := func() {
+		if err := audio.WriteWAVAudio(WAVPathIn(sourceDir, "ok"), bytes.Repeat([]byte{1, 2}, 8000), 16000); err != nil {
+			t.Fatalf("write fixture wav: %v", err)
+		}
+		existing, err := LoadManifestIn(sourceDir)
+		if err != nil {
+			t.Fatalf("LoadManifestIn: %v", err)
+		}
+		if err := SaveManifestIn(sourceDir, Upsert(existing, Sample{Name: "ok", WAVFile: "ok.wav", Text: "ok text", Timestamp: time.Now()})); err != nil {
+			t.Fatalf("save source manifest: %v", err)
+		}
+	}
+	writeSourceSampleAppend()
+
+	out := &bytes.Buffer{}
+	summary, err := Import(home, sourceDir, false, out)
+	if err == nil {
+		t.Fatal("expected Import to report an error when an entry fails validation")
+	}
+	if summary.Imported != 1 || summary.Skipped != 0 || summary.Failed != 1 {
+		t.Fatalf("summary = %+v, want {1 0 1}", summary)
+	}
+
+	samples, _ := LoadManifest(home)
+	if _, ok := Find(samples, "missing-wav"); ok {
+		t.Error("entry with missing wav should not have been imported")
+	}
+	if _, ok := Find(samples, "ok"); !ok {
+		t.Error("valid entry should still have been imported despite the earlier failure")
+	}
+}

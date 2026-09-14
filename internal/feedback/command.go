@@ -439,6 +439,23 @@ func NewCommand(out io.Writer, home string, builtins []spec.StopWord, maxVocabul
 	promoteCmd.Flags().String("to", devsample.PublicSamplesDir(""), "public samples directory to promote into (run from the repo root)")
 	sample.AddCommand(promoteCmd)
 
+	importCmd := &cobra.Command{
+		Use:   "import PATH",
+		Short: "Merge samples from another machine's local sample directory into this one",
+		Long: "Merge every sample listed in PATH's corpus.tsv-compatible manifest into this\n" +
+			"machine's private sample library, copying each referenced WAV. PATH must already\n" +
+			"be a local directory (e.g. copied over with scp/rsync/USB beforehand) -- import\n" +
+			"performs no transfer of its own.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, a []string) error {
+			overwrite, _ := cmd.Flags().GetBool("overwrite")
+			_, err := devsample.Import(home, a[0], overwrite, out)
+			return err
+		},
+	}
+	importCmd.Flags().Bool("overwrite", false, "replace an existing local sample with the same name instead of skipping it")
+	sample.AddCommand(importCmd)
+
 	cmd.AddCommand(sample)
 
 	return cmd
