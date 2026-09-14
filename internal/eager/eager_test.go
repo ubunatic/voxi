@@ -1633,4 +1633,98 @@ func TestCleanWithLLM(t *testing.T) {
 	if fallbackRecord == nil || !fallbackRecord.Enabled || fallbackRecord.Modified {
 		t.Errorf("fallback record mismatch: %+v", fallbackRecord)
 	}
+	if fallbackRecord.FallbackReason != llmFallbackConnectionError {
+		t.Errorf("fallback reason = %q, want %q", fallbackRecord.FallbackReason, llmFallbackConnectionError)
+	}
+	if record.FallbackReason != "" {
+		t.Errorf("successful cleanup carried fallback reason %q, want empty", record.FallbackReason)
+	}
+}
+
+// TestCleanWithLLMFallsBackWithReason is issue 115's Edge Case 3: every
+// degradation path already returned the ASR text unchanged, but anonymously,
+// so a hung or broken cleanup server was indistinguishable from one that had
+// nothing to change. Each failure shape must now name itself.
+func TestCleanWithLLMFallsBackWithReason(t *testing.T) {
+	const asrText = "the transcript as the recognizer produced it"
+	// A handler parked only on the request context never notices the client's
+	// own timeout, and httptest.Server.Close waits for handlers to return --
+	// so hung handlers take an explicit teardown channel.
+	cases := []struct {
+		name    string
+		handler func(stop <-chan struct{}) http.HandlerFunc
+		reason  string
+	}{
+		{"hangs past the 1500ms bound", func(stop <-chan struct{}) http.HandlerFunc {
+			return func(w http.ResponseWriter, r *http.Request) { <-stop }
+		}, llmFallbackTimeout},
+		{"server error", func(<-chan struct{}) http.HandlerFunc {
+			return func(w http.ResponseWriter, r *http.Request) { http.Error(w, "boom", http.StatusInternalServerError) }
+		}, llmFallbackHTTPStatus},
+		{"unparseable body", func(<-chan struct{}) http.HandlerFunc {
+			return func(w http.ResponseWriter, r *http.Request) { fmt.Fprintln(w, "not json at all") }
+		}, llmFallbackInvalidSchema},
+		{"no choices", func(<-chan struct{}) http.HandlerFunc {
+			return func(w http.ResponseWriter, r *http.Request) { fmt.Fprintln(w, `{"choices": []}`) }
+		}, llmFallbackInvalidSchema},
+		{"blank completion", func(<-chan struct{}) http.HandlerFunc {
+			return func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprintln(w, `{"choices": [{"message": {"content": "   "}}]}`)
+			}
+		}, llmFallbackEmptyResponse},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			stop := make(chan struct{})
+			ts := httptest.NewServer(tc.handler(stop))
+			defer func() {
+				close(stop)
+				ts.Close()
+			}()
+			settings := &config.UserSettings{LLMCleaner: true, OpenAIBaseURL: ts.URL, CleanupModel: "test-model"}
+
+			start := time.Now()
+			got, record := cleanWithLLM(context.Background(), asrText, settings, llmChunkContext{})
+			elapsed := time.Since(start)
+
+			if got != asrText {
+				t.Errorf("text = %q, want the unchanged ASR text %q", got, asrText)
+			}
+			if record == nil {
+				t.Fatal("record = nil, want a record describing the fallback")
+			}
+			if record.FallbackReason != tc.reason {
+				t.Errorf("fallback reason = %q, want %q", record.FallbackReason, tc.reason)
+			}
+			if record.Modified {
+				t.Error("record marked modified although cleanup fell back")
+			}
+			// A hang must cost the pipeline its own 1500ms bound, not the
+			// server's patience.
+			if elapsed > 5*time.Second {
+				t.Errorf("cleanup took %v, want the 1500ms bound to cut it short", elapsed)
+			}
+		})
+	}
+
+	// A caller-cancelled cleanup is a different diagnosis from a hung server.
+	stop := make(chan struct{})
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { <-stop }))
+	defer func() {
+		close(stop)
+		ts.Close()
+	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		cancel()
+	}()
+	settings := &config.UserSettings{LLMCleaner: true, OpenAIBaseURL: ts.URL, CleanupModel: "test-model"}
+	got, record := cleanWithLLM(ctx, asrText, settings, llmChunkContext{})
+	if got != asrText {
+		t.Errorf("text = %q, want the unchanged ASR text", got)
+	}
+	if record == nil || record.FallbackReason != llmFallbackCanceled {
+		t.Errorf("cancelled cleanup record = %+v, want reason %q", record, llmFallbackCanceled)
+	}
 }

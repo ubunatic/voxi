@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -691,6 +692,9 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 					PeakRMS:             job.Stats.PeakRMS,
 					AppliedReplacements: appliedReplacements,
 				})
+				if llmRecord != nil && llmRecord.FallbackReason != "" {
+					_ = recorder.Record(telemetry.Event{Event: telemetry.LLMCleanupFallback, Timestamp: time.Now(), SessionID: sessionID, ChunkID: chunkID, ChunkIndex: job.Index, CancelReason: llmRecord.FallbackReason})
+				}
 			}
 			accepted := acceptTranscript(err, text, stopWords, silenceArtifacts)
 			safety := asr.CheckTranscriptSafety(text, modelSpec.TranscriptSafety)
@@ -1106,6 +1110,29 @@ func reportEagerFailure(d deps.Dependencies, stage, sessionID, chunkID string, e
 	fmt.Fprintf(d.Stdout, "voxi eager: %s failed (session=%s chunk=%s): %v\n", stage, sessionID, chunkID, err)
 }
 
+// Reasons an optional LLM cleanup degraded to the raw ASR text (issue 115
+// section 3.3). Every path already fell back correctly; only the "why" was
+// anonymous, which made a hung cleanup server indistinguishable from one that
+// simply had nothing to change.
+const (
+	llmFallbackTimeout         = "timeout"
+	llmFallbackCanceled        = "canceled"
+	llmFallbackConnectionError = "connection_error"
+	llmFallbackHTTPStatus      = "http_status"
+	llmFallbackInvalidSchema   = "invalid_schema"
+	llmFallbackEmptyResponse   = "empty_response"
+	llmFallbackEncodeError     = "encode_error"
+)
+
+// fallback annotates the record with why cleanup degraded and returns it, so
+// each error path in cleanWithLLM stays a one-line return.
+func llmFallback(record *chunks.LLMCleanupRecord, reason string) *chunks.LLMCleanupRecord {
+	if record != nil {
+		record.FallbackReason = reason
+	}
+	return record
+}
+
 type llmChunkContext struct {
 	MeanRMS             int                         `yaml:"mean_rms"`
 	PeakRMS             int                         `yaml:"peak_rms"`
@@ -1140,7 +1167,7 @@ func cleanWithLLM(ctx context.Context, text string, settings *config.UserSetting
 		Chunk      llmChunkContext `yaml:"chunk"`
 	}{Transcript: text, Chunk: contextData})
 	if err != nil {
-		return text, record
+		return text, llmFallback(record, llmFallbackEncodeError)
 	}
 	reqPayload := map[string]any{
 		"model": model,
@@ -1158,7 +1185,7 @@ func cleanWithLLM(ctx context.Context, text string, settings *config.UserSetting
 	}
 	reqData, err := json.Marshal(reqPayload)
 	if err != nil {
-		return text, record
+		return text, llmFallback(record, llmFallbackEncodeError)
 	}
 
 	reqCtx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
@@ -1166,19 +1193,27 @@ func cleanWithLLM(ctx context.Context, text string, settings *config.UserSetting
 
 	httpReq, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqURL, bytes.NewReader(reqData))
 	if err != nil {
-		return text, record
+		return text, llmFallback(record, llmFallbackEncodeError)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{Timeout: 1500 * time.Millisecond}
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		return text, record
+		// A hung server trips either the request context or the client's own
+		// identical deadline; both mean the same thing to the user.
+		if errors.Is(err, context.DeadlineExceeded) || os.IsTimeout(err) {
+			return text, llmFallback(record, llmFallbackTimeout)
+		}
+		if errors.Is(err, context.Canceled) {
+			return text, llmFallback(record, llmFallbackCanceled)
+		}
+		return text, llmFallback(record, llmFallbackConnectionError)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return text, record
+		return text, llmFallback(record, llmFallbackHTTPStatus)
 	}
 
 	var respPayload struct {
@@ -1189,12 +1224,12 @@ func cleanWithLLM(ctx context.Context, text string, settings *config.UserSetting
 		} `json:"choices"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&respPayload); err != nil || len(respPayload.Choices) == 0 {
-		return text, record
+		return text, llmFallback(record, llmFallbackInvalidSchema)
 	}
 
 	cleaned := strings.TrimSpace(respPayload.Choices[0].Message.Content)
 	if cleaned == "" {
-		return text, record
+		return text, llmFallback(record, llmFallbackEmptyResponse)
 	}
 
 	record.Output = cleaned

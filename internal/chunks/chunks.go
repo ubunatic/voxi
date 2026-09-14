@@ -36,10 +36,14 @@ type ReplacementSummary struct {
 
 // LLMCleanupRecord captures LLM post-processing telemetry for a chunk.
 type LLMCleanupRecord struct {
-	Enabled  bool   `json:"enabled"`
-	Model    string `json:"model,omitempty"`
-	Output   string `json:"output,omitempty"`
-	Modified bool   `json:"modified"`
+	Enabled bool   `json:"enabled"`
+	Model   string `json:"model,omitempty"`
+	Output  string `json:"output,omitempty"`
+	// FallbackReason names why the ASR text was kept instead of a cleaned
+	// one, so a degraded cleanup server is distinguishable from a disabled or
+	// merely no-op one (issue 115). Empty on success.
+	FallbackReason string `json:"fallback_reason,omitempty"`
+	Modified       bool   `json:"modified"`
 }
 
 // Chunk represents one recorded audio slice and its transcription diagnostics.

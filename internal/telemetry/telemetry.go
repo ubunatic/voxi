@@ -30,6 +30,9 @@ const (
 	StopDrainTimeout      = "stop_drain_timeout"
 	InjectorStarted       = "injector_started"
 	InjectorComplete      = "injector_completed"
+	// LLMCleanupFallback is emitted when optional LLM transcript cleanup
+	// degrades to the raw ASR text; CancelReason names which failure it was.
+	LLMCleanupFallback = "llm_cleanup_fallback"
 )
 
 // AudioMetrics contains recording-side measurements derived from PCM without
