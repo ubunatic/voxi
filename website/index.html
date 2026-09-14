@@ -300,14 +300,14 @@
 <span class="prompt">$</span> curl -fsSL https://codeberg.org/ubunatic/voxi/raw/branch/main/scripts/install.sh | bash -s -- --modifierd</code></pre>
             </div>
             <p style="margin-top: 1rem;">
-              Or build from source and run the automated user installer:
+              Or install from source with Go, then run the same user setup:
             </p>
             <div class="code-block">
               <button class="copy-code-btn" title="Copy code">copy</button>
               <pre><code><span class="prompt">$</span> git clone https://codeberg.org/ubunatic/voxi.git &amp;&amp; cd voxi
-<span class="prompt">$</span> make install
-<span class="prompt">$</span> voxi install               <span class="comment"># User-scoped setup, no sudo required</span>
-<span class="prompt">$</span> voxi install --modifierd  <span class="comment"># Optional system-wide modifier daemon (needs sudo)</span></code></pre>
+<span class="prompt">$</span> go install ./cmd/voxi
+<span class="prompt">$</span> ~/go/bin/voxi install              <span class="comment"># User setup; make install does both steps</span>
+<span class="prompt">$</span> ~/go/bin/voxi install --modifierd  <span class="comment"># Optional system daemon (needs sudo)</span></code></pre>
             </div>
           </div>
         </div>
@@ -371,7 +371,7 @@
           </thead>
           <tbody>
             <tr>
-              <td><strong>Go 1.22+</strong></td>
+              <td><strong>Go 1.26.5+</strong></td>
               <td>Only needed to build from source (developers/contributors). Most users can
                 skip this and download a prebuilt binary from the
                 <a href="https://codeberg.org/ubunatic/voxi/releases/latest" rel="noopener" target="_blank">latest release</a> instead.</td>
