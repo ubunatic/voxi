@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"ubunatic.com/voxi/internal/chunks"
@@ -458,5 +459,39 @@ func NewCommand(out io.Writer, home string, builtins []spec.StopWord, maxVocabul
 
 	cmd.AddCommand(sample)
 
+	return cmd
+}
+
+// NewConfigImportCommand builds the `voxi config import DIR` command,
+// merging stop-words, replacements, vocabulary, and dev samples from
+// another machine's ~/.config/voxi-shaped directory into this one. It is
+// wired as a subcommand of voxi's top-level `config` command (cmd/voxi's
+// existing voxtype-config.toml command) rather than a competing top-level
+// "config" command, since cobra already owns that name; the resulting CLI
+// shape is still exactly `voxi config import DIR`.
+//
+// config.yaml and env are deliberately not covered here -- they are
+// machine-specific (paths, device IDs) in ways stop-words/replacements/
+// vocabulary/samples aren't, so a blind merge risks importing settings that
+// don't apply to the target machine (see issue 118 and 119).
+func NewConfigImportCommand(out io.Writer, home string, maxVocabularyTermChars int) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "import DIR",
+		Short: "Merge stop-words, replacements, vocabulary, and dev samples from another machine's local Voxi state",
+		Long: "Merge stop-words.json, replacements.json, vocabulary.txt, and samples/ from DIR --\n" +
+			"a local, previously-copied ~/.config/voxi-shaped directory -- into this machine's\n" +
+			"local Voxi state. DIR must already be a local directory (e.g. copied over with\n" +
+			"scp/rsync/USB beforehand) -- import performs no transfer of its own.\n\n" +
+			"config.yaml and env are intentionally not imported: they hold machine-specific\n" +
+			"settings (paths, device IDs) that don't safely carry over between machines.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, a []string) error {
+			overwrite, _ := cmd.Flags().GetBool("overwrite")
+			only, _ := cmd.Flags().GetStringSlice("only")
+			return Import(home, a[0], ImportOptions{Overwrite: overwrite, Only: only}, maxVocabularyTermChars, out)
+		},
+	}
+	cmd.Flags().Bool("overwrite", false, "replace a colliding replacement entry instead of skipping it (stop-words, vocabulary, and samples are always additive/skip-on-collision)")
+	cmd.Flags().StringSlice("only", nil, "import only these areas: "+strings.Join(AreaNames, ",")+" (default: all found in DIR)")
 	return cmd
 }

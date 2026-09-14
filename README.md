@@ -204,6 +204,21 @@ voxi feedback silence-artifact add <PHRASE> # Add whole-phrase silence discard r
 voxi feedback vocabulary add <TERM>         # Add Whisper decoder prompt term
 ```
 
+### Cross-Machine Config Import
+```bash
+# 1. Copy the other machine's config locally (any transport works)
+rsync -avz <host>:.config/voxi/ /path/to/local/copy/
+
+# 2. Merge stop-words, replacements, vocabulary, and dev samples
+voxi config import /path/to/local/copy
+
+voxi config import <DIR> --overwrite   # replace colliding replacement entries
+voxi config import <DIR> --only samples,vocabulary  # limit to specific areas
+```
+`config.yaml`/`env` are never imported (machine-specific); a bad source file
+is rejected as a whole, and already-imported entries are safely skipped on
+re-run.
+
 ### Dictation History
 ```bash
 voxi history list          # List recent dictation entries

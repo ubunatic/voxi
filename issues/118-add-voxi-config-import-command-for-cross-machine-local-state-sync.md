@@ -1,6 +1,6 @@
 # 118 — Add voxi config import command for cross-machine local state sync
 
-**Status**: Open
+**Status**: Closed — Implemented `voxi config import DIR` covering stop-words, replacements, vocabulary, and samples (delegated to `devsample.Import`); config.yaml/env deliberately excluded (machine-specific). Verified with go test, gofmt, make install, and a live CLI smoke test.
 **Priority**: P3 (Low)
 **Severity**: Minor
 **Category**: Feature
