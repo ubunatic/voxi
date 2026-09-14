@@ -72,3 +72,30 @@ back-to-back run of `timeout` fallbacks in the same session).
   on every chunk once contention is detected, while a genuinely idle CPU
   still gets successful cleanup at roughly the same rate as before (no
   regression in cleanup quality/availability when the CPU has headroom).
+
+## 6. Checkpoint (2026-09-15): interim mitigation, adaptive skip still open
+
+Live dictation during this session reproduced the problem organically (no
+`stress-ng` needed — an already-running macOS-in-QEMU VM plus a normal
+Firefox session was enough real background load): 3 of 4 real chunks hit
+`fallback_reason: timeout`. New `LLMCleanupRecord.ElapsedMS` telemetry
+(added this session) showed the *successful* calls in the same run landing
+at 1,338-1,500ms — within 84-162ms of the old 1.5s bound. That is a
+near-zero-headroom budget problem, not a "cleanup is fundamentally too
+slow" problem, so as a first, cheap mitigation `llmCleanupTimeout` was
+raised from 1.5s to 2.5s (`internal/eager/eager.go`), deployed via
+`make restart-service`.
+
+This directly addresses this ticket's "lower default timeout / fail faster"
+option's inverse (raise it, since 1.5s was too tight, not too generous) but
+does **not** implement adaptive skip or load-aware gating — a chunk that
+still lands past 2.5s (e.g. genuinely heavier CPU contention, or a longer
+transcript) pays the same full-budget-then-fallback tax as before, just at
+a higher ceiling. [Issue 123](123-retest-llm-cleanup-models-against-current-yaml-request-format-and-2-5s-timeout.md)
+tracks re-validating the new budget against both cleanup backends.
+
+**Still open**: the adaptive-skip and load-aware-gating design options in
+section 4 remain unimplemented. This ticket should stay open until one of
+those is built, or until re-validation (issue 123) shows the 2.5s raise
+alone is sufficient and this ticket can be closed as resolved-by-headroom
+instead.

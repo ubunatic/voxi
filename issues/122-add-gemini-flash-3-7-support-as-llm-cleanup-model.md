@@ -150,3 +150,18 @@ set against the local-HTTP model), or (b) finding an `agy` mode with a
 smaller fixed tool-schema cost, which is not currently exposed. Next step
 before further plumbing work: decide which of these two to pursue, then
 re-run the 5-case evaluation against whichever design results.
+
+## 8. Update (2026-09-15): shared timeout raised to 2.5s — insufficient for agy
+
+`llmCleanupTimeout` (shared by both backends) was raised from 1.5s to 2.5s
+this session as an issue-121 mitigation for the local-HTTP path's near-miss
+timeouts. This does **not** change the conclusion above for `agy`: even the
+best design measured (persistent stream-JSON session, ~1.2-2.0s/turn) sits
+close to or over 2.5s once the ~13k-token fixed tool-schema cost and a
+realistic (non-trivial) cleanup prompt are accounted for, and the cold-spawn
+and `agy -c` designs (~3.5-4.2s/call) remain well over it regardless. The
+per-call `agy` subprocess in `cleanWithAGY` now inherits the 2.5s bound
+automatically (same `llmCleanupTimeout` constant), but no design tested so
+far is expected to reliably clear it. [Issue 123](123-retest-llm-cleanup-models-against-current-yaml-request-format-and-2-5s-timeout.md)
+covers re-measuring both backends against the new bound rather than
+assuming this analysis without re-running it.
