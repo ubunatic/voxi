@@ -79,13 +79,24 @@ func DefaultEagerOptions() EagerOptions {
 // longest MaxWindowMs utterance on a slow CPU backend.
 const transcribeTimeout = 30 * time.Second
 
-// stopDrainTimeout is the grace period granted to audio captured before a
-// stop request. Capture stops immediately, while ASR and delivery drain in
-// the background. A finite lease keeps an abandoned generation from typing
-// indefinitely after a newer session has started.
-const stopDrainTimeout = 5 * time.Second
+// Drop reasons carried in telemetry.Event.CancelReason and in the
+// user-visible drop message (issue 115).
+const (
+	// dropSuperseded: a newer recording session started, so this generation's
+	// leftover text must not be typed into whatever the new session owns.
+	dropSuperseded = "superseded"
+	// dropDrainDeadline: the absolute post-stop safety net expired. Should be
+	// unreachable in practice -- see spec/eager.yaml drain.delivery_deadline_ms.
+	dropDrainDeadline = "drain_deadline"
+	// dropCaptureBoundary: the audio frame itself completed after the stop
+	// request, so it was never part of the utterance the user intended.
+	dropCaptureBoundary = "capture_boundary"
+)
 
 type sessionDrain struct {
+	// parent is the generation context: cancelled when a *newer* session
+	// starts. It, not the wall clock, is the delivery policy (issue 115).
+	parent  context.Context
 	ctx     context.Context
 	cancel  context.CancelFunc
 	timeout time.Duration
@@ -99,6 +110,18 @@ type sessionDrain struct {
 type stopRequest struct {
 	mu sync.Mutex
 	at time.Time
+	// generation is cancelled when a newer session starts, i.e. the real
+	// "this generation is abandoned" signal that the old five-second
+	// stopDrainTimeout only approximated with a wall clock (issue 115).
+	// A context rather than a channel so the drain can simply derive from it,
+	// with no watcher goroutine.
+	generation context.Context
+	supersede  context.CancelFunc
+}
+
+func newStopRequest() *stopRequest {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &stopRequest{generation: ctx, supersede: cancel}
 }
 
 func (r *stopRequest) mark(at time.Time) {
@@ -113,35 +136,52 @@ func (r *stopRequest) timestamp() time.Time {
 	return r.at
 }
 
-func newSessionDrain() *sessionDrain {
-	return newSessionDrainWithTimeout(stopDrainTimeout)
+// generationCtx is nil-safe: a nil or zero-value request is never superseded.
+// That covers the standalone CLI path (no session manager, so no newer
+// generation can exist) and tests that pass neither.
+func (r *stopRequest) generationCtx() context.Context {
+	if r == nil || r.generation == nil {
+		return context.Background()
+	}
+	return r.generation
 }
 
+// markSuperseded declares this generation abandoned. Called only from
+// eagerSessionManager.Start -- never from Stop, since stopping must not
+// shorten a drain that is still the newest thing the user asked for.
+func (r *stopRequest) markSuperseded() {
+	if r != nil && r.supersede != nil {
+		r.supersede()
+	}
+}
+
+// newSessionDrainWithTimeout builds a drain that can never be superseded,
+// for the standalone CLI path and for unit tests of the wall-clock net alone.
 func newSessionDrainWithTimeout(timeout time.Duration) *sessionDrain {
-	ctx, cancel := context.WithCancel(context.Background())
-	return &sessionDrain{ctx: ctx, cancel: cancel, timeout: timeout}
+	return newSessionDrainFor(context.Background(), timeout)
+}
+
+func newSessionDrainFor(parent context.Context, timeout time.Duration) *sessionDrain {
+	ctx, cancel := context.WithCancel(parent)
+	return &sessionDrain{parent: parent, ctx: ctx, cancel: cancel, timeout: timeout}
 }
 
 func (d *sessionDrain) stop() {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	if d.stopped {
-		return
-	}
-	d.stopped = true
-	d.boundaryAt = time.Now()
-	d.deadline = d.boundaryAt.Add(d.timeout)
-	time.AfterFunc(d.timeout, d.cancel)
+	d.stopAtBoundary(time.Now())
 }
 
 func (d *sessionDrain) stopAt(at time.Time) {
+	d.stopAtBoundary(at)
+}
+
+func (d *sessionDrain) stopAtBoundary(boundary time.Time) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.stopped {
 		return
 	}
 	d.stopped = true
-	d.boundaryAt = at
+	d.boundaryAt = boundary
 	d.deadline = time.Now().Add(d.timeout)
 	time.AfterFunc(d.timeout, d.cancel)
 }
@@ -152,10 +192,25 @@ func (d *sessionDrain) eligibleAt(at time.Time) bool {
 	return !d.stopped || at.Before(d.boundaryAt)
 }
 
-func (d *sessionDrain) eligible() bool {
+// deliverable reports whether this generation may still type, and if not, why.
+// The policy is "deliver unless a newer generation exists"; the deadline is
+// only an absolute net against a hung, never-superseded generation typing
+// minutes later (issue 115).
+func (d *sessionDrain) deliverable() (bool, string) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	return !d.stopped || time.Now().Before(d.deadline)
+	if d.parent != nil && d.parent.Err() != nil {
+		return false, dropSuperseded
+	}
+	if d.stopped && !time.Now().Before(d.deadline) {
+		return false, dropDrainDeadline
+	}
+	return true, ""
+}
+
+func (d *sessionDrain) eligible() bool {
+	ok, _ := d.deliverable()
+	return ok
 }
 
 // eagerSocketTimeout bounds a client's round trip to the eager daemon's
@@ -522,7 +577,10 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 	}
 
 	jobChan := make(chan TranscribeJob, 10)
-	drain := newSessionDrain()
+	// The drain lives under this generation's context, so a newer session
+	// starting -- not a wall clock -- is what revokes delivery (issue 115).
+	drain := newSessionDrainFor(request.generationCtx(), eagerSpec.DeliveryDeadline())
+	injectionTimeout := eagerSpec.InjectionTimeout()
 	var transWg sync.WaitGroup
 	var fullTranscript strings.Builder
 	var transLock sync.Mutex
@@ -555,7 +613,7 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 				continue
 			}
 			if !job.Eligible {
-				recordStaleDelivery(recorder, sessionID, chunkID, job.Index)
+				recordStaleDelivery(d, recorder, sessionID, chunkID, job.Index, dropCaptureBoundary)
 				_ = os.Remove(wavPath)
 				continue
 			}
@@ -724,13 +782,13 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 					// going stale mid-buffer does not retroactively make it safe
 					// to type into whatever now has focus.
 					if buffer, justEntered := eagerBuf.EnterIfNeeded(sessions, modifierTimeout); buffer {
-						eagerBuf.AppendDelivery(chunkID, text+" ")
+						eagerBuf.AppendDelivery(chunkID, text+" ", job.Index, chunkMeta)
 						if justEntered {
 							eagerBuf.ScheduleNotify(d, modifierNotifyDelay)
 						}
 					} else {
-						if !drain.eligible() {
-							recordStaleDelivery(recorder, sessionID, chunkID, job.Index)
+						if ok, reason := drain.deliverable(); !ok {
+							recordStaleDelivery(d, recorder, sessionID, chunkID, job.Index, reason)
 							continue
 						}
 						claimed, claimErr := delivery.Claim(chunkID)
@@ -745,11 +803,13 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 						}
 						typeStart := time.Now()
 						_ = recorder.Record(telemetry.Event{Event: telemetry.TypingStarted, Timestamp: typeStart, SessionID: sessionID, ChunkID: chunkID, ChunkIndex: job.Index, DeliveryID: chunkID, Attempt: 1})
-						if !drain.eligible() {
-							recordStaleDelivery(recorder, sessionID, chunkID, job.Index)
+						if ok, reason := drain.deliverable(); !ok {
+							recordStaleDelivery(d, recorder, sessionID, chunkID, job.Index, reason)
 							continue
 						}
-						typeErr := typing.TypeTextObserved(drain.ctx, d, text+" ", &injectorObserver{recorder: recorder, sessionID: sessionID, chunkID: chunkID, chunkIndex: job.Index, deliveryID: chunkID})
+						injectCtx, cancelInject := newInjectionContext(injectionTimeout)
+						typeErr := typing.TypeTextObserved(injectCtx, d, text+" ", &injectorObserver{recorder: recorder, sessionID: sessionID, chunkID: chunkID, chunkIndex: job.Index, deliveryID: chunkID})
+						cancelInject()
 						typeEnd := time.Now()
 						typeSuccess := typeErr == nil
 						typeError := ""
@@ -939,13 +999,13 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 	// different, now-current session's buffer.
 	if pending, wasBuffering := eagerBuf.FlushDeliveries(); wasBuffering {
 		for _, item := range pending {
-			if !drain.eligible() {
-				recordStaleDelivery(recorder, sessionID, item.ID, 0)
+			if ok, reason := drain.deliverable(); !ok {
+				recordStaleDelivery(d, recorder, sessionID, item.ID, item.Index, reason)
 				continue
 			}
 			claimed, claimErr := delivery.Claim(item.ID)
 			if claimErr != nil || !claimed {
-				event := telemetry.Event{Event: telemetry.DeliveryDuplicate, Timestamp: time.Now(), SessionID: sessionID, ChunkID: item.ID, DeliveryID: item.ID}
+				event := telemetry.Event{Event: telemetry.DeliveryDuplicate, Timestamp: time.Now(), SessionID: sessionID, ChunkID: item.ID, ChunkIndex: item.Index, DeliveryID: item.ID}
 				if claimErr != nil {
 					event.Error = claimErr.Error()
 				}
@@ -953,15 +1013,34 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 				continue
 			}
 			// Recheck after the durable claim and immediately before the
-			// irreversible injector call. A lease expiry can therefore suppress
-			// delivery, with the existing crash-after-claim loss tradeoff.
-			if !drain.eligible() {
-				recordStaleDelivery(recorder, sessionID, item.ID, 0)
+			// irreversible injector call, so a session that started in between
+			// still wins. This keeps the existing crash-after-claim loss
+			// tradeoff, and is now the *only* thing that can suppress a
+			// buffered delivery short of the absolute deadline (issue 115).
+			if ok, reason := drain.deliverable(); !ok {
+				recordStaleDelivery(d, recorder, sessionID, item.ID, item.Index, reason)
 				continue
 			}
-			typeErr := typing.TypeTextObserved(drain.ctx, d, item.Text, &injectorObserver{recorder: recorder, sessionID: sessionID, chunkID: item.ID, deliveryID: item.ID})
+			typeStart := time.Now()
+			_ = recorder.Record(telemetry.Event{Event: telemetry.TypingStarted, Timestamp: typeStart, SessionID: sessionID, ChunkID: item.ID, ChunkIndex: item.Index, DeliveryID: item.ID, Attempt: 1})
+			injectCtx, cancelInject := newInjectionContext(injectionTimeout)
+			typeErr := typing.TypeTextObserved(injectCtx, d, item.Text, &injectorObserver{recorder: recorder, sessionID: sessionID, chunkID: item.ID, chunkIndex: item.Index, deliveryID: item.ID})
+			cancelInject()
+			typeEnd := time.Now()
+			typeSuccess := typeErr == nil
+			typeError := ""
 			if typeErr != nil {
+				typeError = typeErr.Error()
 				reportEagerFailure(d, "typing", sessionID, item.ID, typeErr)
+			}
+			_ = recorder.Record(telemetry.Event{Event: telemetry.TypingComplete, Timestamp: typeEnd, SessionID: sessionID, ChunkID: item.ID, ChunkIndex: item.Index, DeliveryID: item.ID, Attempt: 1, Success: &typeSuccess, Error: typeError})
+			// Buffered deliveries previously left typing timestamps at their
+			// zero value, so a flushed chunk looked never-typed in
+			// `voxi chunks show` and in the latency view (issue 115 §3.4).
+			if item.Meta.ChunkID != "" {
+				item.Meta.TypingStartedAt = typeStart
+				item.Meta.TypingEndedAt = typeEnd
+				_, _ = chunkBuf.Update(item.Meta)
 			}
 		}
 	}
@@ -986,11 +1065,34 @@ func queuedJobContext(sessionCtx context.Context, detached bool) context.Context
 	return sessionCtx
 }
 
-func recordStaleDelivery(recorder *telemetry.Recorder, sessionID, chunkID string, index int) {
+// newInjectionContext bounds one keystroke injection on a context of its own,
+// deliberately rooted at context.Background() rather than at drain.ctx or the
+// daemon root: eligibility is decided immediately before the injector is
+// called, and once keystrokes have started, aborting mid-word is strictly
+// worse than finishing them (issue 115). The budget must stay above the 5s
+// physical-modifier-release wait inside typing.TypeTextObserved.
+func newInjectionContext(timeout time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), timeout)
+}
+
+// recordStaleDelivery reports a transcript that was captured and accepted but
+// never typed. Previously telemetry-only, which made both issue 115 incidents
+// invisible to the user at the moment they happened -- so it now also writes
+// to stdout, which systemd inherits (journalctl --user -u voxi-agent.service),
+// mirroring reportEagerFailure's contract. It deliberately does not print the
+// transcript itself (privacy contract, docs/EagerDeliverySafety.md); the
+// recovery hint carries the value instead, and is honest because
+// history.AppendHistory has already run for every accepted chunk.
+func recordStaleDelivery(d deps.Dependencies, recorder *telemetry.Recorder, sessionID, chunkID string, index int, reason string) {
 	_ = recorder.Record(telemetry.Event{
 		Event: telemetry.DeliveryStale, Timestamp: time.Now(), SessionID: sessionID,
-		ChunkID: chunkID, ChunkIndex: index, DeliveryID: chunkID,
+		ChunkID: chunkID, ChunkIndex: index, DeliveryID: chunkID, CancelReason: reason,
 	})
+	if d.Stdout == nil {
+		return
+	}
+	fmt.Fprintf(d.Stdout, "voxi eager: transcript not typed (session=%s chunk=%s reason=%s); recover with: voxi history retype 1\n",
+		sessionID, chunkID, reason)
 }
 
 // reportEagerFailure makes hard pipeline failures visible to both direct users
@@ -1195,7 +1297,12 @@ type eagerSessionManager struct {
 	activeCancel        context.CancelFunc
 	activeStopped       chan struct{}
 	activeRequest       *stopRequest
-	activeSessionID     string
+	// prevRequest is the most recently started session's request, kept after
+	// Stop clears activeRequest so the *next* Start can supersede it. A
+	// stopped session still owns the desktop until something newer begins
+	// (issue 115), so nothing but Start may ever cancel this.
+	prevRequest     *stopRequest
+	activeSessionID string
 	isRecording         bool
 	sessWg              sync.WaitGroup
 	lastModifierPressAt time.Time // zero value = no gating-modifier press seen yet this session; reset on Start/Stop
@@ -1226,6 +1333,11 @@ func (m *eagerSessionManager) Stop() {
 	m.activeStopped = nil
 	m.activeSessionID = ""
 	m.activeRequest = nil
+	// Deliberately not cleared or superseded: the stopped session keeps the
+	// right to type its already-captured speech until a new session starts.
+	if request != nil {
+		m.prevRequest = request
+	}
 	m.isRecording = false
 	m.lastModifierPressAt = time.Time{}
 	m.ignorePressesBefore = time.Time{}
@@ -1248,11 +1360,18 @@ func (m *eagerSessionManager) Start() {
 	m.Stop()
 
 	m.mu.Lock()
+	// Starting is the only event that abandons the previous generation: from
+	// here on, its leftover transcripts must not reach the desktop the new
+	// session is about to type into (issue 115). Stop() above already ended
+	// that session's capture, so this happens strictly before the new session
+	// produces any output.
+	m.prevRequest.markSuperseded()
 	activatedAt := m.now()
 	sessionID := m.recorder.NewSessionID(activatedAt)
 	sessCtx, cancel := context.WithCancel(m.ctx)
 	stopped := make(chan struct{})
-	request := &stopRequest{}
+	request := newStopRequest()
+	m.prevRequest = request
 	m.activeCancel = cancel
 	m.activeStopped = stopped
 	m.activeSessionID = sessionID
@@ -1353,7 +1472,15 @@ type modifierBuffer struct {
 	cancelNotify context.CancelFunc
 }
 
-type bufferedDelivery struct{ ID, Text string }
+// bufferedDelivery carries enough of the chunk to finish its bookkeeping at
+// flush time: Index for telemetry correlation, and Meta so the typing
+// timestamps can be persisted the way the plain path already does (issue 115).
+type bufferedDelivery struct {
+	ID    string
+	Text  string
+	Index int
+	Meta  chunks.Chunk
+}
 
 // EnterIfNeeded reports whether eager output should be buffered rather than
 // typed immediately: either buffering is already active for this session
@@ -1384,9 +1511,9 @@ func (b *modifierBuffer) Append(s string) {
 	b.pending.WriteString(s)
 }
 
-func (b *modifierBuffer) AppendDelivery(id, text string) {
+func (b *modifierBuffer) AppendDelivery(id, text string, index int, meta chunks.Chunk) {
 	b.pending.WriteString(text)
-	b.entries = append(b.entries, bufferedDelivery{ID: id, Text: text})
+	b.entries = append(b.entries, bufferedDelivery{ID: id, Text: text, Index: index, Meta: meta})
 }
 
 // ScheduleNotify plays the typing-paused notification after delay, unless
@@ -1453,6 +1580,14 @@ func (b *modifierBuffer) FlushDeliveries() (entries []bufferedDelivery, wasBuffe
 // drain) has completed. Intended for daemon shutdown only.
 func (m *eagerSessionManager) Wait() {
 	m.sessWg.Wait()
+	// Every session has returned, so releasing the last generation context
+	// cannot revoke a delivery that is still pending; without this the final
+	// session's context would outlive the manager.
+	m.mu.Lock()
+	last := m.prevRequest
+	m.prevRequest = nil
+	m.mu.Unlock()
+	last.markSuperseded()
 }
 
 func runEagerDaemon(ctx context.Context, d deps.Dependencies, opts EagerOptions) error {

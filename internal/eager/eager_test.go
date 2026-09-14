@@ -194,8 +194,66 @@ func TestSessionDrainLeaseExpiresAndCancels(t *testing.T) {
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("drain lease did not expire")
 	}
-	if drain.eligible() {
+	ok, reason := drain.deliverable()
+	if ok {
 		t.Fatal("expired drain lease still allowed delivery")
+	}
+	if reason != dropDrainDeadline {
+		t.Fatalf("expired-lease drop reason = %q, want %q", reason, dropDrainDeadline)
+	}
+}
+
+// TestSessionDrainSupersedeBeatsWallClock is the issue 115 core-policy test:
+// the wall clock is only an absolute safety net, and the real revocation
+// signal is a newer generation starting. With an effectively infinite
+// deadline, a stopped generation stays deliverable indefinitely -- exactly the
+// case both live incidents (chunks #563/#564, #1120) lost -- and becomes
+// undeliverable the instant, and only the instant, it is superseded.
+func TestSessionDrainSupersedeBeatsWallClock(t *testing.T) {
+	request := newStopRequest()
+	drain := newSessionDrainFor(request.generationCtx(), time.Hour)
+
+	drain.stop()
+	if ok, reason := drain.deliverable(); !ok {
+		t.Fatalf("deliverable() = (false, %q) right after stop, want (true, \"\")", reason)
+	}
+	// Well past the five seconds the old lease allowed, and past the queue
+	// backlog + LLM cleanup window that expired it in production.
+	time.Sleep(20 * time.Millisecond)
+	if ok, reason := drain.deliverable(); !ok {
+		t.Fatalf("deliverable() = (false, %q) while draining under a far deadline, want (true, \"\")", reason)
+	}
+	select {
+	case <-drain.ctx.Done():
+		t.Fatal("drain context canceled although nothing superseded this generation")
+	default:
+	}
+
+	request.markSuperseded()
+	ok, reason := drain.deliverable()
+	if ok {
+		t.Fatal("superseded generation was still allowed to type")
+	}
+	if reason != dropSuperseded {
+		t.Fatalf("superseded drop reason = %q, want %q", reason, dropSuperseded)
+	}
+	select {
+	case <-drain.ctx.Done():
+	case <-time.After(time.Second):
+		t.Fatal("supersede did not cancel the derived drain context")
+	}
+}
+
+// TestStopRequestGenerationCtxIsNilSafe guards the standalone CLI path and the
+// older tests that pass a nil or zero-value request: with no session manager,
+// no newer generation can exist, so delivery must never be revoked.
+func TestStopRequestGenerationCtxIsNilSafe(t *testing.T) {
+	var nilRequest *stopRequest
+	for name, request := range map[string]*stopRequest{"nil": nilRequest, "zero value": {}} {
+		if err := request.generationCtx().Err(); err != nil {
+			t.Errorf("%s request generationCtx().Err() = %v, want nil", name, err)
+		}
+		request.markSuperseded() // must not panic
 	}
 }
 
