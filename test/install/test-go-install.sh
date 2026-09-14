@@ -56,4 +56,6 @@ cp /src/*.go /src/go.mod /src/go.sum /src/Makefile "$HOME/voxi-source/"
 make -C "$HOME/voxi-source" install
 test -x "$HOME/.local/bin/voxi"
 test "$(grep -c -- '--user enable --now voxi-agent.service' "$HOME/systemctl-calls")" -eq 3
+test -s "$HOME/.local/share/man/man1/voxi.1"
+grep -q '\.TH "VOXI"' "$HOME/.local/share/man/man1/voxi.1"
 printf '%s\n' 'Go install, both voxi install modes, and make install passed'

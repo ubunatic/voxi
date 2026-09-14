@@ -364,11 +364,13 @@ func main() {
 	if err != nil {
 		panic(fmt.Sprintf("load embedded model specification: %v", err))
 	}
+	configCmd.AddCommand(feedback.NewConfigImportCommand(d.Stdout, d.Getenv("HOME"), modelSpec.SpeechContext.MaxTermChars))
 	root.AddCommand(modeCmd, recordCmd, eagerCmd, monitorCmd, historyCmd, configCmd, daemonCmd, benchCmd, settings.NewCommand(d, modelSpec.Names()), shortcut.NewCommand(d), telemetry.NewCommand(d.Stdout, d.Getenv), feedback.NewCommand(d.Stdout, d.Getenv("HOME"), modelSpec.BuiltinStopWords(modelSpec.DefaultModel), modelSpec.SpeechContext.MaxTermChars, modelSpec.SpeechContext.Terms, d, eager.TranscribeCohereWAV), agent.NewCommand(d), chunks.NewCommand(d, nil))
 	installEffects := install.DefaultEffects()
 	installEffects.Home = d.Getenv("HOME")
 	installEffects.Executable = os.Executable
 	root.AddCommand(install.NewCommand(installEffects, d.Stdout))
+	root.AddCommand(newManCmd(root))
 	addDebugCommands(root, d)
 
 	if err := root.Execute(); err != nil {

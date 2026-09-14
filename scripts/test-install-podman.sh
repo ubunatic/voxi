@@ -87,6 +87,19 @@ for unit in voxi-agent.service voxi-eager.service dotoold.service; do
 done
 
 echo "✅ Verified user systemd units properly generated."
+
+# Verify man page installed by install.sh'"'"'s `voxi man --install` step
+man_path="$HOME/.local/share/man/man1/voxi.1"
+if [[ ! -f "$man_path" ]]; then
+  echo "❌ Error: Expected man page $man_path does not exist."
+  exit 1
+fi
+grep -q '"'"'\.TH "VOXI"'"'"' "$man_path" || {
+  echo "❌ Error: $man_path does not look like a generated voxi roff man page."
+  exit 1
+}
+echo "✅ Verified man page installed to $man_path."
+
 echo "==> All Podman installation tests PASSED successfully!"
 '
 

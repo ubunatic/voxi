@@ -29,8 +29,12 @@ build-all: ⚙️ build build-modifierd  # build all binaries
 run: ⚙️ build  # run voxi monitor
 	./$(BINARY) monitor
 
-install: ⚙️ build  # install the binary, dependencies, and user services through voxi install
+install: ⚙️ build  # install the binary, dependencies, user services, and man page through voxi install
 	./$(BINARY) install
+	./$(BINARY) man --install
+
+man: ⚙️ build  # generate roff man page to $(BINARY).1
+	./$(BINARY) man > $(BINARY).1
 
 install-debug: ⚙️ build-debug  # replace the user binary with debug/canary commands for live diagnosis
 	@mkdir -p $(HOME)/.local/bin $(HOME)/go/bin
@@ -115,8 +119,15 @@ canary-nested: ⚙️  # run nested GNOME Shell Wayland text-injection canary
 format: ⚙️  # format source code
 	go fmt ./...
 
+website-install-sh: ⚙️  # regenerate website/install.sh from scripts/install.sh (run by uman pre_sync before publish, so the short ubunatic.com URL never drifts from the real installer)
+	cp scripts/install.sh website/install.sh
+
+website-manual: ⚙️ build  # regenerate website/man/index.html from the live Cobra tree (run by uman pre_sync before publish, so the full command reference subpage can't drift from the real CLI)
+	@mkdir -p website/man
+	./$(BINARY) man --html > website/man/index.html
+
 clean: ⚙️  # remove build artifacts
-	rm -f $(BINARY) $(MODIFIER)
+	rm -f $(BINARY) $(MODIFIER) $(BINARY).1
 
 release: check ⚙️  # release the project using harnez
 	harnez release

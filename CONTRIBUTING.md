@@ -61,7 +61,8 @@ make build-modifierd      # Build the voxi-modifierd daemon
 make test                 # Run go vet and go test across all packages
 make validate-spec        # Validate spec/*.yaml against embedded JSON schemas
 make check                # Run full test suite and spec validations
-make install              # Install voxi to ~/go/bin
+make install              # Install voxi (binary, deps, services, man page) to ~/go/bin
+make man                   # Generate roff man page to voxi.1
 make install-user-services# Install systemd user service units
 make format               # Format Go source code (go fmt ./...)
 make clean                # Remove build artifacts

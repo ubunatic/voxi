@@ -30,3 +30,6 @@ testdata/speech-context/*.wav
 # Release build artifacts
 /dist/
 
+# Generated roff man page (docs/ManPages.md)
+/*.1
+
