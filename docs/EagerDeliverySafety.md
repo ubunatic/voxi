@@ -27,20 +27,36 @@ written into these lifecycle records by default.
 Stopping capture is deliberately fast: the recording process is killed and
 reaped, while all audio captured before the stop request drains asynchronously.
 The final Super-X is a flush command, not a discard command: in-flight, queued,
-and segmenter-buffered jobs belonging to that generation may finish
-transcription and type promptly under a bounded five-second drain lease.
+and segmenter-buffered jobs belonging to that generation finish transcription
+and type.
+
+A stopped generation keeps that right until a **newer session starts**. That, not
+a wall clock, is the delivery gate (issue 115). Each session's stop request owns
+a generation context which only `Start` cancels — `Stop` never does — and the
+session's drain context derives from it, so starting a new session
+simultaneously revokes delivery and reaps the abandoned generation's ASR
+subprocess. Earlier releases instead granted a five-second drain lease, which
+silently discarded fully transcribed, accepted speech whenever queue backlog or
+LLM cleanup ran past it: confirmed twice in production, on the buffered flush
+path (chunks #563/#564) and on the plain path (chunk #1120).
+
+`drain.delivery_deadline_ms` in `spec/eager.yaml` remains as an absolute safety
+net, sized far above one transcription plus one injection, so it only stops a
+hung generation from typing minutes later when the user never records again.
+It is not the delivery policy, and reaching it is a bug report.
 
 The stop request is timestamped before cancellation. Reads completed before that
 boundary survive even if cancellation is observed between reading and frame
-processing; reads completing after the boundary are discarded. A stopped
-generation's lease is independent of a newly started generation, while delivery
-checks lease eligibility before claiming an identity and again immediately
-before injection.
+processing; reads completing after the boundary are discarded. Delivery checks
+`deliverable()` before claiming an identity and again immediately before
+injection; injection itself then runs under its own budget
+(`drain.injection_timeout_ms`) on a context detached from both the drain and the
+daemon root, since aborting mid-word is strictly worse than finishing.
 
 This distinction is important. Detaching every job would allow stale ASR output
-to type after stop; canceling every job drops the last words the user spoke.
-The explicit generation boundary and bounded drain lease express both policies
-without making the control socket wait for transcription.
+to type after stop; canceling every job drops the last words the user spoke. The
+explicit generation boundary expresses both policies without making the control
+socket wait for transcription.
 
 ## User-visible failures
 
@@ -50,6 +66,13 @@ is captured by the systemd user journal. Expected empty, silence-artifact,
 stop-word, pathological, and other normal acceptance rejections remain quiet.
 Buffered modifier-release flushes use the same diagnostic path as immediate
 typing.
+
+An accepted transcript that is never typed is also reported there, naming the
+drop reason (`superseded`, `drain_deadline`, `capture_boundary`) and pointing at
+`voxi history retype`, which can recover it because history is appended for
+every accepted chunk regardless of the delivery path. The transcript text itself
+is not printed. Silence here was what made both issue 115 incidents invisible
+until the telemetry database was inspected after the fact.
 
 ## Conservative transcript safety
 
