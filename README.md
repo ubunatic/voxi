@@ -39,7 +39,21 @@
 
 ## Quickstart & Installation
 
-### Option A: One-Line Script (Recommended)
+### Option A: Go Install from Source
+
+With Go 1.26.5 or newer and a checkout:
+
+```bash
+go install ./cmd/voxi
+~/go/bin/voxi install
+# Optional system-wide physical modifier daemon (requires sudo):
+~/go/bin/voxi install --modifierd
+```
+
+`voxi install` installs dependencies and activates the user services. `make install`
+uses the same command after building the CLI.
+
+### Option B: One-Line Release Script
 
 Install `voxi` directly into `~/.local/bin` and configure user services:
 
@@ -49,22 +63,6 @@ curl -fsSL https://codeberg.org/ubunatic/voxi/raw/branch/main/scripts/install.sh
 
 # (Optional) Include privileged physical modifier daemon setup
 curl -fsSL https://codeberg.org/ubunatic/voxi/raw/branch/main/scripts/install.sh | bash -s -- --modifierd
-```
-
-### Option B: Build and Install from Source
-
-```bash
-git clone https://codeberg.org/ubunatic/voxi.git
-cd voxi
-
-# 1. Build and install the voxi binary
-make install
-
-# 2. Run automated user setup (installs crispasr, dotool/dotoold, configures systemd user units)
-voxi install
-
-# 3. (Optional) Install the system-wide physical modifier daemon (requires sudo)
-voxi install --modifierd
 ```
 
 Ensure `~/.local/bin` (and `~/go/bin` for Go-installed helpers) is in your `$PATH`.
@@ -77,7 +75,7 @@ When running `voxi install`, user-level dependencies (`crispasr`, `dotool`, `dot
 
 | Dependency | Purpose | Package / Source |
 |---|---|---|
-| **Go 1.22+** | Compiling from source | `golang` / `go` |
+| **Go 1.26.5+** | Compiling from source | `golang` / `go` |
 | **`dotoold` / `dotool`** | Hotkey-safe Wayland synthetic typing | Auto-installed by `voxi install` / [git.sr.ht/~geb/dotool](https://git.sr.ht/~geb/dotool) |
 | **`wl-clipboard`** | Clipboard operations (`wl-copy`) & fallback | `wl-clipboard` |
 | **`crispasr`** | Default eager ASR engine (Cohere Transcribe 03-2026, CPU) | Auto-installed by `voxi install` / [CrispASR](https://github.com/CrispStrobe/CrispASR) |

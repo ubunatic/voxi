@@ -6,11 +6,12 @@
 
 ## Decision
 
-Voxi has one discoverable application-level installation entry point:
+Voxi has one application-level installation entry point after acquiring the CLI:
 
 ```sh
-make install             # bootstrap the CLI itself
-voxi install             # complete user-scoped installation
+go install ./cmd/voxi    # from a source checkout
+~/go/bin/voxi install    # complete user-scoped installation
+make install             # build locally, then run voxi install
 voxi install --modifierd # optional system-scoped modifier gating
 ```
 
@@ -20,9 +21,16 @@ binary, user service units, CrispASR, dotool/dotoold, and the enabled and active
 system services. The `--modifierd` flag is an explicit privilege boundary for
 installing and enabling `voxi-modifierd.service`.
 
-The existing Make targets remain compatibility and development primitives.
-`make install-all` also enables and starts the agent, preserving the behavior
-needed by the Super+X workflow for users who continue to use Make directly.
+The release download script also invokes `voxi install` after placing the
+prebuilt binaries. `make install-all` is a compatibility alias for `make install`;
+`make install-modifierd` invokes `voxi install --modifierd`. Other Make targets
+remain development primitives.
+
+`make test-install-podman` tests a local `go install ./cmd/voxi` followed by
+both CLI install modes in one container, then tests release download plus
+`voxi install` in a separate container. Service commands are recorded by stubs;
+the test verifies generated units and installed files without mounting host
+input devices or starting a real systemd manager.
 
 ## Why the boundary matters
 
@@ -99,5 +107,3 @@ review plus live checks supplied the final confidence gate.
 For a narrow future ticket, use the lean fresh-handoff loop. Reserve the full
 five-phase sprint for cross-cutting install, service, security, or architecture
 changes where independent review can uncover integration failures.
-
-
