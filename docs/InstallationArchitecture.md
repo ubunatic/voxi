@@ -27,8 +27,10 @@ prebuilt binaries. `make install-all` is a compatibility alias for `make install
 remain development primitives.
 
 `make test-install-podman` tests a local `go install ./cmd/voxi` followed by
-both CLI install modes in one container, then tests release download plus
-`voxi install` in a separate container. Service commands are recorded by stubs;
+both CLI install modes from outside the checkout, including a versioned remote
+`go install` of `voxi-modifierd`. It also tests `make install` from a writable
+source copy, then tests release download plus automatic `voxi install` in a
+separate container. Service commands are recorded by stubs;
 the test verifies generated units and installed files without mounting host
 input devices or starting a real systemd manager.
 
