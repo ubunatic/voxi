@@ -5,6 +5,7 @@ _rst  := \033[0m
 
 BINARY   ?= voxi
 MODIFIER ?= voxi-modifierd
+# Kept for uninstalling binaries from older system-wide installations.
 PREFIX   ?= /usr/local
 
 help: 🤖  # show this help
@@ -31,7 +32,7 @@ run: ⚙️ build  # run voxi monitor
 install: ⚙️ build  # install the binary, dependencies, and user services through voxi install
 	./$(BINARY) install
 
-install-debug: ⚙️ build-debug  # install debug binary to ~/.local/bin and symlink to ~/go/bin
+install-debug: ⚙️ build-debug  # replace the user binary with debug/canary commands for live diagnosis
 	@mkdir -p $(HOME)/.local/bin $(HOME)/go/bin
 	install -m 0755 $(BINARY) $(HOME)/.local/bin/$(BINARY)
 	ln -sf $(HOME)/.local/bin/$(BINARY) $(HOME)/go/bin/$(BINARY)
@@ -54,9 +55,6 @@ install-dotoold: ⚙️ install-dotool  # install dotoold/dotoolc scripts + doto
 
 restart-service: ⚙️ install  # rebuild, install, and restart the running voxi-agent user service
 	systemctl --user restart voxi-agent.service
-
-install-system: ⚙️ build  # install binary to PREFIX/bin via sudo (system-wide)
-	sudo install -m 0755 $(BINARY) $(PREFIX)/bin/$(BINARY)
 
 install-crispasr: ⚙️  # download official CrispASR release binary (crispasr, needed by the cohere-transcribe engine; issue 078)
 	@arch="$$(uname -m)"; \
