@@ -37,6 +37,9 @@ separate container. Service commands are recorded by stubs;
 the test verifies generated units and installed files without mounting host
 input devices or starting a real systemd manager.
 
+The remaining distribution and real-systemd coverage is tracked in
+[issue 116](../issues/116-test-installer-portability-across-distributions-and-real-systemd.md).
+
 The test has two distinct provenance paths: the Go/Make case builds the current
 checkout, while the curl case downloads the latest published release. A passing
 curl case does not validate unreleased source. Conversely, the source case does
