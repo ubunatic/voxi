@@ -1,6 +1,6 @@
 # 117 — Add voxi feedback sample import command for cross-machine sample transfer
 
-**Status**: Open
+**Status**: Closed — Implemented voxi feedback sample import <path> with tests and live verification
 **Priority**: P3 (Low)
 **Severity**: Minor
 **Category**: Feature
