@@ -1,6 +1,6 @@
 # 115 — Prevent modifier buffer flush drops from expired stopDrainTimeout
 
-**Status**: Open
+**Status**: In Progress — Implementation + Phase-3 review complete; blocked on human live-verification gate (§5.8/§6.3)
 **Priority**: P1 (High)
 **Severity**: High
 **Category**: Core / Eager Engine
