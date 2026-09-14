@@ -39,6 +39,10 @@ When cutting or publishing a release:
 4. **Website Sync**:
    - Verify with `uman website doctor voxi`.
    - Publish latest updates with `uman website sync voxi`.
+   - A CLI `harnez release` publishes binaries and tags; it does not sync
+     `website/`. Keep website copy current locally, then sync it as a separate
+     publishing step when requested. A `releases/latest` link follows new tags
+     without a version-string edit.
 5. **Git Tagging**:
    - Tag releases using semver (e.g. `v0.1.0`).
 
