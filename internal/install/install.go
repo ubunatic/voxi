@@ -458,10 +458,13 @@ func buildModifier(ctx context.Context, dir string) (string, error) {
 	}
 	// If outside a local source checkout, attempt to build from remote module if Go toolchain is available
 	if _, err := exec.LookPath("go"); err == nil {
-		cmd := exec.CommandContext(ctx, "go", "build", "-o", path, "ubunatic.com/voxi/cmd/voxi-modifierd@latest")
-		if err := cmd.Run(); err == nil {
+		cmd := exec.CommandContext(ctx, "go", "install", "ubunatic.com/voxi/cmd/voxi-modifierd@latest")
+		cmd.Env = append(os.Environ(), "GOBIN="+dir)
+		output, err := cmd.CombinedOutput()
+		if err == nil {
 			return path, nil
 		}
+		return "", fmt.Errorf("install voxi-modifierd from remote module: %w: %s", err, strings.TrimSpace(string(output)))
 	}
 	return "", fmt.Errorf("no source checkout or packaged voxi-modifierd binary available (install Go to build or place voxi-modifierd in PATH)")
 }

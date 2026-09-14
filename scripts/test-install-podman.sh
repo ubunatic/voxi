@@ -24,13 +24,25 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 log_info "Building Podman test image (${IMAGE_TAG})..."
 podman build -t "${IMAGE_TAG}" -f "${PROJECT_ROOT}/test/install/Containerfile" "${PROJECT_ROOT}"
 
+log_info "Testing go install from this checkout, then voxi install and voxi install --modifierd..."
+podman run --rm --security-opt label=disable -v "${PROJECT_ROOT}:/src:ro" "${IMAGE_TAG}" bash /src/test/install/test-go-install.sh
+
 log_info "Testing curl installer in clean container environment..."
-podman run --rm -v "${PROJECT_ROOT}/scripts/install.sh:/tmp/install.sh:ro" "${IMAGE_TAG}" bash -c '
+podman run --rm --security-opt label=disable -v "${PROJECT_ROOT}/scripts/install.sh:/tmp/install.sh:ro" "${IMAGE_TAG}" bash -c '
 set -euo pipefail
 export PATH="/home/testuser/.local/bin:${PATH}"
 
-echo "==> 1. Testing standalone binary download and verification via install.sh (--no-bootstrap)..."
-bash /tmp/install.sh --no-bootstrap
+mkdir -p "$HOME/bin"
+cat <<STUB > "$HOME/bin/systemctl"
+#!/bin/bash
+echo "[stub systemctl] \$*"
+exit 0
+STUB
+chmod +x "$HOME/bin/systemctl"
+export PATH="$HOME/bin:$PATH"
+
+echo "==> Testing curl download followed by automatic voxi install..."
+bash /tmp/install.sh
 
 # Verify installed binaries
 if [[ ! -x "$HOME/.local/bin/voxi" ]]; then
@@ -46,18 +58,6 @@ fi
 echo "✅ Verified binaries installed in ~/.local/bin"
 "$HOME/.local/bin/voxi" --help >/dev/null
 echo "✅ Verified voxi binary runs."
-
-echo "==> 2. Testing full voxi install workflow (dependencies & unit generation)..."
-mkdir -p "$HOME/bin"
-cat <<STUB > "$HOME/bin/systemctl"
-#!/bin/bash
-echo "[stub systemctl] \$*"
-exit 0
-STUB
-chmod +x "$HOME/bin/systemctl"
-export PATH="$HOME/bin:$PATH"
-
-"$HOME/.local/bin/voxi" install
 
 # Verify CrispASR installation
 if [[ ! -x "$HOME/.local/lib/voxi/crispasr/crispasr" ]]; then

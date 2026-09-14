@@ -28,19 +28,15 @@ build-all: ⚙️ build build-modifierd  # build all binaries
 run: ⚙️ build  # run voxi monitor
 	./$(BINARY) monitor
 
-install: ⚙️ build  # install voxi binary to ~/.local/bin and symlink to ~/go/bin (user)
-	@mkdir -p $(HOME)/.local/bin $(HOME)/go/bin
-	install -m 0755 $(BINARY) $(HOME)/.local/bin/$(BINARY)
-	ln -sf $(HOME)/.local/bin/$(BINARY) $(HOME)/go/bin/$(BINARY)
+install: ⚙️ build  # install the binary, dependencies, and user services through voxi install
+	./$(BINARY) install
 
 install-debug: ⚙️ build-debug  # install debug binary to ~/.local/bin and symlink to ~/go/bin
 	@mkdir -p $(HOME)/.local/bin $(HOME)/go/bin
 	install -m 0755 $(BINARY) $(HOME)/.local/bin/$(BINARY)
 	ln -sf $(HOME)/.local/bin/$(BINARY) $(HOME)/go/bin/$(BINARY)
 
-install-all: ⚙️ install install-user-services install-crispasr install-dotool install-dotoold  # install user binaries, systemd user services, and default engine + typing-injection deps
-	go install ./cmd/voxi-modifierd
-	systemctl --user enable --now voxi-agent.service
+install-all: ⚙️ install  # compatibility alias for the converged user install
 
 install-dotool: ⚙️  # install dotool (direct keystroke injection) to ~/go/bin
 	go install git.sr.ht/~geb/dotool@latest
@@ -81,11 +77,8 @@ install-crispasr: ⚙️  # download official CrispASR release binary (crispasr,
 	ln -sf "$$dir/crispasr" "$(HOME)/go/bin/crispasr"; \
 	"$(HOME)/go/bin/crispasr" --version
 
-install-modifierd: ⚙️ build-modifierd  # install voxi-modifierd and enable system service via sudo
-	sudo install -m 0755 $(MODIFIER) $(PREFIX)/bin/$(MODIFIER)
-	sudo cp systemd/voxi-modifierd.service /etc/systemd/system/
-	sudo systemctl daemon-reload
-	sudo systemctl enable --now voxi-modifierd.service
+install-modifierd: ⚙️ build  # install user services and optional system modifier daemon
+	./$(BINARY) install --modifierd
 
 install-user-services: ⚙️  # install systemd user service units
 	mkdir -p $(HOME)/.config/systemd/user
@@ -110,7 +103,7 @@ test-debug: ⚙️  # run tests with debug tag
 	go vet -tags debug ./...
 	go test -tags debug ./...
 
-test-install-podman: ⚙️  # test curl installer workflow in clean container via podman
+test-install-podman: ⚙️  # test Go and curl installation workflows in clean containers
 	./scripts/test-install-podman.sh
 
 test-install: ⚙️ test-install-podman  # alias for test-install-podman

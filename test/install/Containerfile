@@ -5,7 +5,7 @@
 # injecting keystrokes into a mapped uinput device leaks synthetic typing
 # directly into focused host desktop windows.
 
-FROM debian:bookworm-slim
+FROM golang:1.26-bookworm
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -18,7 +18,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     sudo \
     procps \
     libevdev2 \
-    golang-go \
     gcc \
     libc6-dev \
     pkg-config \
