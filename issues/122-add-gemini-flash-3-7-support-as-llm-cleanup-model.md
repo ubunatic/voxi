@@ -110,3 +110,43 @@ cleanup was observed through Voxi, so this issue is not complete.
 Next: establish and test a viable persistent `agy` stream-JSON session (or
 another measured design that meets the eager deadline), then rerun the same
 five cases and require successful cleanup before closing this ticket.
+
+## 7. Session canary (2026-09-14, later same day): persistent session vs. per-call spawn
+
+Follow-up canary probing three designs for reducing per-chunk `agy` latency,
+run directly against `agy` from a shell (not through Voxi):
+
+- **Cold per-call spawn** (`agy --model=... -p "..."`, one process per chunk):
+  ~3.3-4.2s wall-clock per call, dominated by process
+  startup/auth/connection, not generation.
+- **`agy -c` (continue most recent conversation) per call**: confirmed
+  repo/dir-aware (requires an existing prior conversation in that dir), but
+  does **not** reduce latency — each call is still a fresh process paying
+  full startup cost (~3.5-4.2s wall-clock across 3 calls), no better than a
+  cold spawn.
+- **Persistent stream-JSON session** (one long-lived `agy --print=''
+  --input-format=stream-json --output-format=stream-json` process, fed one
+  NDJSON line per turn: `{"event":"user","message":{"role":"user","content":"..."}}`):
+  the best of the three, at ~1.2-2.0s per turn once the process is warm —
+  avoids repeated process-spawn/connection overhead, but still occasionally
+  exceeds a 1.5s budget.
+
+**Fixed cost that no session strategy avoids**: every turn — regardless of
+design, and regardless of working directory (tested from both `voxi/` and an
+empty scratch dir) — carries a **~13,180-token baseline** from `agy`'s full
+tool-schema loadout (30+ tools: browser control, subagents, MCP, etc.),
+which is not project-doc leakage and has no known opt-out (`agy agent`
+returns an empty agent list; no flag strips the tool schema). This baseline,
+not conversation history size, appears to set the latency floor — history
+growth (13k -> 26k -> 40k tokens across 3 turns in both the stream-JSON and
+`-c` tests) compounds it further, though `agy` reportedly auto-compacts
+server-side so this may self-limit over a long session.
+
+**Conclusion**: a hard 1.5s per-chunk deadline cannot be reliably met by any
+`agy`-mediated cloud round-trip design tested so far. Closing this ticket
+needs either (a) relaxing/reframing the eager-cleanup latency budget
+specifically for the opt-in cloud-backed path (issue 121's 1.5s budget was
+set against the local-HTTP model), or (b) finding an `agy` mode with a
+smaller fixed tool-schema cost, which is not currently exposed. Next step
+before further plumbing work: decide which of these two to pursue, then
+re-run the 5-case evaluation against whichever design results.
