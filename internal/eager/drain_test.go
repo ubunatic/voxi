@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"syscall"
 	"testing"
@@ -458,13 +459,35 @@ func TestSupersededGenerationDoesNotTypeIntoNewSession(t *testing.T) {
 	}
 	// Never drop silently: the daemon's stdout is the journal.
 	out := stdout.String()
-	for _, want := range []string{"transcript not typed", "reason=" + dropSuperseded, "voxi history retype"} {
-		if !bytes.Contains([]byte(out), []byte(want)) {
+	for _, want := range []string{"transcript not typed", "reason=" + dropSuperseded} {
+		if !strings.Contains(out, want) {
 			t.Errorf("daemon output does not mention %q; got:\n%s", want, out)
 		}
 	}
-	if bytes.Contains([]byte(out), []byte("first")) {
+	assertRecoveryHintIsUsable(t, out)
+	if strings.Contains(out, "first") {
 		t.Errorf("drop message leaked the transcript text, violating the privacy contract:\n%s", out)
+	}
+}
+
+// assertRecoveryHintIsUsable checks the advice a user gets at the worst
+// possible moment actually works. `voxi history retype` resolves an entry by
+// its 8-character ID via an exact-match lookup (history.FindHistoryEntry), so
+// a hint naming a position -- `retype 1` -- fails with `no history entry with
+// id "1"`. Asserting only that the string "voxi history retype" appears is
+// what let exactly that ship.
+func assertRecoveryHintIsUsable(t *testing.T, out string) {
+	t.Helper()
+	const hint = "voxi history list, then voxi history retype <ID>"
+	if !strings.Contains(out, hint) {
+		t.Errorf("drop message does not offer the recovery hint %q; got:\n%s", hint, out)
+	}
+	// A literal argument after `retype` would be a positional index or some
+	// other invented token: the real ID is only knowable from `history list`.
+	for _, bogus := range []string{"retype 1", "retype 0", "retype <N>", "retype N"} {
+		if strings.Contains(out, bogus) {
+			t.Errorf("drop message suggests %q, but retype takes an 8-character history ID, not an index; got:\n%s", bogus, out)
+		}
 	}
 }
 

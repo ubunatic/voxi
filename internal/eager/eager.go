@@ -209,11 +209,6 @@ func (d *sessionDrain) deliverable() (bool, string) {
 	return true, ""
 }
 
-func (d *sessionDrain) eligible() bool {
-	ok, _ := d.deliverable()
-	return ok
-}
-
 // eagerSocketTimeout bounds a client's round trip to the eager daemon's
 // control socket (start/stop/toggle/status). See issue 057: this is a
 // safety net, not the primary fix -- the primary fix (eagerSessionManager)
@@ -1095,7 +1090,10 @@ func recordStaleDelivery(d deps.Dependencies, recorder *telemetry.Recorder, sess
 	if d.Stdout == nil {
 		return
 	}
-	fmt.Fprintf(d.Stdout, "voxi eager: transcript not typed (session=%s chunk=%s reason=%s); recover with: voxi history retype 1\n",
+	// `retype` takes a history entry's 8-character ID, never an index, so the
+	// hint must route through `history list` (which prints the ID first, most
+	// recent first) rather than naming a position.
+	fmt.Fprintf(d.Stdout, "voxi eager: transcript not typed (session=%s chunk=%s reason=%s); recover with: voxi history list, then voxi history retype <ID>\n",
 		sessionID, chunkID, reason)
 }
 
@@ -1327,17 +1325,17 @@ type eagerSessionManager struct {
 	// for tests that don't set it) disables the grace window entirely.
 	modifierStartGrace time.Duration
 
-	mu                  sync.Mutex
-	toggleMu            sync.Mutex // serializes check-and-act Toggle operations
-	activeCancel        context.CancelFunc
-	activeStopped       chan struct{}
-	activeRequest       *stopRequest
+	mu            sync.Mutex
+	toggleMu      sync.Mutex // serializes check-and-act Toggle operations
+	activeCancel  context.CancelFunc
+	activeStopped chan struct{}
+	activeRequest *stopRequest
 	// prevRequest is the most recently started session's request, kept after
 	// Stop clears activeRequest so the *next* Start can supersede it. A
 	// stopped session still owns the desktop until something newer begins
 	// (issue 115), so nothing but Start may ever cancel this.
-	prevRequest     *stopRequest
-	activeSessionID string
+	prevRequest         *stopRequest
+	activeSessionID     string
 	isRecording         bool
 	sessWg              sync.WaitGroup
 	lastModifierPressAt time.Time // zero value = no gating-modifier press seen yet this session; reset on Start/Stop

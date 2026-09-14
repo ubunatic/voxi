@@ -177,12 +177,12 @@ func TestQueuedJobContextDetachesCanceledQueuedJobs(t *testing.T) {
 
 func TestSessionDrainLeaseExpiresAndCancels(t *testing.T) {
 	drain := newSessionDrainWithTimeout(25 * time.Millisecond)
-	if !drain.eligible() {
-		t.Fatal("active session unexpectedly ineligible")
+	if ok, reason := drain.deliverable(); !ok {
+		t.Fatalf("active session unexpectedly ineligible: %q", reason)
 	}
 	drain.stop()
-	if !drain.eligible() {
-		t.Fatal("pre-stop result was not eligible during drain lease")
+	if ok, reason := drain.deliverable(); !ok {
+		t.Fatalf("pre-stop result was not deliverable during the drain: %q", reason)
 	}
 	select {
 	case <-drain.ctx.Done():
@@ -283,11 +283,11 @@ func TestSessionDrainGenerationOverlapKeepsOnlyAuthorizedLease(t *testing.T) {
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("old generation lease did not expire")
 	}
-	if old.eligible() {
-		t.Fatal("late old-generation result remained eligible")
+	if ok, _ := old.deliverable(); ok {
+		t.Fatal("late old-generation result remained deliverable")
 	}
-	if !newGeneration.eligible() {
-		t.Fatal("new generation was incorrectly invalidated by old generation")
+	if ok, reason := newGeneration.deliverable(); !ok {
+		t.Fatalf("new generation was incorrectly invalidated by the old one: %q", reason)
 	}
 }
 

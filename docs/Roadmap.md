@@ -68,10 +68,13 @@ user speaking becoming confident, well-formed, correctly-delivered text.
   (In Progress, P1). Demoted within `Now` — still `Now`, no longer first. §9
   shipped the durable at-most-once ledger (file-locked, fsynced, survives
   daemon restarts, `delivery_duplicate` telemetry) and the injector attempt
-  boundary; §10 shipped the bounded five-second final-Super-X drain that makes
-  "stop capture and flush" mean what the daily workflow expects, with
-  generation eligibility checked both before the durable claim and before
-  injection. The §8 warning still stands for anyone touching this code: the
+  boundary; §10 shipped the final-Super-X drain that makes "stop capture and
+  flush" mean what the daily workflow expects, with generation eligibility
+  checked both before the durable claim and before injection. Its original
+  five-second wall-clock lease was replaced in issue 115 by an explicit
+  generation-superseded signal, after the lease was confirmed to drop fully
+  transcribed speech twice in production; see
+  [EagerDeliverySafety.md](EagerDeliverySafety.md). The §8 warning still stands for anyone touching this code: the
   design must keep distinguishing "the last thing the user said, right up to
   stop" from "a stale or pathological late result." What is explicitly *not*
   claimed and remains open: emergency stop, exhaustive FIFO/standalone injector
