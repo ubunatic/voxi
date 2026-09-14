@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -147,14 +148,28 @@ func checkASREngine(d deps.Dependencies, model string) DiagnosticItem {
 
 func checkLLMCleaner(ctx context.Context, s *config.UserSettings) DiagnosticItem {
 	item := DiagnosticItem{Name: "LLM Cleaner"}
+	if s.CleanupBackend == "agy" {
+		_, err := exec.LookPath("agy")
+		if !s.LLMCleaner {
+			item.Status = StatusSkip
+			item.Summary = "Disabled (agy backend selected)"
+			return item
+		}
+		if err != nil {
+			item.Status = StatusFail
+			item.Summary = "agy binary not found"
+			item.Detail = "Install agy and ensure it is on PATH"
+			return item
+		}
+		item.Status = StatusPass
+		item.Summary = fmt.Sprintf("Enabled via agy (model: %s)", cleanupModel(s))
+		return item
+	}
 	baseURL := s.OpenAIBaseURL
 	if baseURL == "" {
 		baseURL = "http://127.0.0.1:8734/v1"
 	}
-	model := s.CleanupModel
-	if model == "" {
-		model = "qwen3-4b-instruct-2507-q4"
-	}
+	model := cleanupModel(s)
 
 	probeURL := strings.TrimRight(baseURL, "/") + "/models"
 	reqCtx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
@@ -194,6 +209,17 @@ func checkLLMCleaner(ctx context.Context, s *config.UserSettings) DiagnosticItem
 	item.Summary = fmt.Sprintf("Enabled but endpoint unreachable at %s (fallback to raw ASR)", baseURL)
 	item.Detail = "Start local lmcoder service or verify OPENAI_BASE_URL"
 	return item
+}
+
+func cleanupModel(s *config.UserSettings) string {
+	model := s.CleanupModel
+	if model == "" {
+		model = "qwen3-4b-instruct-2507-q4"
+		if s.CleanupBackend == "agy" {
+			model = "gemini-3.7-flash-low"
+		}
+	}
+	return model
 }
 
 func checkTypingInjection(d deps.Dependencies, home string, typeDelayMs int) DiagnosticItem {

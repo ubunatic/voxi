@@ -21,6 +21,7 @@ var (
 // UserSettings defines user-configurable Voxi settings across config.yaml, env, and config.toml.
 type UserSettings struct {
 	LLMCleaner       bool   `json:"llm_cleaner" yaml:"llm_cleaner"`
+	CleanupBackend   string `json:"cleanup_backend" yaml:"cleanup_backend"`
 	CleanupModel     string `json:"cleanup_model" yaml:"cleanup_model"`
 	OpenAIBaseURL    string `json:"openai_base_url" yaml:"openai_base_url"`
 	ASRModel         string `json:"asr_model" yaml:"asr_model"`
@@ -33,6 +34,7 @@ type UserSettings struct {
 func DefaultUserSettings() *UserSettings {
 	return &UserSettings{
 		LLMCleaner:       false,
+		CleanupBackend:   "local_http",
 		CleanupModel:     "qwen3-4b-instruct-2507-q4",
 		OpenAIBaseURL:    "http://127.0.0.1:8734/v1",
 		ASRModel:         "cohere-transcribe-03-2026",
@@ -83,12 +85,18 @@ func LoadUserSettings(home string) (*UserSettings, error) {
 	} else if !os.IsNotExist(err) {
 		return nil, fmt.Errorf("read %s: %w", yamlPath, err)
 	}
+	if s.CleanupBackend == "" {
+		s.CleanupBackend = "local_http"
+	}
 
 	envPath := VoxiEnvPath(home)
 	if envData, err := os.ReadFile(envPath); err == nil {
 		envMap := ParseEnv(envData)
 		if v, ok := envMap["VOXI_LLM_CLEANER"]; ok {
 			s.LLMCleaner = parseBool(v, s.LLMCleaner)
+		}
+		if v, ok := envMap["VOXI_CLEANUP_BACKEND"]; ok && v != "" {
+			s.CleanupBackend = v
 		}
 		if v, ok := envMap["VOXI_CLEANUP_MODEL"]; ok && v != "" {
 			s.CleanupModel = v
@@ -167,6 +175,7 @@ func FormatEnv(s *UserSettings, existing map[string]string) []byte {
 	}
 
 	merged["VOXI_LLM_CLEANER"] = strconv.FormatBool(s.LLMCleaner)
+	merged["VOXI_CLEANUP_BACKEND"] = s.CleanupBackend
 	merged["VOXI_CLEANUP_MODEL"] = s.CleanupModel
 	if s.OpenAIBaseURL != "" {
 		merged["OPENAI_BASE_URL"] = s.OpenAIBaseURL
@@ -177,6 +186,7 @@ func FormatEnv(s *UserSettings, existing map[string]string) []byte {
 
 	managedOrder := []string{
 		"VOXI_LLM_CLEANER",
+		"VOXI_CLEANUP_BACKEND",
 		"VOXI_CLEANUP_MODEL",
 		"OPENAI_BASE_URL",
 		"VOXI_ASR_MODEL",

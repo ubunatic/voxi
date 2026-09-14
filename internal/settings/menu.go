@@ -50,8 +50,14 @@ type MenuModel struct {
 var DefaultCleanupModels = []string{
 	"qwen3-4b-instruct-2507-q4",
 	"smollm3-3b-instruct-q4",
+	"gemini-3.7-flash-low",
+	"gemini-3.7-flash-medium",
+	"gemini-3.7-flash-high",
 	"none",
 }
+
+// DefaultCleanupBackends lists the supported cleanup transports.
+var DefaultCleanupBackends = []string{"local_http", "agy"}
 
 // DefaultTypeDelays lists standard typing delay choices in milliseconds.
 var DefaultTypeDelays = []int{0, 1, 5, 12}
@@ -70,6 +76,14 @@ func NewMenuModel(s *config.UserSettings, availableASRModels []string) *MenuMode
 	cleanupIdx := indexOf(cleanupChoices, s.CleanupModel)
 	if cleanupIdx < 0 {
 		cleanupIdx = 0
+	}
+	backendChoices := append([]string{}, DefaultCleanupBackends...)
+	if s.CleanupBackend != "" && !contains(backendChoices, s.CleanupBackend) {
+		backendChoices = append([]string{s.CleanupBackend}, backendChoices...)
+	}
+	backendIdx := indexOf(backendChoices, s.CleanupBackend)
+	if backendIdx < 0 {
+		backendIdx = 0
 	}
 
 	// Prepare ASR model choices
@@ -103,6 +117,14 @@ func NewMenuModel(s *config.UserSettings, availableASRModels []string) *MenuMode
 	}
 
 	items := []*MenuItem{
+		{
+			ID:          "cleanup_backend",
+			Title:       "Cleanup Backend",
+			Description: "local_http stays local; agy sends transcript text to its configured provider",
+			Kind:        ItemChoice,
+			Choices:     backendChoices,
+			ChoiceIndex: backendIdx,
+		},
 		{
 			ID:          "llm_cleaner",
 			Title:       "LLM Post-Processing Cleaner",
@@ -300,6 +322,10 @@ func (m *MenuModel) ToUserSettings(base *config.UserSettings) *config.UserSettin
 
 	for _, item := range m.Items {
 		switch item.ID {
+		case "cleanup_backend":
+			if item.ChoiceIndex >= 0 && item.ChoiceIndex < len(item.Choices) {
+				res.CleanupBackend = item.Choices[item.ChoiceIndex]
+			}
 		case "llm_cleaner":
 			res.LLMCleaner = item.BoolValue
 		case "cleanup_model":

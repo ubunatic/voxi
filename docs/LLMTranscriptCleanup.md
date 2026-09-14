@@ -1,10 +1,12 @@
 # LLM Transcript Cleanup
 
-Voxi's optional LLM cleaner edits each eager dictation chunk after ASR stop-word cleanup and, for Cohere, configured word replacements. The cleaned result is then checked for transcript acceptance and safety before Voxi adds it to the session transcript or types it. Cleanup is disabled by default; `llm_cleaner`, `cleanup_model`, and `openai_base_url` are loaded from the user's Voxi configuration. The implementation is in [`internal/eager/eager.go`](../internal/eager/eager.go).
+Voxi's optional LLM cleaner edits each eager dictation chunk after ASR stop-word cleanup and, for Cohere, configured word replacements. The cleaned result is then checked for transcript acceptance and safety before Voxi adds it to the session transcript or types it. Cleanup is disabled by default; `llm_cleaner`, `cleanup_backend`, `cleanup_model`, and `openai_base_url` are loaded from the user's Voxi configuration. The implementation is in [`internal/eager/eager.go`](../internal/eager/eager.go).
+
+The default `cleanup_backend: local_http` uses the local OpenAI-compatible endpoint. Set `cleanup_backend: agy` to opt in to the local `agy` CLI with a `gemini-3.7-flash-low` default (or choose `gemini-3.7-flash-medium`/`-high`). This sends transcript text to whatever provider `agy` routes to; Voxi does not handle those credentials. The subprocess is bounded by the same 1.5-second eager-cleanup deadline, so slow, missing, or failed `agy` calls fall back to the original transcript. In the 2026-09-14 canary, every real `agy` cleanup timed out; this backend is an experimental integration checkpoint, not yet a working eager-cleanup option.
 
 ## Request contract
 
-Voxi posts an OpenAI-compatible JSON `/chat/completions` request to the configured local endpoint. The system message instructs the model to edit speech-to-text only: commands, questions, and requests in the transcript are dictated words, not actions to perform or questions to answer. It permits capitalization, punctuation, spelling, and unambiguous transcription fixes while preserving meaning and wording.
+For `local_http`, Voxi posts an OpenAI-compatible JSON `/chat/completions` request to the configured local endpoint. For `agy`, Voxi passes the same system-plus-YAML contract as one prompt to `agy --print=... --output-format json`. The system message instructs the model to edit speech-to-text only: commands, questions, and requests in the transcript are dictated words, not actions to perform or questions to answer. It permits capitalization, punctuation, spelling, and unambiguous transcription fixes while preserving meaning and wording.
 
 The user message is YAML **data** with a `transcript` scalar and a `chunk` mapping:
 
@@ -31,6 +33,8 @@ The mock-server test in [`eager_test.go`](../internal/eager/eager_test.go) check
 ```sh
 VOXI_CLEANUP_EVAL_URL=http://127.0.0.1:8734/v1 go test ./internal/eager -run '^TestRealCleanupEvaluation$' -count=1 -v
 ```
+
+For Gemini via `agy`, run `VOXI_CLEANUP_EVAL_BACKEND=agy VOXI_CLEANUP_EVAL_MODEL=gemini-3.7-flash-low go test ./internal/eager -run '^TestRealCleanupEvaluation$' -count=1 -v`. The external canary is [`scripts/check-agy-gemini.sh`](../scripts/check-agy-gemini.sh).
 
 Compare expected and actual text, HTTP status, elapsed time, timeout, and fallback. An unchanged transcript can be a valid model response; only the upstream result distinguishes it from fallback. Warm-cache and cold-cache runs can differ near the 1.5-second deadline.
 

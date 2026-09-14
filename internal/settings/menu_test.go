@@ -10,8 +10,8 @@ func TestMenuModelNavigation(t *testing.T) {
 	s := config.DefaultUserSettings()
 	m := NewMenuModel(s, nil)
 
-	if len(m.Items) != 8 {
-		t.Fatalf("expected 8 items, got %d", len(m.Items))
+	if len(m.Items) != 9 {
+		t.Fatalf("expected 9 items, got %d", len(m.Items))
 	}
 	if m.Cursor != 0 {
 		t.Fatalf("expected initial cursor 0, got %d", m.Cursor)
@@ -53,8 +53,8 @@ func TestMenuModelTogglesAndCycles(t *testing.T) {
 	}
 	m := NewMenuModel(s, []string{"cohere-transcribe-03-2026", "large-v3-turbo", "small.en", "base.en"})
 
-	// 1. LLM Cleaner (Cursor 0): Toggle bool
-	m.Cursor = 0
+	// 1. LLM Cleaner (Cursor 1): Toggle bool
+	m.Cursor = 1
 	if m.CurrentItem().BoolValue != false {
 		t.Fatalf("initial LLMCleaner should be false")
 	}
@@ -66,8 +66,8 @@ func TestMenuModelTogglesAndCycles(t *testing.T) {
 		t.Errorf("expected Modified=true after change")
 	}
 
-	// 2. Cleanup Model (Cursor 1): Cycle choice
-	m.Cursor = 1
+	// 2. Cleanup Model (Cursor 2): Cycle choice
+	m.Cursor = 2
 	initialModel := m.CurrentItem().Choices[m.CurrentItem().ChoiceIndex]
 	m.Next()
 	newModel := m.CurrentItem().Choices[m.CurrentItem().ChoiceIndex]
@@ -80,8 +80,16 @@ func TestMenuModelTogglesAndCycles(t *testing.T) {
 		t.Errorf("CleanupModel after Prev() = %s, want %s", revertedModel, initialModel)
 	}
 
-	// 3. ASR Model (Cursor 2): Cycle choice
-	m.Cursor = 2
+	// 3. Cleanup backend (Cursor 0): Cycle choice
+	m.Cursor = 0
+	initialBackend := m.CurrentItem().Choices[m.CurrentItem().ChoiceIndex]
+	m.Next()
+	if m.CurrentItem().Choices[m.CurrentItem().ChoiceIndex] == initialBackend {
+		t.Errorf("CleanupBackend did not change on Next()")
+	}
+
+	// 4. ASR Model (Cursor 3): Cycle choice
+	m.Cursor = 3
 	initialASR := m.CurrentItem().Choices[m.CurrentItem().ChoiceIndex]
 	m.Next()
 	newASR := m.CurrentItem().Choices[m.CurrentItem().ChoiceIndex]
@@ -89,8 +97,8 @@ func TestMenuModelTogglesAndCycles(t *testing.T) {
 		t.Errorf("ASRModel did not change on Next()")
 	}
 
-	// 4. Typing Delay (Cursor 3): Cycle choice
-	m.Cursor = 3
+	// 5. Typing Delay (Cursor 4): Cycle choice
+	m.Cursor = 4
 	if m.CurrentItem().Choices[m.CurrentItem().ChoiceIndex] != "0ms" {
 		t.Errorf("initial delay = %s, want 0ms", m.CurrentItem().Choices[m.CurrentItem().ChoiceIndex])
 	}
@@ -99,8 +107,8 @@ func TestMenuModelTogglesAndCycles(t *testing.T) {
 		t.Errorf("next delay = %s, want 1ms", m.CurrentItem().Choices[m.CurrentItem().ChoiceIndex])
 	}
 
-	// 5. Save action (Cursor 6)
-	m.Cursor = 6
+	// 6. Save action (Cursor 7)
+	m.Cursor = 7
 	m.ToggleOrNext()
 	if !m.Saved || !m.Closed {
 		t.Errorf("expected Saved=true, Closed=true on Save row action")

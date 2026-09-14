@@ -14,6 +14,7 @@ func TestSettingsCommandDump(t *testing.T) {
 	home := t.TempDir()
 	custom := &config.UserSettings{
 		LLMCleaner:       true,
+		CleanupBackend:   "local_http",
 		CleanupModel:     "qwen3-4b-instruct-2507-q4",
 		OpenAIBaseURL:    "http://127.0.0.1:8734/v1",
 		ASRModel:         "large-v3-turbo",

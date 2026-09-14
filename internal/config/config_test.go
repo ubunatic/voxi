@@ -85,6 +85,9 @@ func TestLoadUserSettingsDefaults(t *testing.T) {
 	if s.CleanupModel != def.CleanupModel {
 		t.Errorf("CleanupModel = %v, want %v", s.CleanupModel, def.CleanupModel)
 	}
+	if s.CleanupBackend != "local_http" {
+		t.Errorf("CleanupBackend = %v, want local_http", s.CleanupBackend)
+	}
 	if s.ASRModel != def.ASRModel {
 		t.Errorf("ASRModel = %v, want %v", s.ASRModel, def.ASRModel)
 	}
@@ -103,6 +106,7 @@ func TestSaveAndLoadUserSettings(t *testing.T) {
 	dir := t.TempDir()
 	custom := &UserSettings{
 		LLMCleaner:       true,
+		CleanupBackend:   "agy",
 		CleanupModel:     "smollm3-3b-instruct-q4",
 		OpenAIBaseURL:    "http://127.0.0.1:9999/v1",
 		ASRModel:         "large-v3-turbo",
@@ -130,6 +134,9 @@ func TestSaveAndLoadUserSettings(t *testing.T) {
 	envMap := ParseEnv(envData)
 	if envMap["VOXI_LLM_CLEANER"] != "true" {
 		t.Errorf("VOXI_LLM_CLEANER = %s, want true", envMap["VOXI_LLM_CLEANER"])
+	}
+	if envMap["VOXI_CLEANUP_BACKEND"] != "agy" {
+		t.Errorf("VOXI_CLEANUP_BACKEND = %s, want agy", envMap["VOXI_CLEANUP_BACKEND"])
 	}
 	if envMap["VOXI_CLEANUP_MODEL"] != "smollm3-3b-instruct-q4" {
 		t.Errorf("VOXI_CLEANUP_MODEL = %s, want smollm3-3b-instruct-q4", envMap["VOXI_CLEANUP_MODEL"])
@@ -165,6 +172,9 @@ func TestSaveAndLoadUserSettings(t *testing.T) {
 	}
 	if loaded.CleanupModel != custom.CleanupModel {
 		t.Errorf("loaded CleanupModel = %v, want %v", loaded.CleanupModel, custom.CleanupModel)
+	}
+	if loaded.CleanupBackend != custom.CleanupBackend {
+		t.Errorf("loaded CleanupBackend = %v, want %v", loaded.CleanupBackend, custom.CleanupBackend)
 	}
 	if loaded.OpenAIBaseURL != custom.OpenAIBaseURL {
 		t.Errorf("loaded OpenAIBaseURL = %v, want %v", loaded.OpenAIBaseURL, custom.OpenAIBaseURL)

@@ -29,6 +29,7 @@ func TestRenderMenu(t *testing.T) {
 func TestRenderSummary(t *testing.T) {
 	s := &config.UserSettings{
 		LLMCleaner:       true,
+		CleanupBackend:   "local_http",
 		CleanupModel:     "qwen3-4b-instruct-2507-q4",
 		ASRModel:         "cohere-transcribe-03-2026",
 		TypeDelayMs:      5,

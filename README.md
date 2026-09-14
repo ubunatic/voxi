@@ -2,7 +2,7 @@
 
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/License-AGPL--3.0--or--later-blue.svg)](LICENSE)
 
-`voxi` is a high-performance, privacy-first voice input, continuous eager sentence streaming, and desktop typing engine for Linux/Wayland. It brings fast speech-to-text dictation directly to any focused window with no cloud transcription and hotkey-safe input injection. The default Cohere Transcribe model runs locally on the CPU via `crispasr` and cached GGUF weights, with optional Whisper models supported out of the box.
+`voxi` is a high-performance, privacy-first voice input, continuous eager sentence streaming, and desktop typing engine for Linux/Wayland. It brings fast speech-to-text dictation directly to any focused window with no cloud transcription by default and hotkey-safe input injection. The default Cohere Transcribe model runs locally on the CPU via `crispasr` and cached GGUF weights, with optional Whisper models supported out of the box.
 
 ---
 

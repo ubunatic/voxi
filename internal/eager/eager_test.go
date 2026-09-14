@@ -41,6 +41,40 @@ func TestAcceptTranscriptRejectsIsolatedSilenceArtifactBeforeTypingAndHistory(t 
 	}
 }
 
+func TestCleanWithAGYUsesJSONAndPreservesFallbackTaxonomy(t *testing.T) {
+	dir := t.TempDir()
+	agyPath := filepath.Join(dir, "agy")
+	if err := os.WriteFile(agyPath, []byte("#!/bin/sh\nprintf '%s' \"$AGY_TEST_OUTPUT\"\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	settings := &config.UserSettings{LLMCleaner: true, CleanupBackend: "agy", CleanupModel: "gemini-3.7-flash-low"}
+
+	t.Run("success", func(t *testing.T) {
+		t.Setenv("AGY_TEST_OUTPUT", `{"status":"SUCCESS","response":"Cleaned by agy"}`)
+		got, record := cleanWithLLM(context.Background(), "original", settings, llmChunkContext{})
+		if got != "Cleaned by agy" || record == nil || record.Model != "gemini-3.7-flash-low" || record.FallbackReason != "" {
+			t.Fatalf("result = %q, record = %+v", got, record)
+		}
+	})
+
+	t.Run("invalid schema", func(t *testing.T) {
+		t.Setenv("AGY_TEST_OUTPUT", `{"status":"ERROR","response":""}`)
+		got, record := cleanWithLLM(context.Background(), "original", settings, llmChunkContext{})
+		if got != "original" || record == nil || record.FallbackReason != llmFallbackInvalidSchema {
+			t.Fatalf("result = %q, record = %+v", got, record)
+		}
+	})
+
+	t.Run("empty response", func(t *testing.T) {
+		t.Setenv("AGY_TEST_OUTPUT", `{"status":"SUCCESS","response":"   "}`)
+		got, record := cleanWithLLM(context.Background(), "original", settings, llmChunkContext{})
+		if got != "original" || record == nil || record.FallbackReason != llmFallbackEmptyResponse {
+			t.Fatalf("result = %q, record = %+v", got, record)
+		}
+	})
+}
+
 func TestApplyEngineReplacementsIsCohereOnlyAndChunkLocal(t *testing.T) {
 	// "Voxy" is heard in Title Case here, so the stored lowercase "voxi" is
 	// adapted to "Voxi" to match (see feedback.ApplyReplacements).
