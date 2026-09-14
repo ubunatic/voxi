@@ -2,7 +2,7 @@
 
 **Status:** Accepted  
 **Date:** 2026-09-10  
-**Related:** [Issue 104](../issues/104-add-voxi-install-command-for-complete-user-install-with-optional-privileged-setup.md), [Issue 081](../issues/081-install-and-run-a-persistent-dotoold-systemd-user-service.md), [Issue 089](../issues/089-voxi-modifierd-not-installed-on-this-dev-machine-modifier-gating-currently-inactive.md)
+**Related:** [Issue 104](../issues/104-add-voxi-install-command-for-complete-user-install-with-optional-privileged-setup.md), [Issue 114](../issues/114-fix-out-of-checkout-modifierd-build-fallback.md), [Issue 081](../issues/081-install-and-run-a-persistent-dotoold-systemd-user-service.md), [Issue 089](../issues/089-voxi-modifierd-not-installed-on-this-dev-machine-modifier-gating-currently-inactive.md)
 
 ## Decision
 
@@ -23,8 +23,11 @@ installing and enabling `voxi-modifierd.service`.
 
 The release download script also invokes `voxi install` after placing the
 prebuilt binaries. `make install-all` is a compatibility alias for `make install`;
-`make install-modifierd` invokes `voxi install --modifierd`. Other Make targets
-remain development primitives.
+`make install-modifierd` invokes `voxi install --modifierd`. The former
+`make install-system` target was removed because it only copied a binary and
+did not configure a working installation. `make install-debug` remains a
+diagnostic-only binary replacement; it does not set up services or restart
+the agent. See [VoiceInput.md](VoiceInput.md).
 
 `make test-install-podman` tests a local `go install ./cmd/voxi` followed by
 both CLI install modes from outside the checkout, including a versioned remote
@@ -33,6 +36,27 @@ source copy, then tests release download plus automatic `voxi install` in a
 separate container. Service commands are recorded by stubs;
 the test verifies generated units and installed files without mounting host
 input devices or starting a real systemd manager.
+
+The test has two distinct provenance paths: the Go/Make case builds the current
+checkout, while the curl case downloads the latest published release. A passing
+curl case does not validate unreleased source. Conversely, the source case does
+not prove that the published archive contains the same code. The systemctl and
+sudo stubs verify requested commands and resulting files, not actual service
+liveness or behavior across distributions.
+
+### Container test pitfalls
+
+- The test image must provide the version of Go required by `go.mod`; Debian
+  Bookworm's `golang-go` package was too old for this repository's Go 1.26.5
+  source. The image now uses `golang:1.26-bookworm`.
+- The Go image defaults to `/go/bin`, so the test sets `GOBIN` explicitly to
+  `~/go/bin`. It runs the installed CLI from outside the checkout to exercise
+  the remote modifier-helper fallback instead of accidentally using local
+  source. That fallback uses versioned `go install`, not `go build path@latest`.
+- On SELinux enforcing hosts, a read-only source bind mount was denied until
+  the Podman run disabled container labeling for that mount. The test never
+  mounts host input devices. Go VCS stamping is disabled only inside this
+  bind-mounted test because the checkout appears to have a different owner.
 
 ## Why the boundary matters
 

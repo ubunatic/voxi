@@ -6,7 +6,7 @@ In-depth references for architecture, decisions, and operations of the Voxi Linu
 | :--- | :--- |
 | [VoiceInput.md](VoiceInput.md) | Universal voice input CLI reference, streaming mode toggle, dotool injection, and audio DSP pipeline |
 | [VoiceInputArchitecture.md](VoiceInputArchitecture.md) | ADR: Multi-tier architecture, evdev physical modifier key gating daemon, and GNOME Shell companion extension |
-| [InstallationArchitecture.md](InstallationArchitecture.md) | User-scoped `voxi install`, optional privileged modifier-daemon setup, service activation, and installation failure lessons |
+| [InstallationArchitecture.md](InstallationArchitecture.md) | Converged Go/Make/curl installation, optional modifier daemon, Podman verification boundaries, and installation pitfalls |
 | [HeadlessTestingArchitecture.md](HeadlessTestingArchitecture.md) | Headless end-to-end container test harness, virtual PulseAudio mic streaming, persistent FIFO typing sinks, and host uinput isolation |
 | [BenchBaseline.md](BenchBaseline.md) | `voxi bench` CPU vs GPU RTF baseline for an average dev machine (T14 Gen2 AMD) |
 | [PublicationAndRelease.md](PublicationAndRelease.md) | Codeberg hosting philosophy, local CI quality gates, and release workflow |
