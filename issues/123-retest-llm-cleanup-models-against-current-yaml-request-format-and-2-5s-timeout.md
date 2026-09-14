@@ -67,3 +67,17 @@ the new 2.5s deadline, for both configured backends:
 - Update `docs/studies/2026-09-13-llm-cleanup-evaluation.md` (or add a dated
   follow-up study) with the new numbers rather than leaving the stale 1.5s
   results as the only record.
+
+## 5. 2026-09-15 checkpoint
+
+The five-case harness was rerun twice against local Qwen and once against
+`agy`/Gemini using the current YAML contract and 2.5-second deadline. Qwen
+completed 10/10 calls (737–2,033 ms); Gemini timed out on 5/5 calls
+(2,520–2,525 ms including process teardown). The multiline Qwen output kept
+line breaks but added trailing spaces. Per-case results are in the linked
+study. The harness now records the production cleanup result and classifies
+timeouts from `FallbackReason`, not the former 1.5-second heuristic.
+
+Remaining verification: repeat Qwen under controlled background CPU load
+and from a cold model state before claiming reliable completion under those
+conditions. This checkpoint used warm, sequential requests only.

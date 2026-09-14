@@ -113,24 +113,14 @@ func TestRealCleanupEvaluation(t *testing.T) {
 			case <-time.After(100 * time.Millisecond):
 			}
 			timeout, fallback := "no", "unknown"
-			if upstreamResult == nil {
-				timeout = "unknown (upstream pending)"
-			} else if upstreamResult.Error != "" {
-				fallback = "yes"
-				if elapsed >= 1490*time.Millisecond && strings.Contains(upstreamResult.Error, "context canceled") {
-					timeout = "yes"
-				} else {
-					timeout = "unknown (upstream error)"
-				}
-			} else if upstreamResult.Status != http.StatusOK || strings.TrimSpace(upstreamResult.Content) == "" {
-				fallback = "yes"
-			} else if actual == strings.TrimSpace(upstreamResult.Content) {
+			if record != nil {
 				fallback = "no"
-			} else {
-				fallback = "yes"
-			}
-			if elapsed >= 1490*time.Millisecond && timeout == "no" {
-				timeout = "unknown (deadline boundary)"
+				if record.FallbackReason != "" {
+					fallback = "yes"
+				}
+				if record.FallbackReason == llmFallbackTimeout {
+					timeout = "yes"
+				}
 			}
 			upstreamStatus, upstreamError, upstreamContent, usage := 0, "pending", "", "null"
 			if upstreamResult != nil {
@@ -233,7 +223,7 @@ func runAGYCleanupEvaluation(t *testing.T, model string) {
 		t.Run(tc.name, func(t *testing.T) {
 			started := time.Now()
 			actual, record := cleanWithLLM(context.Background(), tc.spoken, &config.UserSettings{LLMCleaner: true, CleanupBackend: "agy", CleanupModel: model}, tc.chunk)
-			t.Logf("model=%s elapsed=%s fallback=%q output=%q", model, time.Since(started), recordFallback(record), actual)
+			t.Logf("model=%s elapsed=%s record=%+v fallback=%q expected=%q output=%q", model, time.Since(started), record, recordFallback(record), tc.expected, actual)
 			if record == nil || record.FallbackReason != "" {
 				t.Logf("agy evaluation fallback; expected=%q actual=%q", tc.expected, actual)
 				return

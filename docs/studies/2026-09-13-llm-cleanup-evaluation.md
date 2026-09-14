@@ -33,3 +33,19 @@ With the retained prompt and a warm model cache, the repeatable test produced:
 The multiline result is the original transcript returned by fallback, not evidence that the model obeyed a line-break rule. An earlier run immediately after the retained prompt edit timed out on four of five cases; a later warm run timed out on one of five. Latency and cache state matter at this 1.5-second deadline, and this prompt alone does not resolve multiline fidelity. No external model response was substituted for a timeout.
 
 The test also captures the actual production system instruction and YAML user message, converts the YAML data to semantically equivalent compact JSON, and sends both to the same server with `max_tokens: 1`. The server reported **206 YAML prompt tokens versus 203 JSON prompt tokens** for `"i went to teh store and bought milk"` with the representative chunk. JSON used three fewer tokens in this sample. Those counts include the chat template and current system instruction; they do not establish a general format advantage.
+
+## 2026-09-15 retest — current YAML contract, 2.5-second deadline
+
+Ticket 123 reran the same five inputs through production `cleanWithLLM`. The local endpoint was `http://127.0.0.1:8734/v1` with `qwen3-4b-instruct-2507-q4`; the other backend was `agy` with `gemini-3.7-flash-low`. The harness now uses `LLMCleanupRecord.FallbackReason` for timeout classification instead of the former 1.5-second elapsed-time heuristic. Times below are `LLMCleanupRecord.ElapsedMS`, measured inside the cleanup call. Headroom is 2,500 ms minus that time; negative values reflect subprocess cleanup overhead after the deadline.
+
+| Case | Qwen run 1 / run 2 (ms) | Qwen result | Gemini (ms) | Gemini result |
+| --- | ---: | --- | ---: | --- |
+| Literal command | 755 / 737 | `fix this`, no fallback | 2,525 | timeout; original text |
+| Literal question | 885 / 877 | `can you fix this`, no fallback | 2,520 | timeout; original text |
+| YAML-looking speech | 2,033 / 2,001 | Preserved line breaks, added two spaces before each line break; no fallback | 2,524 | timeout; original text |
+| Ordinary cleanup | 1,304 / 1,262 | `I went to the store and bought milk.`, no fallback | 2,524 | timeout; original text |
+| Applied replacement | 1,200 / 1,131 | `Voxi should open the menu`, no fallback | 2,522 | timeout; original text |
+
+Qwen completed 10/10 calls across two sequential runs. Its smallest measured headroom was 467 ms (the multiline case); the other cases had at least 1,196 ms. The multiline response kept all three line breaks but inserted trailing spaces and did not reach the expected capitalization/punctuation. This is improved line-break retention in these two observations, not proof that issue 112 is resolved. Both runs again reported 206 YAML versus 203 JSON prompt tokens for the ordinary-cleanup case.
+
+Gemini fell back on all 5/5 calls. Its measured cleanup duration was 20–25 ms beyond the 2.5-second deadline as the subprocess exited, so the larger budget did not make this backend usable for eager cleanup in this run. These runs did not impose controlled CPU load; they establish warm, sequential behavior only, not reliability during contention or cold starts.
