@@ -295,6 +295,13 @@ line-targeted regex replacement that modifies only the numeric delay in place.
 
 Experimental diagnostics and prototyping tools are gated behind Go's `//go:build debug` tag to keep standard release binaries clean. Build with `make build-debug` or `make install-debug`:
 
+Use `make install-debug` when diagnosing a live user installation and the debug
+commands must be available as `voxi` on the normal PATH. It replaces the installed
+user binary but does not set up services or restart a running agent. Restart
+`voxi-agent.service` with `systemctl --user restart voxi-agent.service` if the
+agent must execute the debug build. Run `make restart-service` after debugging
+to restore the normal build.
+
 ```text
 voxi canary     # real-time streaming token observer & parameter tuner
 voxi vad-probe  # prototype VAD-segmented sentence-by-sentence dictation
