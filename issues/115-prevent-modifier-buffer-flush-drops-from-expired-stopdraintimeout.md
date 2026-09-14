@@ -562,3 +562,24 @@ Verified:
 Each has unit coverage (EC1/EC1b, EC2, EC5 respectively), but per
 `docs/AgenticLoop.md` that is explicitly not sufficient for a change to the
 live daemon's delivery policy. Record the outcome here before closing.
+
+### 6.4 Phase-3 review fixes (commit `7c66434`)
+
+Independent review passed the core fix and found one real defect plus doc drift:
+
+1. **Broken recovery hint (fixed).** The drop message said
+   `recover with: voxi history retype 1`, but `retype` resolves an entry by its
+   8-character ID via `history.FindHistoryEntry`'s exact match, so that command
+   always failed with `no history entry with id "1"` — at precisely the moment
+   a user had lost a transcript. Verified against the real binary. The hint is
+   now `voxi history list, then voxi history retype <ID>`, and the round trip
+   (`history list` → ID → lookup) was confirmed end to end. The EC2 assertion
+   that let this through (substring `"voxi history retype"` only) now asserts
+   the full hint and rejects an index-shaped argument.
+2. `docs/LLMTranscriptCleanup.md` and `docs/Roadmap.md` re-synced.
+3. `sessionDrain.eligible()` removed (no production callers after
+   `deliverable()`); `gofmt` applied to the field block the `prevRequest`
+   comment split. Note `make check` does not run `gofmt -l`, which is why this
+   was not caught automatically.
+
+Section 6.3's live dictation gate is still open and still needs a human.
