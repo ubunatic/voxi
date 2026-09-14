@@ -1,8 +1,8 @@
 // Package spec also loads spec/eager.yaml: the eager pipeline's
-// injection-safety tuning, currently the modifier-release race guard's
-// staleness window (issue 101). It is the single source of truth for that
-// tuning — see docs/Spec.md. Application code must not hardcode values that
-// duplicate or shadow it.
+// injection-safety tuning — the modifier-release race guard's staleness window
+// (issue 101) and the post-stop delivery drain bounds (issue 115). It is the
+// single source of truth for that tuning — see docs/Spec.md. Application code
+// must not hardcode values that duplicate or shadow it.
 package spec
 
 import (
@@ -26,10 +26,26 @@ type ModifierGateSpec struct {
 	NotifyDelayMs int `yaml:"notify_delay_ms"`
 }
 
+// DrainSpec tunes the post-stop delivery drain (issue 115): how long an
+// already-captured, already-transcribed utterance may still be typed after its
+// session stopped, and how long one injection may take. The real "stop
+// typing" signal is a newer session starting, not either of these values --
+// see internal/eager's stopRequest.generation.
+type DrainSpec struct {
+	DeliveryDeadlineMs int `yaml:"delivery_deadline_ms"`
+	InjectionTimeoutMs int `yaml:"injection_timeout_ms"`
+}
+
 // EagerSpec is the parsed contents of spec/eager.yaml.
 type EagerSpec struct {
 	ModifierGate ModifierGateSpec `yaml:"modifier_gate"`
+	Drain        DrainSpec        `yaml:"drain"`
 }
+
+// minInjectionTimeoutMs is the physical-modifier-release wait inside
+// typing.TypeTextObserved; an injection budget at or below it could expire
+// before a single keystroke is ever sent.
+const minInjectionTimeoutMs = 5000
 
 // LoadEager parses the embedded eager pipeline tuning spec.
 func LoadEager() (*EagerSpec, error) {
@@ -53,6 +69,12 @@ func parseEagerSpec(data []byte) (*EagerSpec, error) {
 	if s.ModifierGate.NotifyDelayMs < 0 {
 		return nil, fmt.Errorf("spec: modifier_gate.notify_delay_ms must not be negative")
 	}
+	if s.Drain.DeliveryDeadlineMs <= 0 {
+		return nil, fmt.Errorf("spec: drain.delivery_deadline_ms must be positive")
+	}
+	if s.Drain.InjectionTimeoutMs <= minInjectionTimeoutMs {
+		return nil, fmt.Errorf("spec: drain.injection_timeout_ms must exceed %dms, the modifier-release wait inside typing injection", minInjectionTimeoutMs)
+	}
 	return &s, nil
 }
 
@@ -69,4 +91,14 @@ func (s *EagerSpec) ModifierStartGrace() time.Duration {
 // ModifierNotifyDelay converts ModifierGate.NotifyDelayMs to a time.Duration.
 func (s *EagerSpec) ModifierNotifyDelay() time.Duration {
 	return time.Duration(s.ModifierGate.NotifyDelayMs) * time.Millisecond
+}
+
+// DeliveryDeadline converts Drain.DeliveryDeadlineMs to a time.Duration.
+func (s *EagerSpec) DeliveryDeadline() time.Duration {
+	return time.Duration(s.Drain.DeliveryDeadlineMs) * time.Millisecond
+}
+
+// InjectionTimeout converts Drain.InjectionTimeoutMs to a time.Duration.
+func (s *EagerSpec) InjectionTimeout() time.Duration {
+	return time.Duration(s.Drain.InjectionTimeoutMs) * time.Millisecond
 }

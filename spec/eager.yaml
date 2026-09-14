@@ -34,3 +34,23 @@ modifier_gate:
   # Super+X lost nothing, yet still played "Typing paused" pointlessly
   # after the session had already closed and flushed).
   notify_delay_ms: 500
+
+# Post-stop delivery drain (issue 115). A session's capture stops immediately
+# on Stop, while ASR, LLM cleanup, and keystroke injection for already-captured
+# speech continue in the background. The policy question is "may this
+# generation still type?" -- and the real answer is "yes, unless a newer
+# session has started", not "yes, for N seconds". The previous five-second
+# wall-clock lease was only a proxy for that and silently dropped fully
+# transcribed, accepted speech whenever queue backlog or LLM cleanup pushed the
+# last chunk past it (confirmed live twice: chunks #563/#564 and #1120).
+drain:
+  # Absolute safety net, not the delivery policy: it only stops an abandoned
+  # generation from typing minutes later when the user never starts another
+  # session. Sized well above transcribeTimeout (30s per queued job) plus
+  # injection, so it is never the reason a real utterance is dropped.
+  delivery_deadline_ms: 60000
+  # Per-delivery injection budget, on a context independent of the drain:
+  # once keystrokes start, aborting mid-word is strictly worse than finishing.
+  # Must exceed the 5s physical-modifier-release wait inside
+  # typing.TypeTextObserved, which spends the same context.
+  injection_timeout_ms: 15000

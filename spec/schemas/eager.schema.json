@@ -1,10 +1,30 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Voxi Eager Pipeline Injection-Safety Tuning",
-  "description": "Modifier-release race guard tuning for internal/eager (issue 101).",
+  "description": "Modifier-release race guard (issue 101) and post-stop delivery drain (issue 115) tuning for internal/eager.",
   "type": "object",
-  "required": ["modifier_gate"],
+  "required": ["modifier_gate", "drain"],
   "properties": {
+    "drain": {
+      "type": "object",
+      "description": "Post-stop delivery drain bounds. The delivery policy itself is 'type unless a newer session has started'; these are only bounds around it.",
+      "required": ["delivery_deadline_ms", "injection_timeout_ms"],
+      "properties": {
+        "delivery_deadline_ms": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 600000,
+          "description": "Absolute safety net in milliseconds after a stop, beyond which an abandoned generation stops typing. Must stay well above the per-job transcription timeout so it never drops real speech."
+        },
+        "injection_timeout_ms": {
+          "type": "integer",
+          "exclusiveMinimum": 5000,
+          "maximum": 120000,
+          "description": "Per-delivery keystroke injection budget in milliseconds. Must exceed the 5000ms physical-modifier-release wait inside typing.TypeTextObserved."
+        }
+      },
+      "additionalProperties": false
+    },
     "modifier_gate": {
       "type": "object",
       "description": "Buffering/staleness tuning for the modifier-release typing race.",
