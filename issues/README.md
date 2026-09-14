@@ -97,3 +97,4 @@
 | 113 | [113-wire-saved-asr-history-and-modifier-settings-into-runtime.md](113-wire-saved-asr-history-and-modifier-settings-into-runtime.md) | Wire saved ASR, history, and modifier settings into runtime | Open |
 | 114 | [114-fix-out-of-checkout-modifierd-build-fallback.md](114-fix-out-of-checkout-modifierd-build-fallback.md) | Fix out-of-checkout modifierd build fallback | Closed — resolved and Podman-verified |
 | 115 | [115-prevent-modifier-buffer-flush-drops-from-expired-stopdraintimeout.md](115-prevent-modifier-buffer-flush-drops-from-expired-stopdraintimeout.md) | Prevent modifier buffer flush drops from expired stopDrainTimeout | Open |
+| 116 | [116-test-installer-portability-across-distributions-and-real-systemd.md](116-test-installer-portability-across-distributions-and-real-systemd.md) | Test installer portability across distributions and real systemd | Open |
