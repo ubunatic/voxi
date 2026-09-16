@@ -52,3 +52,57 @@ landing first.
 - Blocked on `lmcoder:issues/091` reaching a usable state; canary against it manually
   before wiring full integration.
 - Live-verify via `voxi monitor`/an actual dictation session, not unit tests alone.
+
+## 5. Progress (2026-09-16)
+
+Implemented the generic client side (this ticket's actual scope) without waiting on
+`lmcoder:issues/091`, since a second server already speaks the identical
+`/v1/audio/transcriptions` contract: `voxi-clients/agy-voice/whisper-server` (see that
+repo's issue 001), a research server bridging agy's internal voice RPC behind the
+OpenAI API shape.
+
+- New `openai-transcribe` engine value in `spec/models.yaml`/`spec/models.go`
+  (`internal/eager/openai_transcribe.go`): multipart POST to
+  `{base_url}/audio/transcriptions` with `response_format=text`, HTTP-only (no local
+  binary — `requireEngineBinary` returns early for this engine).
+- Config: `OPENAI_ASR_BASE_URL` / `UserSettings.OpenAIASRBaseURL`, default
+  `http://127.0.0.1:8090/v1` (matches `whisper-server`'s default `--addr`), following the
+  `OPENAI_BASE_URL` naming from [[106]].
+- New spec field `does_llm_cleanup` (per-model, `spec/models.go`/schema): the
+  `openai-transcribe-local` model entry sets it `true` since `whisper-server`'s
+  Gemini-backed output already reflects server-side cleanup — `internal/eager` now skips
+  its own `cleanWithLLM` pass for any model with this flag set, avoiding a redundant
+  double cleanup. Re-check this default once `lmcoder:issues/091` lands: if lmcoder's
+  endpoint returns raw ASR instead, a lmcoder-targeted model entry should set it `false`.
+- Live-verified: `go test ./internal/eager/... ./internal/config/... ./spec/...` green,
+  plus a direct canary call against the running local `whisper-server`
+  (`transcribeOpenAIWAV` against `test/fixtures/short-abc.wav`) returned a real transcript
+  end-to-end. `voxi-agent.service` restarted via `make restart-service` to pick up the
+  `internal/eager` change.
+- New spec field `api_model` (`spec/models.go`/schema, required for `engine:
+  openai-transcribe`): the request's `model` field must be an id the remote server
+  understands, not voxi's own spec map key — the model entry was accordingly renamed
+  `openai-transcribe-local` -> `openai-transcribe-gemini` (`api_model: gemini`), naming
+  what it actually targets (agy's Gemini voice RPC behind `whisper-server`, not literal
+  whisper.cpp). `internal/chunks` `voxi chunks list` badges: 🔷 for this
+  Gemini-via-openai-transcribe model specifically, 🌐 for any other openai-transcribe
+  model, distinct from 👂 (whisper) and ⚡ (cohere-transcribe).
+- Remaining for full close-out: swap/add a model entry once `lmcoder:issues/091` exposes
+  its endpoint, confirm whether lmcoder's output needs `does_llm_cleanup: false`, and the
+  explicit unreachable-endpoint fallback-to-existing-ASR-path behavior from the
+  acceptance criteria (today an unreachable `openai-transcribe` endpoint surfaces as a
+  transcription error for that chunk, same as any other engine failure, rather than
+  falling back to a different engine mid-session).
+
+### Unrelated pre-existing bug surfaced during live verification
+
+Selecting `openai-transcribe-local` via `voxi settings` produced zero requests against
+`whisper-server` in production, tracing back to `internal/agent/eager_backend.go`:
+`voxi-agent.service` runs `voxi agent --daemon`, whose `EagerChildBackend.Start` spawned
+the actual transcription child as `voxi eager --daemon` with no `--model` flag at all —
+`UserSettings.ASRModel` was saved to `config.yaml`/`env` and shown in the settings TUI,
+but never read by anything that starts the daemon, so it silently always ran
+`spec.DefaultModel` (`cohere-transcribe-03-2026`) regardless of the user's selection.
+Fixed in the same session: `eager_backend.go` now loads `UserSettings` and passes
+`--model <ASRModel>` through to the child. Live-verified via `ps aux` showing the child
+process launched with `--model openai-transcribe-local` after `make restart-service`.
