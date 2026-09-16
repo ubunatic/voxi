@@ -154,6 +154,24 @@ func Install(ctx context.Context, out io.Writer, e Effects, modifierd bool) erro
 				data = bytes.ReplaceAll(data, []byte("%h/go/bin/voxi"), []byte("%h/.local/bin/voxi"))
 				data = bytes.ReplaceAll(data, []byte("PATH=%h/go/bin:"), []byte("PATH=%h/.local/bin:%h/go/bin:"))
 			}
+			if name == "dotoold.service" {
+				// installUserDependencies writes the dotoold/dotoolc wrapper
+				// scripts into userBin (~/.local/bin), not GOBIN (~/go/bin)
+				// where `go install` puts the compiled dotool binary. Without
+				// this rewrite ExecStart still points at the GOBIN path, so
+				// the unit crash-loops forever (203/EXEC) and TypeText silently
+				// falls back to a fresh standalone `dotool` process per chunk,
+				// each spinning up a new uinput device that drops the first
+				// keystrokes while the compositor registers it.
+				data = bytes.ReplaceAll(data, []byte("ExecStart=%h/go/bin/dotoold"), []byte("ExecStart=%h/.local/bin/dotoold"))
+				// The Makefile's install-dotoold target resolves this via
+				// `sed` from `localectl status`; this path must do the same
+				// substitution or dotool/xkbcommon fails to compile a keymap
+				// for the literal "@DOTOOL_XKB_LAYOUT@" placeholder and the
+				// unit exits 1 on every start.
+				layout := detectXKBLayout(ctx, e)
+				data = bytes.ReplaceAll(data, []byte("@DOTOOL_XKB_LAYOUT@"), []byte(layout))
+			}
 			if err := e.WriteFile(filepath.Join(serviceDir, name), data, 0644); err != nil {
 				return fmt.Errorf("write %s: %w", name, err)
 			}
@@ -216,6 +234,26 @@ func Install(ctx context.Context, out io.Writer, e Effects, modifierd bool) erro
 		}
 		return nil
 	})
+}
+
+// detectXKBLayout mirrors the Makefile install-dotoold target's
+// `localectl status` probe. Falls back to "us" when localectl is
+// unavailable or reports no X11 layout, since dotool refuses to run
+// without a resolvable xkb_symbols layout.
+func detectXKBLayout(ctx context.Context, e Effects) string {
+	out, err := e.RunOutput(ctx, "localectl", "status")
+	if err != nil {
+		return "us"
+	}
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if rest, ok := strings.CutPrefix(line, "X11 Layout:"); ok {
+			if layout := strings.TrimSpace(rest); layout != "" {
+				return layout
+			}
+		}
+	}
+	return "us"
 }
 
 func installUserDependencies(ctx context.Context, e Effects, userBin, serviceDir string) error {

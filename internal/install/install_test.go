@@ -82,6 +82,16 @@ func TestInstallDefaultIsUserScopedAndIdempotent(t *testing.T) {
 	if !strings.Contains(string(service), "ExecStart=%h/.local/bin/voxi agent --daemon") {
 		t.Fatalf("service is not self-contained: %s", service)
 	}
+	dotoold, err := os.ReadFile(filepath.Join(e.Home, ".config/systemd/user/dotoold.service"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(dotoold), "ExecStart=%h/.local/bin/dotoold") {
+		t.Fatalf("dotoold.service ExecStart does not match where installUserDependencies writes the wrapper script: %s", dotoold)
+	}
+	if !strings.Contains(string(dotoold), "DOTOOL_XKB_LAYOUT=us") {
+		t.Fatalf("dotoold.service layout placeholder not substituted (localectl unavailable should fall back to us): %s", dotoold)
+	}
 	target, err := os.Readlink(filepath.Join(e.Home, "go/bin/voxi"))
 	if err != nil {
 		t.Fatalf("go/bin/voxi is not a symlink: %v", err)
