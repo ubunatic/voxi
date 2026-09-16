@@ -99,3 +99,27 @@ models:
     # own guidance ("split a model out ... as soon as it shows model-specific
     # leakage").
     stop_words: *common_stop_words
+
+  openai-transcribe-gemini:
+    label: "Gemini (via agy voice RPC, OpenAI-compatible)"
+    engine: openai-transcribe
+    # The "model" field sent in the request. whisper-server ignores it (one
+    # backend, see voxi-clients/agy-voice/whisper-server/server.go, and it
+    # is not actually a whisper.cpp model despite the server's name -- see
+    # does_llm_cleanup below), but an OpenAI-compatible endpoint may host
+    # more than one model and reject a request that omits or misnames it --
+    # required by spec validation for this engine regardless.
+    api_model: gemini
+    # No live-corpus hallucination data yet for this engine (new, issue
+    # 126) -- reuse common_stop_words as a safe starting point per the file
+    # header's guidance, same as cohere-transcribe-03-2026 above.
+    stop_words: *common_stop_words
+    # voxi-clients/agy-voice/whisper-server, this engine's current canary
+    # target, is backed by agy's Gemini-based voice RPC rather than raw
+    # whisper.cpp, so its output already reflects Gemini's own
+    # punctuation/formatting pass server-side -- running voxi's own
+    # cleanWithLLM on top would be a second, redundant cleanup. Re-check
+    # this default once lmcoder:issues/091 lands and becomes the intended
+    # target (see issue 126): if lmcoder's endpoint returns raw ASR output
+    # instead, flip this to false so voxi's own cleanup still runs for it.
+    does_llm_cleanup: true

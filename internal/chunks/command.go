@@ -165,9 +165,21 @@ func FormatStatusBadges(c Chunk) string {
 
 	// Engine badge: only show if transcription actually ran / produced a transcript
 	if c.TranscribeDurationSec > 0 || c.RawTranscript != "" {
-		if c.Engine == "whisper" || isWhisperModel(c.Model) {
+		switch {
+		case c.Engine == "whisper" || isWhisperModel(c.Model):
 			badges = append(badges, "👂")
-		} else {
+		case c.Engine == "openai-transcribe" && strings.Contains(c.Model, "gemini"):
+			// openai-transcribe-gemini specifically (see issue 126): agy's
+			// Gemini voice RPC behind whisper-server, not a whisper.cpp
+			// model -- distinct from the generic openai-transcribe badge
+			// below so it doesn't read as an unbranded/unknown remote call.
+			badges = append(badges, "🔷")
+		case c.Engine == "openai-transcribe":
+			// Remote HTTP call (see issue 126), unlike the other two
+			// engines which run a local binary -- distinct badge so it
+			// doesn't read as the same local-fast-path as cohere-transcribe.
+			badges = append(badges, "🌐")
+		default:
 			badges = append(badges, "⚡")
 		}
 	}

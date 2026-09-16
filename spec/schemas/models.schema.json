@@ -53,8 +53,17 @@
           },
           "engine": {
             "type": "string",
-            "description": "Inference engine backing this model. 'whisper' dispatches through voxtype; 'cohere-transcribe' dispatches through the crispasr binary (see issue 074).",
-            "enum": ["whisper", "cohere-transcribe"]
+            "description": "Inference engine backing this model. 'whisper' dispatches through voxtype; 'cohere-transcribe' dispatches through the crispasr binary (see issue 074); 'openai-transcribe' calls an OpenAI-API-compatible /v1/audio/transcriptions HTTP endpoint (see issue 126) -- no local binary.",
+            "enum": ["whisper", "cohere-transcribe", "openai-transcribe"]
+          },
+          "does_llm_cleanup": {
+            "type": "boolean",
+            "default": false,
+            "description": "If true, this engine already applies LLM-based transcript cleanup server-side, so eager mode skips its own cleanWithLLM pass for this model even when the user's llm_cleaner setting is on (avoids double cleanup)."
+          },
+          "api_model": {
+            "type": "string",
+            "description": "The model id sent as the \"model\" field of the request to an openai-transcribe engine's /v1/audio/transcriptions endpoint (e.g. \"whisper-1\"). Distinct from this entry's own map key, which is voxi's spec model name and is never meaningful to the remote server. Required when engine is 'openai-transcribe'; ignored otherwise."
           },
           "stop_words": {
             "type": "array",

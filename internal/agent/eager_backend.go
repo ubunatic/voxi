@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"ubunatic.com/voxi/internal/config"
 	"ubunatic.com/voxi/internal/deps"
 	"ubunatic.com/voxi/internal/eager"
 )
@@ -45,8 +46,17 @@ func (b *EagerChildBackend) Start(ctx context.Context) error {
 		b.mu.Unlock()
 		return err
 	}
+	args := []string{"eager", "--daemon"}
+	// The saved ASR model (voxi settings / VOXI_ASR_MODEL) otherwise never
+	// reaches this child process: `voxi eager`'s own --model flag defaults
+	// to spec/models.yaml's default_model, not the user's setting, so
+	// without this the settings UI's "ASR Model Engine" choice was silently
+	// ignored by the actual running daemon.
+	if settings, err := config.LoadUserSettings(b.d.Getenv("HOME")); err == nil && settings.ASRModel != "" {
+		args = append(args, "--model", settings.ASRModel)
+	}
 	childCtx, cancel := context.WithCancel(ctx)
-	cmd := exec.CommandContext(childCtx, voxiPath, "eager", "--daemon")
+	cmd := exec.CommandContext(childCtx, voxiPath, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {

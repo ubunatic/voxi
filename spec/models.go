@@ -22,6 +22,21 @@ type Model struct {
 	StopWords   []StopWord `yaml:"stop_words"`
 	RequiresGPU bool       `yaml:"requires_gpu"`
 	CPUFallback string     `yaml:"cpu_fallback"`
+	// DoesLLMCleanup marks an engine that already applies LLM-based cleanup
+	// server-side (e.g. openai-transcribe against an lmcoder/whisper-server
+	// instance doing its own cleanup pass -- see issue 126), so eager mode
+	// must skip its own cleanWithLLM step for this model even when the
+	// user's llm_cleaner setting is on, rather than cleaning twice.
+	DoesLLMCleanup bool `yaml:"does_llm_cleanup"`
+	// APIModel is the model id sent as the "model" field of the request to
+	// an openai-transcribe engine's endpoint (e.g. "whisper-1") -- distinct
+	// from the map key above, which is voxi's own spec model name and is
+	// never meaningful to the remote server. Ignored by engines other than
+	// openai-transcribe. Required for openai-transcribe models: an
+	// OpenAI-compatible endpoint may host more than one model and reject a
+	// request that omits or misnames it, even though today's single-model
+	// canary target (whisper-server) ignores the field.
+	APIModel string `yaml:"api_model"`
 }
 
 // StopWord is a shipped hallucination filter. ID is stable so a user can
@@ -103,6 +118,9 @@ func parseModelSpec(data []byte) (*ModelSpec, error) {
 				return nil, fmt.Errorf("spec: model %q has duplicate stop_word id %q", name, word.ID)
 			}
 			seen[word.ID] = true
+		}
+		if m.Engine == "openai-transcribe" && m.APIModel == "" {
+			return nil, fmt.Errorf("spec: model %q has engine %q and must set api_model", name, m.Engine)
 		}
 		if m.CPUFallback == "" {
 			continue

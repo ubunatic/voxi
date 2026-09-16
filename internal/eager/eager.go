@@ -334,6 +334,10 @@ func requireEngineBinary(ctx context.Context, d deps.Dependencies, modelName, en
 			return "", "", fmt.Errorf("eager: %w", weightsErr)
 		}
 		return crispasrPath, wp, nil
+	case openaiTranscribeEngine:
+		// HTTP-only engine (see transcribeOpenAIWAV): no local binary or
+		// weights to resolve.
+		return "", "", nil
 	default:
 		return "", "", fmt.Errorf("eager: model %q has unknown engine %q", modelName, engine)
 	}
@@ -582,6 +586,28 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 			return crispASRTranscribeArgs(weightsPath, wavPath)
 		}
 	}
+	// runTranscribe abstracts over how the resolved engine actually
+	// transcribes a chunk: the CLI engines (whisper, cohere-transcribe) exec
+	// transcribeBinPath and capture stdout, while openai-transcribe instead
+	// makes an HTTP call (see transcribeOpenAIWAV) -- no local binary is
+	// involved. Both shapes return the same (rawText, err) the worker loop
+	// below already expects.
+	runTranscribe := func(ctx context.Context, wavPath string) (string, error) {
+		if engine == openaiTranscribeEngine {
+			baseURL := ""
+			if userSettings != nil {
+				baseURL = userSettings.OpenAIASRBaseURL
+			}
+			return transcribeOpenAIWAV(ctx, wavPath, baseURL, modelSpec.Models[modelName].APIModel)
+		}
+		cmd := exec.CommandContext(ctx, transcribeBinPath, buildTranscribeArgs(wavPath)...)
+		cmd.Env = append(os.Environ(), "NO_COLOR=1", "RUST_LOG=error")
+		var outBuf bytes.Buffer
+		cmd.Stdout = &outBuf
+		cmd.Stderr = io.Discard
+		err := cmd.Run()
+		return outBuf.String(), err
+	}
 
 	jobChan := make(chan TranscribeJob, 10)
 	// The drain lives under this generation's context, so a newer session
@@ -659,17 +685,11 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 			}
 
 			writeVoxtypeState("transcribing")
-			cmdArgs := buildTranscribeArgs(wavPath)
 			transcribeParent := drain.ctx
 			transcribeCtx, cancelTranscribe := context.WithTimeout(transcribeParent, transcribeTimeout)
-			cmd := exec.CommandContext(transcribeCtx, transcribeBinPath, cmdArgs...)
-			cmd.Env = append(os.Environ(), "NO_COLOR=1", "RUST_LOG=error")
-			var outBuf bytes.Buffer
-			cmd.Stdout = &outBuf
-			cmd.Stderr = io.Discard
 			transStart := time.Now()
 			_ = recorder.Record(telemetry.Event{Event: telemetry.TranscriptionStarted, Timestamp: transStart, SessionID: sessionID, ChunkID: chunkID, ChunkIndex: job.Index})
-			err := cmd.Run()
+			rawText, err := runTranscribe(transcribeCtx, wavPath)
 			cancelTranscribe()
 			if drain.ctx.Err() != nil {
 				_ = recorder.Record(telemetry.Event{Event: telemetry.StopDrainTimeout, Timestamp: time.Now(), SessionID: sessionID, ChunkID: chunkID, ChunkIndex: job.Index, Error: drain.ctx.Err().Error()})
@@ -677,8 +697,6 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 			transEnd := time.Now()
 			transDuration := transEnd.Sub(transStart).Seconds()
 			writeVoxtypeState("recording")
-
-			rawText := outBuf.String()
 			text, matchedStopWords := asr.CleanWhisperTranscriptWithAudit(rawText, stopWords)
 			var appliedReplacements []chunks.ReplacementSummary
 			if engine == cohereTranscribeEngine {
@@ -692,7 +710,7 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 				}
 			}
 			var llmRecord *chunks.LLMCleanupRecord
-			if userSettings != nil && userSettings.LLMCleaner {
+			if userSettings != nil && userSettings.LLMCleaner && !modelSpec.Models[modelName].DoesLLMCleanup {
 				text, llmRecord = cleanWithLLM(drain.ctx, text, userSettings, llmChunkContext{
 					MeanRMS:             job.Stats.MeanRMS,
 					PeakRMS:             job.Stats.PeakRMS,
