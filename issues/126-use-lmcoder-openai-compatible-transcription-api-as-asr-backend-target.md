@@ -1,6 +1,6 @@
 # 126 — Use lmcoder OpenAI-compatible transcription API as ASR backend target
 
-**Status**: Open
+**Status**: In Progress — openai-transcribe engine implemented against voxi-clients whisper-server canary; lmcoder endpoint still pending
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Architecture
