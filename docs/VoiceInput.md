@@ -197,6 +197,44 @@ Run `voxi bench` to measure RTF (real-time factor) and speedup for every configu
 on both backends against a fixed, checksum-verified reference clip (downloaded on demand,
 never committed — see `internal/bench`), or against `--record`ed live audio / a `--file`.
 
+### `openai-transcribe` engine (issue 126)
+
+A third engine value exists alongside `whisper` and `cohere-transcribe`:
+`openai-transcribe` speaks the OpenAI-compatible `POST /v1/audio/transcriptions`
+multipart contract (`file` + `model` + `response_format=text`) against a configurable
+HTTP endpoint (`OPENAI_ASR_BASE_URL`, default `http://127.0.0.1:8090/v1`) instead of
+executing a local binary — see `internal/eager/openai_transcribe.go`. Unlike the other
+two engines, `requireEngineBinary` resolves no binary path for it at all.
+
+Two spec fields exist only for this engine (both schema-validated):
+- `api_model` (required when `engine: openai-transcribe`): the `model` field actually
+  sent in the request. This is *not* the same string as the model's own
+  `spec/models.yaml` map key — that key is voxi's internal name and is never meaningful
+  to the remote server.
+- `does_llm_cleanup: true` (optional): tells eager mode the remote endpoint already
+  applies its own cleanup pass server-side, so `cleanWithLLM` (see
+  LLMTranscriptCleanup.md) is skipped for this model even when the user's `llm_cleaner`
+  setting is on — otherwise the transcript would be cleaned twice.
+
+The shipped `openai-transcribe-gemini` model entry (`api_model: gemini`,
+`does_llm_cleanup: true`) targets
+[`voxi-clients/agy-voice/whisper-server`](https://codeberg.org/ubunatic/voxi-clients), a
+separate research repo's OpenAI-API-compatible bridge onto agy's internal Gemini voice
+RPC — not literal whisper.cpp despite the server's name. It is a stand-in canary target
+while the actual intended target, a local `lmcoder` instance exposing the same contract
+(`lmcoder:issues/091`), is still unbuilt; see issue 126 for the full history and the
+`does_llm_cleanup` default's rationale.
+
+`voxi chunks list` shows a distinct badge per engine: 👂 whisper, ⚡ cohere-transcribe,
+🔷 the Gemini `openai-transcribe` model specifically, 🌐 any other `openai-transcribe`
+model (`internal/chunks/command.go`).
+
+**Known gap (issue 128)**: `voxi settings` writes the selected model to
+`~/.config/voxi/{config.yaml,env}`, but `voxi-agent.service`'s child `voxi eager --daemon`
+process only reads that setting once, at startup (`internal/agent/eager_backend.go`).
+Changing the model in `voxi settings` has no effect on a running daemon until it is
+restarted: `systemctl --user restart voxi-agent.service`.
+
 ## Security note: uinput access is not gated by voice input
 
 `dotool` (and `ydotool`) write to `/dev/uinput` to synthesize keyboard input. On a typical
