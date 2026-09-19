@@ -269,7 +269,11 @@ guided manual test; ordinary `go test` never runs it.
 As of issue 081, the `dotoold` daemon setup above is no longer manual: `make
 install-dotoold` (folded into `install-all`) installs the `dotoold`/`dotoolc` scripts
 shipped alongside `dotool`, installs `systemd/dotoold.service`, and runs `systemctl
---user enable --now dotoold.service`. The keyboard layout (`DOTOOL_XKB_LAYOUT`) is no
+--user enable --now dotoold.service`. During GNOME sessions, Voxi detects the active
+input source and runs standalone `dotool` with its current `DOTOOL_XKB_LAYOUT` and
+optional `DOTOOL_XKB_VARIANT`, so switching sources does not require restarting
+`dotoold`. Non-GNOME sessions retain the install-time daemon layout as fallback. The
+keyboard layout (`DOTOOL_XKB_LAYOUT`) is no
 longer hardcoded to `de` — it is auto-detected per machine from `localectl status`'s
 X11 Layout at install time, overridable with `make DOTOOL_XKB_LAYOUT=<layout>
 install-dotoold`. This closed the last gap where telemetry reported `typing_completed:

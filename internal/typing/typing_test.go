@@ -28,6 +28,7 @@ func TestBuildDotoolCommands(t *testing.T) {
 func TestCopyText(t *testing.T) {
 	var copied string
 	d := deps.Dependencies{
+		Getenv: func(string) string { return "" },
 		LookPath: func(name string) (string, error) {
 			if name == "wl-copy" {
 				return "/usr/bin/wl-copy", nil
@@ -81,6 +82,33 @@ func TestTypeTextFallback(t *testing.T) {
 	}
 	if !strings.Contains(typed, "type Typing test\n") {
 		t.Fatalf("expected 'type Typing test\\n', got %q", typed)
+	}
+}
+
+func TestTypeTextUsesActiveInputSourceLayout(t *testing.T) {
+	var env []string
+	d := deps.Dependencies{
+		Getenv: func(string) string { return "" },
+		RunOutput: func(_ context.Context, _ string, args ...string) (string, error) {
+			if args[len(args)-1] == "sources" {
+				return "[('xkb', 'de+nodeadkeys'), ('xkb', 'us+mac-iso')]", nil
+			}
+			return "uint32 1", nil
+		},
+		LookPath: func(string) (string, error) { return "/usr/bin/dotool", nil },
+		RunStdinEnv: func(_ context.Context, _ string, got []string, name string, _ ...string) error {
+			if name != "dotool" {
+				t.Fatalf("name=%q", name)
+			}
+			env = got
+			return nil
+		},
+	}
+	if err := TypeText(context.Background(), d, "layout test"); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(env, ",") != "DOTOOL_XKB_LAYOUT=us,DOTOOL_XKB_VARIANT=mac-iso" {
+		t.Fatalf("env=%v", env)
 	}
 }
 

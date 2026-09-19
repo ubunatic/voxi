@@ -10,6 +10,7 @@ import (
 
 	"ubunatic.com/voxi/internal/config"
 	"ubunatic.com/voxi/internal/deps"
+	"ubunatic.com/voxi/internal/inputsource"
 	"ubunatic.com/voxi/internal/modifiers"
 )
 
@@ -99,6 +100,12 @@ func TypeTextObserved(ctx context.Context, d deps.Dependencies, text string, obs
 		}
 	}
 	commands := BuildDotoolCommands(text, typeDelayMs)
+	if source, err := inputsource.DetectActive(ctx, d); err == nil {
+		if _, err := d.LookPath("dotool"); err != nil {
+			return fmt.Errorf("dotool not found on PATH: %w", err)
+		}
+		return runInjectorEnv(ctx, d, commands, source, observer)
+	}
 
 	if dotoolDaemonReady(dotoolPipePath(d.Getenv)) {
 		// Once a FIFO submission is attempted its partial-write status is
@@ -109,6 +116,31 @@ func TypeTextObserved(ctx context.Context, d deps.Dependencies, text string, obs
 		return fmt.Errorf("dotool not found on PATH: %w", err)
 	}
 	return runInjector(ctx, d, commands, "dotool", observer)
+}
+
+func runInjectorEnv(ctx context.Context, d deps.Dependencies, commands string, source inputsource.Source, observer InjectionObserver) error {
+	started := time.Now()
+	if observer != nil {
+		observer.Started("dotool", started)
+	}
+	var err error
+	if d.RunStdinEnv != nil {
+		env := []string{"DOTOOL_XKB_LAYOUT=" + source.Layout}
+		if source.Variant != "" {
+			env = append(env, "DOTOOL_XKB_VARIANT="+source.Variant)
+		}
+		err = d.RunStdinEnv(ctx, commands, env, "dotool")
+	} else {
+		err = fmt.Errorf("environment-aware injector dependency is not configured")
+	}
+	ended := time.Now()
+	if observer != nil {
+		observer.Completed(InjectionAttempt{Path: "dotool", StartedAt: started, EndedAt: ended, Err: err})
+	}
+	if err != nil {
+		return fmt.Errorf("dotool: %w", err)
+	}
+	return nil
 }
 
 func runInjector(ctx context.Context, d deps.Dependencies, commands, name string, observer InjectionObserver) error {
