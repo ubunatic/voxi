@@ -85,30 +85,36 @@ func TestTypeTextFallback(t *testing.T) {
 	}
 }
 
-func TestTypeTextUsesActiveInputSourceLayout(t *testing.T) {
-	var env []string
+func TestTypeTextPrefersPersistentFIFOOverStandaloneDotool(t *testing.T) {
+	pipe := filepath.Join(t.TempDir(), "dotool-pipe")
+	if err := syscall.Mkfifo(pipe, 0600); err != nil {
+		t.Fatal(err)
+	}
+	reader, err := os.OpenFile(pipe, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+
+	var command string
 	d := deps.Dependencies{
-		Getenv: func(string) string { return "" },
-		RunOutput: func(_ context.Context, _ string, args ...string) (string, error) {
-			if args[len(args)-1] == "sources" {
-				return "[('xkb', 'de+nodeadkeys'), ('xkb', 'us+mac-iso')]", nil
+		Getenv: func(key string) string {
+			if key == "DOTOOL_PIPE" {
+				return pipe
 			}
-			return "uint32 1", nil
+			return ""
 		},
-		LookPath: func(string) (string, error) { return "/usr/bin/dotool", nil },
-		RunStdinEnv: func(_ context.Context, _ string, got []string, name string, _ ...string) error {
-			if name != "dotool" {
-				t.Fatalf("name=%q", name)
-			}
-			env = got
+		RunStdin: func(_ context.Context, _ string, name string, _ ...string) error {
+			command = name
 			return nil
 		},
 	}
-	if err := TypeText(context.Background(), d, "layout test"); err != nil {
-		t.Fatal(err)
+
+	if err := TypeText(context.Background(), d, "persistent path"); err != nil {
+		t.Fatalf("TypeText failed: %v", err)
 	}
-	if strings.Join(env, ",") != "DOTOOL_XKB_LAYOUT=us,DOTOOL_XKB_VARIANT=mac-iso" {
-		t.Fatalf("env=%v", env)
+	if command != "dotoolc" {
+		t.Fatalf("injector=%q, want dotoolc", command)
 	}
 }
 

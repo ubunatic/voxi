@@ -836,7 +836,7 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 							continue
 						}
 						injectCtx, cancelInject := newInjectionContext(injectionTimeout)
-						typeErr := typing.TypeTextObserved(injectCtx, d, text+" ", &injectorObserver{recorder: recorder, sessionID: sessionID, chunkID: chunkID, chunkIndex: job.Index, deliveryID: chunkID})
+						typeErr := typing.TypeTextObserved(injectCtx, d, text+" ", &injectorObserver{recorder: recorder, output: d.Stdout, sessionID: sessionID, chunkID: chunkID, chunkIndex: job.Index, deliveryID: chunkID})
 						cancelInject()
 						typeEnd := time.Now()
 						typeSuccess := typeErr == nil
@@ -1052,7 +1052,7 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 			typeStart := time.Now()
 			_ = recorder.Record(telemetry.Event{Event: telemetry.TypingStarted, Timestamp: typeStart, SessionID: sessionID, ChunkID: item.ID, ChunkIndex: item.Index, DeliveryID: item.ID, Attempt: 1})
 			injectCtx, cancelInject := newInjectionContext(injectionTimeout)
-			typeErr := typing.TypeTextObserved(injectCtx, d, item.Text, &injectorObserver{recorder: recorder, sessionID: sessionID, chunkID: item.ID, chunkIndex: item.Index, deliveryID: item.ID})
+			typeErr := typing.TypeTextObserved(injectCtx, d, item.Text, &injectorObserver{recorder: recorder, output: d.Stdout, sessionID: sessionID, chunkID: item.ID, chunkIndex: item.Index, deliveryID: item.ID})
 			cancelInject()
 			typeEnd := time.Now()
 			typeSuccess := typeErr == nil

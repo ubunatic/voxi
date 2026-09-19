@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -32,6 +33,7 @@ type deliveryClaim struct {
 
 type injectorObserver struct {
 	recorder   *telemetry.Recorder
+	output     io.Writer
 	sessionID  string
 	chunkID    string
 	chunkIndex int
@@ -39,6 +41,9 @@ type injectorObserver struct {
 }
 
 func (o *injectorObserver) Started(path string, at time.Time) {
+	if o.output != nil {
+		fmt.Fprintf(o.output, "voxi eager: typing started (path=%s session=%s chunk=%s)\n", path, o.sessionID, o.chunkID)
+	}
 	_ = o.recorder.Record(telemetry.Event{Event: telemetry.InjectorStarted, Timestamp: at, SessionID: o.sessionID, ChunkID: o.chunkID, ChunkIndex: o.chunkIndex, DeliveryID: o.deliveryID, InjectorPath: path, Attempt: 1})
 }
 
@@ -50,6 +55,13 @@ func (o *injectorObserver) Completed(a typing.InjectionAttempt) {
 		e.Error = a.Err.Error()
 		if a.Err == context.Canceled {
 			e.CancelReason = "context_canceled"
+		}
+	}
+	if o.output != nil {
+		if a.Err != nil {
+			fmt.Fprintf(o.output, "voxi eager: typing failed (path=%s session=%s chunk=%s duration=%.1fms): %v\n", a.Path, o.sessionID, o.chunkID, duration, a.Err)
+		} else {
+			fmt.Fprintf(o.output, "voxi eager: typing succeeded (path=%s session=%s chunk=%s duration=%.1fms)\n", a.Path, o.sessionID, o.chunkID, duration)
 		}
 	}
 	_ = o.recorder.Record(e)

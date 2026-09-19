@@ -38,6 +38,22 @@ func TestDetectActive(t *testing.T) {
 	}
 }
 
+func TestDetectActiveUsesIBusEngine(t *testing.T) {
+	d := deps.Dependencies{RunOutput: func(_ context.Context, name string, args ...string) (string, error) {
+		if name == "ibus" {
+			return "xkb:us:mac-iso:eng\n", nil
+		}
+		return "", errors.New("gsettings should not be consulted")
+	}}
+	got, err := DetectActive(context.Background(), d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != (Source{Layout: "us", Variant: "mac-iso"}) {
+		t.Fatalf("got %#v", got)
+	}
+}
+
 func TestDetectActiveFailure(t *testing.T) {
 	d := deps.Dependencies{RunOutput: func(context.Context, string, ...string) (string, error) { return "", errors.New("missing gsettings") }}
 	if _, err := DetectActive(context.Background(), d); err == nil {

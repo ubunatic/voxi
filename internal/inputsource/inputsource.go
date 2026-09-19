@@ -18,12 +18,18 @@ type Source struct {
 }
 
 var sourceTuplePattern = regexp.MustCompile(`\('([^']+)',\s*'([^']+)'\)`)
+var ibusEnginePattern = regexp.MustCompile(`^xkb:([^:]+):([^:]*):`)
 
 // DetectActive reads GNOME's active input source. It returns an error when
 // gsettings is unavailable, malformed, or no active XKB source is present.
 func DetectActive(ctx context.Context, d deps.Dependencies) (Source, error) {
 	if d.RunOutput == nil {
 		return Source{}, fmt.Errorf("output dependency is not configured")
+	}
+	if value, err := d.RunOutput(ctx, "ibus", "engine"); err == nil {
+		if match := ibusEnginePattern.FindStringSubmatch(strings.TrimSpace(value)); match != nil && match[1] != "" {
+			return Source{Layout: match[1], Variant: match[2]}, nil
+		}
 	}
 	value, err := d.RunOutput(ctx, "gsettings", "get", "org.gnome.desktop.input-sources", "sources")
 	if err != nil {

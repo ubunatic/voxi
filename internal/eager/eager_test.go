@@ -819,7 +819,7 @@ func TestStopFlushesTrailingUtteranceForTranscriptionAndTyping(t *testing.T) {
 		}
 		defer f.Close()
 		// 10 frames (200ms) of continuous "speech" -- above both MinSpeechMs
-		// (40ms) and the segmenter's default MinVoicedFrames (160ms) acoustic
+		// (40ms) and the segmenter's default MinVoicedFrames (60ms) acoustic
 		// plausibility floor -- but with no trailing silence, so the segmenter
 		// never finalizes this utterance on its own; it stays buffered until
 		// Flush() on stop.
