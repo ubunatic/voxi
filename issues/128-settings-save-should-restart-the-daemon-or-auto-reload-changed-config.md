@@ -73,3 +73,12 @@ Two candidate approaches (pick one, or a small combination):
   session actually uses the new value — not just that the config file changed.
 - If restart-on-save is chosen, verify behavior when triggered mid-recording (does it
   wait for the current utterance to finish, or interrupt it?).
+
+## Progress
+
+- 2026-09-19, `a57cf0c`: `voxi settings` offers a `[y/N]` restart after save via
+  `systemctl --user try-restart voxi-agent.service`, with separate declined, requested
+  and failed outputs and tests.
+- Still open: live verification (`ps aux | grep 'voxi eager'` shows the new `--model`
+  after a save) and the drain/delivery-ledger check (criterion 2), which the prompt only
+  mitigates. Pitfalls are in [TypingLayoutArchitecture.md](../docs/TypingLayoutArchitecture.md).

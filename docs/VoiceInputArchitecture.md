@@ -70,7 +70,7 @@ flowchart TB
 | **2. voxi CLI** (`internal/history`, `internal/config`) | • Local history store (`history.jsonl`, `0600`)<br>• Zero-overhead `record` filter (`cat` wrapper)<br>• Comment-preserving `config.toml` editor<br>• Standalone `retype` and `copy` CLI commands | • No persistent GUI of its own<br>• No compositor-internal window queries |
 | **3. GNOME Extension** (GJS / Shell) | • Top bar status icon and history popup<br>• History list presentation<br>• Mode toggle (batch vs. streaming)<br>• Typing speed slider (`type_delay_ms`)<br>• **Mutter focus capture and restoration** | • Does not synthesize keystrokes directly<br>• Does not manage audio streams or models |
 | **4. Mutter & Wayland** | • Window focus management and input routing<br>• Global shortcut handling (`Super+X`)<br>• Emits compositor focus signals to GJS | • Agnostic to speech and transcript content |
-| **5. `dotoold` & `/dev/uinput`** | • Kernel-level synthetic keystroke injection<br>• XKB layout translation (`de`/`us`)<br>• Ultra-low latency (<10ms) via named pipe | • No window targeting (types to active surface) |
+| **5. `dotoold` & `/dev/uinput`** | • Kernel-level synthetic keystroke injection<br>• XKB layout translation; on GNOME the active input source is detected per injection and typed via standalone `dotool` (see [TypingLayoutArchitecture.md](TypingLayoutArchitecture.md))<br>• Low latency (<10ms) via named pipe on the fallback path | • No window targeting (types to active surface) |
 
 ---
 

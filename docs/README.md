@@ -6,6 +6,7 @@ In-depth references for architecture, decisions, and operations of the Voxi Linu
 | :--- | :--- |
 | [VoiceInput.md](VoiceInput.md) | Universal voice input CLI reference, streaming mode toggle, dotool injection, and audio DSP pipeline |
 | [VoiceInputArchitecture.md](VoiceInputArchitecture.md) | ADR: Multi-tier architecture, evdev physical modifier key gating daemon, and GNOME Shell companion extension |
+| [TypingLayoutArchitecture.md](TypingLayoutArchitecture.md) | Why typed text can have Y/Z swapped: dotool vs compositor layout, active GNOME input source detection, standalone-dotool vs `dotoold` restart trade-off, and the settings-save restart pitfalls (`try-restart`, `Key` enum) |
 | [InstallationArchitecture.md](InstallationArchitecture.md) | Converged Go/Make/curl installation, optional modifier daemon, Podman verification boundaries, and installation pitfalls |
 | [HeadlessTestingArchitecture.md](HeadlessTestingArchitecture.md) | Headless end-to-end container test harness, virtual PulseAudio mic streaming, persistent FIFO typing sinks, and host uinput isolation |
 | [BenchBaseline.md](BenchBaseline.md) | `voxi bench` CPU vs GPU RTF baseline for an average dev machine (T14 Gen2 AMD) |

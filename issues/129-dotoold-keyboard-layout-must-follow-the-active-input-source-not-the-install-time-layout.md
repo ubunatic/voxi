@@ -95,3 +95,13 @@ Uncertainties to resolve during implementation:
 Restart `dotoold` with the active layout, for example
 `DOTOOL_XKB_LAYOUT=us DOTOOL_XKB_VARIANT=mac-iso`. This breaks German typing until the
 next manual change.
+
+## 6. Progress
+
+- 2026-09-19, `5d5c2c3`: M1 (`internal/inputsource`) and M2 landed, using approach 2
+  (standalone `dotool` with `DOTOOL_XKB_LAYOUT`/`DOTOOL_XKB_VARIANT` per injection when
+  detection succeeds). `docs/VoiceInput.md` updated in part.
+- Still open: M3 (logged fallback warning, `voxi status` layout line), live acceptance
+  check and `make restart-service`, and measuring the per-injection spawn cost, since
+  the fast `dotoold` pipe is no longer used on GNOME. See
+  [TypingLayoutArchitecture.md](../docs/TypingLayoutArchitecture.md).
