@@ -178,7 +178,36 @@ func RenderSaveSuccess(home string) string {
 	b.WriteString(fmt.Sprintf("  • %s\n", config.VoxiEnvPath(home)))
 	b.WriteString(fmt.Sprintf("  • %s\n\n", config.VoxtypeConfigPath(home)))
 	b.WriteString("Restart background services for changes to take effect:\n")
-	b.WriteString("  systemctl --user restart voxi-agent.service\n")
+	b.WriteString("  systemctl --user try-restart voxi-agent.service\n")
+	return b.String()
+}
+
+// RestartOutcome describes what happened after settings were saved.
+type RestartOutcome int
+
+const (
+	RestartDeclined RestartOutcome = iota
+	RestartRequested
+	RestartFailed
+)
+
+// RenderSaveSuccessWithRestart prints saved paths and the service restart result.
+func RenderSaveSuccessWithRestart(home string, outcome RestartOutcome, restartErr error) string {
+	var b bytes.Buffer
+	b.WriteString("✓ Configuration successfully saved:\n")
+	b.WriteString(fmt.Sprintf("  • %s\n", config.VoxiConfigYAMLPath(home)))
+	b.WriteString(fmt.Sprintf("  • %s\n", config.VoxiEnvPath(home)))
+	b.WriteString(fmt.Sprintf("  • %s\n\n", config.VoxtypeConfigPath(home)))
+	switch outcome {
+	case RestartRequested:
+		b.WriteString("  ✓ restart requested for voxi-agent.service (only applies if running).\n")
+	case RestartFailed:
+		b.WriteString(fmt.Sprintf("  ⚠ Could not restart voxi-agent.service automatically: %v\n", restartErr))
+		b.WriteString("  Run: systemctl --user try-restart voxi-agent.service\n")
+	default:
+		b.WriteString("  Restart declined. Run this when ready to apply changes:\n")
+		b.WriteString("  systemctl --user try-restart voxi-agent.service\n")
+	}
 	return b.String()
 }
 

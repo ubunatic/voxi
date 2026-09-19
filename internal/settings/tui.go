@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -90,11 +91,20 @@ func RunInteractive(ctx context.Context, d deps.Dependencies, home string, asrMo
 			// Restore terminal before printing success message
 			_ = term.Restore(fd, oldState)
 			fmt.Fprint(d.Stdout, "\033[?25h\033[?1049l")
-
 			if err := config.SaveUserSettings(home, updated); err != nil {
 				return fmt.Errorf("save user settings: %w", err)
 			}
-			fmt.Fprint(d.Stdout, RenderSaveSuccess(home))
+			restart := confirmRestart(inReader, d.Stdout)
+			outcome := RestartDeclined
+			var restartErr error
+			if restart {
+				outcome = RestartRequested
+				restartErr = restartAgent(ctx, d)
+				if restartErr != nil {
+					outcome = RestartFailed
+				}
+			}
+			fmt.Fprint(d.Stdout, RenderSaveSuccessWithRestart(home, outcome, restartErr))
 			return nil
 		}
 
@@ -106,4 +116,11 @@ func RunInteractive(ctx context.Context, d deps.Dependencies, home string, asrMo
 
 		render()
 	}
+}
+
+func confirmRestart(r io.Reader, w io.Writer) bool {
+	fmt.Fprint(w, "Restart a running voxi-agent.service now? This may interrupt an active dictation. [y/N] ")
+	line, _ := bufio.NewReader(r).ReadString('\n')
+	answer := strings.TrimSpace(line)
+	return answer == "y" || answer == "Y"
 }
