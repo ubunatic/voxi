@@ -15,9 +15,9 @@ type SegmenterOptions struct {
 	PreRollMs          int
 	MinSpeechMs        int
 	MaxWindowMs        int
-	MinVoicedFrames    int // Minimum number of voiced frames (>= ThresholdRMS) across the segment (default: 3 = 60ms)
-	MinVoicedRunFrames int // Minimum consecutive voiced frames required to accept a segment (default: 2 = 40ms)
-	MinMeanRMS         int // Minimum average RMS across candidate segment (default: 0 = disabled)
+	MinVoicedFrames    int // Minimum number of voiced frames (>= ThresholdRMS) across the segment (default: 8 = 160ms)
+	MinVoicedRunFrames int // Minimum consecutive voiced frames required to accept a segment (default: 7 = 140ms)
+	MinMeanRMS         int // Minimum average RMS across candidate segment (default: 120)
 }
 
 // DefaultSegmenterOptions returns standard defaults.
@@ -28,9 +28,9 @@ func DefaultSegmenterOptions() SegmenterOptions {
 		PreRollMs:          500,
 		MinSpeechMs:        200,
 		MaxWindowMs:        8000,
-		MinVoicedFrames:    3,
-		MinVoicedRunFrames: 2,
-		MinMeanRMS:         0,
+		MinVoicedFrames:    8,
+		MinVoicedRunFrames: 7,
+		MinMeanRMS:         120,
 	}
 }
 
@@ -82,13 +82,13 @@ func NewAudioSegmenter(opts SegmenterOptions) *AudioSegmenter {
 	maxWindowFrames := (opts.MaxWindowMs + frameMs - 1) / frameMs
 
 	if opts.MinVoicedFrames <= 0 {
-		opts.MinVoicedFrames = 3
+		opts.MinVoicedFrames = 8
 	}
 	if opts.MinVoicedRunFrames <= 0 {
-		opts.MinVoicedRunFrames = 2
+		opts.MinVoicedRunFrames = 7
 	}
-	if opts.MinMeanRMS < 0 {
-		opts.MinMeanRMS = 0
+	if opts.MinMeanRMS <= 0 {
+		opts.MinMeanRMS = 120
 	}
 
 	return &AudioSegmenter{
@@ -291,9 +291,9 @@ func RenderAudioLevelMeter(rms int, threshold int) string {
 // the floor still renders as the quietest *audible* glyph (sparklineMinLevel,
 // "⣀") — not blank — since it represents a real, measured (if silent)
 // bucket; RMS at or above the ceiling saturates at the loudest glyph. The
-// floor sits in the ambient noise range (see sparklineLevel) so a chunk the
-// gate rejected as low_energy_transient still reads as visibly flat-and-low,
-// just never as literally blank — a
+// floor sits just below the acoustic gate's MinMeanRMS (default 120, see
+// SegmenterOptions) so a chunk the gate rejected as low_energy_transient
+// still reads as visibly flat-and-low, just never as literally blank — a
 // blank/space glyph is reserved exclusively for buckets with no data at all
 // (see RenderVolumeSparkline). The floor-to-ceiling mapping is logarithmic,
 // not linear (see sparklineLevel) — human speech RMS commonly spans tens to

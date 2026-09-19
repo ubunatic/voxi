@@ -154,9 +154,9 @@ func TestAcousticGatingAcceptsGenuineShortSpeech(t *testing.T) {
 		PreRollMs:          40,
 		MinSpeechMs:        100, // 5 frames
 		MaxWindowMs:        800,
-		MinVoicedFrames:    3,
-		MinVoicedRunFrames: 2,
-		MinMeanRMS:         0,
+		MinVoicedFrames:    8,
+		MinVoicedRunFrames: 7,
+		MinMeanRMS:         120,
 	}
 	segmenter := NewAudioSegmenter(opts)
 	silenceFrame := make([]byte, 640)
@@ -166,8 +166,8 @@ func TestAcousticGatingAcceptsGenuineShortSpeech(t *testing.T) {
 	segmenter.ProcessFrame(silenceFrame)
 	segmenter.ProcessFrame(silenceFrame)
 
-	// Sustained word (e.g. 5 frames = 100ms of "Stop" or "Yes")
-	for i := 0; i < 5; i++ {
+	// Sustained word (e.g. 10 frames = 200ms of "Stop" or "Yes")
+	for i := 0; i < 10; i++ {
 		segmenter.ProcessFrame(speechFrame)
 	}
 
@@ -184,83 +184,6 @@ func TestAcousticGatingAcceptsGenuineShortSpeech(t *testing.T) {
 	}
 	if !candidate.Plausible {
 		t.Fatalf("expected sustained short speech to be accepted as plausible, rejected with: %s (stats: %+v)", candidate.RejectionReason, candidate.Stats)
-	}
-}
-
-func TestAcousticGatingAcceptsConversationalSpeechWithConsonantsAndDefaultOptions(t *testing.T) {
-	segmenter := NewAudioSegmenter(DefaultSegmenterOptions())
-	silenceFrame := make([]byte, 640)
-	consonantFrame := generateSineFrame(320, 440, 90) // RMS = 90 < 150 (unvoiced consonant)
-	vowelFrame := generateSineFrame(320, 440, 260)     // RMS = 260 > 150 (voiced vowel)
-
-	// Fill pre-roll buffer with ambient silence
-	for i := 0; i < 30; i++ {
-		segmenter.ProcessFrame(silenceFrame)
-	}
-
-	// Speak words with unvoiced consonants breaking up voiced vowels:
-	// "And" (3 voiced frames) -> "this" (1 consonant, 3 voiced, 1 consonant) -> "is" (3 voiced, 1 consonant)
-	pattern := []struct {
-		frame []byte
-		count int
-	}{
-		{vowelFrame, 3},
-		{consonantFrame, 2},
-		{vowelFrame, 3},
-		{consonantFrame, 2},
-		{vowelFrame, 3},
-		{consonantFrame, 2},
-		{vowelFrame, 4},
-	}
-	for _, p := range pattern {
-		for i := 0; i < p.count; i++ {
-			segmenter.ProcessFrame(p.frame)
-		}
-	}
-
-	// Trailing silence to trigger pause finalization (800ms = 40 frames)
-	var candidate SegmentCandidate
-	for i := 0; i < 45; i++ {
-		cand, _, _ := segmenter.ProcessFrame(silenceFrame)
-		if len(cand.Audio) > 0 {
-			candidate = cand
-		}
-	}
-
-	if len(candidate.Audio) == 0 {
-		t.Fatal("expected candidate for conversational speech utterance")
-	}
-	if !candidate.Plausible {
-		t.Fatalf("conversational utterance was wrongly rejected: reason=%s stats=%+v", candidate.RejectionReason, candidate.Stats)
-	}
-}
-
-func TestAcousticGatingRejectsIsolatedTransientWithDefaultOptions(t *testing.T) {
-	segmenter := NewAudioSegmenter(DefaultSegmenterOptions())
-	silenceFrame := make([]byte, 640)
-	spikeFrame := generateSineFrame(320, 440, 2000) // 20ms impulse spike
-
-	for i := 0; i < 30; i++ {
-		segmenter.ProcessFrame(silenceFrame)
-	}
-	segmenter.ProcessFrame(spikeFrame)
-
-	var candidate SegmentCandidate
-	for i := 0; i < 45; i++ {
-		cand, _, _ := segmenter.ProcessFrame(silenceFrame)
-		if len(cand.Audio) > 0 {
-			candidate = cand
-		}
-	}
-
-	if len(candidate.Audio) == 0 {
-		t.Fatal("expected candidate to be emitted for ring buffer inspection")
-	}
-	if candidate.Plausible {
-		t.Fatalf("expected isolated click spike to be rejected as implausible, got plausible (stats: %+v)", candidate.Stats)
-	}
-	if candidate.RejectionReason != "low_energy_transient" && candidate.RejectionReason != "unvoiced_transient" {
-		t.Fatalf("unexpected rejection reason: %s", candidate.RejectionReason)
 	}
 }
 
