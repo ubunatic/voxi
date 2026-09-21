@@ -113,3 +113,4 @@
 | 129 | [129-dotoold-keyboard-layout-must-follow-the-active-input-source-not-the-install-time-layout.md](129-dotoold-keyboard-layout-must-follow-the-active-input-source-not-the-install-time-layout.md) | dotoold keyboard layout must follow the active input source, not the install-time layout | Open |
 | 130 | [130-standalone-dotool-injection-exits-successfully-but-produces-no-visible-typing-on-gnome.md](130-standalone-dotool-injection-exits-successfully-but-produces-no-visible-typing-on-gnome.md) | Standalone dotool injection exits successfully but produces no visible typing on GNOME | Open |
 | 131 | [131-research-and-benchmark-r2t2-ai-open-stt-model.md](131-research-and-benchmark-r2t2-ai-open-stt-model.md) | Research and benchmark R2T2.ai open STT model | Open |
+| 132 | [132-evaluate-qwen3-8-live-stt-after-release.md](132-evaluate-qwen3-8-live-stt-after-release.md) | Evaluate Qwen3.8 live STT after release | Open |
