@@ -1,6 +1,6 @@
 # 136 — voxi monitor should warn when a required ASR server is offline
 
-**Status**: Open
+**Status**: Closed — M1-M3 done (9280686, 312f86c, d5b3df7): backend state always shown on its own line
 **Priority**: P2 (Medium)
 **Severity**: Major
 **Category**: Feature
