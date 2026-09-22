@@ -9,6 +9,7 @@ In-depth references for architecture, decisions, and operations of the Voxi Linu
 | [TypingLayoutArchitecture.md](TypingLayoutArchitecture.md) | Why typed text can have Y/Z swapped: dotool vs compositor layout, active GNOME input source detection, standalone-dotool vs `dotoold` restart trade-off, and the settings-save restart pitfalls (`try-restart`, `Key` enum) |
 | [InstallationArchitecture.md](InstallationArchitecture.md) | Converged Go/Make/curl installation, optional modifier daemon, Podman verification boundaries, and installation pitfalls |
 | [HeadlessTestingArchitecture.md](HeadlessTestingArchitecture.md) | Headless end-to-end container test harness, virtual PulseAudio mic streaming, persistent FIFO typing sinks, and host uinput isolation |
+| [ASREngines.md](ASREngines.md) | The three engine shapes (voxtype, crispasr, HTTP) and who owns each process, spec-driven per-model endpoint/response format, R2T2 via llama-server incl. the iGPU VRAM cap, keyterm biasing, and the no-speech sentinel |
 | [BenchBaseline.md](BenchBaseline.md) | `voxi bench` CPU vs GPU RTF baseline for an average dev machine (T14 Gen2 AMD) |
 | [PublicationAndRelease.md](PublicationAndRelease.md) | Codeberg hosting philosophy, local CI quality gates, and release workflow |
 | [ChunkDiagnostics.md](ChunkDiagnostics.md) | `voxi chunks` ring buffer, RMS/acoustic-gate fields, the Braille LEVEL sparkline (dual-column packing, log-scale calibration pitfalls), and `--color` |

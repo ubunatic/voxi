@@ -226,3 +226,14 @@ pipe-separated terms may not be the best prompt shape.
 This also closes a longer-standing gap: 074 §5 recorded that crispasr's
 `--prompt` is a no-op for Cohere, so voxi had no vocabulary hook on any
 non-whisper engine. The openai-transcribe engine now demonstrably has one.
+
+## 9. Status (2026-09-22): M1-M3 done, engine is live
+
+Landed: `89675af` (response_format + marker strip), `be78170` (schema test),
+`1c736af` (per-model `base_url` + live corpus test). R2T2 is selectable and in
+daily use by the user. Durable knowledge moved to `@docs/ASREngines.md`.
+
+Follow-ups split out so this ticket can close: **137** (keyterm prompt biasing),
+**138** (no-speech sentinel), **139** (systemd unit). Remaining here: nothing —
+close once 139 makes the backend survive a reboot, or close now and let 139
+stand alone.

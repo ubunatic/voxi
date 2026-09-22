@@ -174,3 +174,15 @@ streaming, without upstream work. Options:
    more than one clip, which needs a small labelled clip set.
 3. Native streaming needs NetEase's own runtime (vLLM/transformers, likely
    ROCm) and is out of scope unless streaming latency becomes the goal.
+
+## 8. Outcome (2026-09-22)
+
+Research and canaries complete. R2T2 runs on Vulkan at RTF ~0.2 warm, is
+whole-utterance only (no native streaming via mainline llama.cpp), and is now
+integrated as a voxi engine — see issue **134** and `@docs/ASREngines.md`.
+Accuracy findings and the vocabulary-biasing discovery are in 134 §7-§8 and
+tracked as **137**.
+
+Still open from this ticket's original scope: option 2, a WER comparison against
+Cohere and small.en on the same corpus, which needs a multi-engine bench
+(issue **133**).
