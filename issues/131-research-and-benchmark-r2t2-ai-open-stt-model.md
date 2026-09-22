@@ -46,7 +46,10 @@ Unverified web claims are marked *(reported)*; code refs were spot-checked.
   latency. Optimized for Chinese and English, also supports DE, FR, ES, IT,
   JA, KO, PT, RU, AR. Local weights only; no hosted API.
 - **Runtimes** *(reported)*: vLLM (CUDA, primary), Transformers, and a
-  llama.cpp/GGUF backend. Only the GGUF path fits voxi's CPU desktop use.
+  llama.cpp/GGUF backend. Target hardware is the T14's AMD Cezanne iGPU,
+  which already runs Cohere and Qwen models on GPU with plenty of VRAM. vLLM
+  is CUDA-first, so the GGUF path on the same GPU backend that `crispasr`
+  uses is the likely route.
   **Unverified**: the GGUF instructions, the HF weight id, and the file size.
 - **Documented canary** (vLLM path):
   `./run_example.sh audio.wav --model_path <Confucius4-R2T2> --infer_mode stream_vllm --language English --chunk_size_ms 160`
@@ -63,8 +66,9 @@ Unverified web claims are marked *(reported)*; code refs were spot-checked.
 ### Next steps (pre-work for M1)
 
 1. Fetch the repo README's GGUF/llama.cpp section and the HF card to confirm
-   the weight id, the size, and a CPU command. Check whether `crispasr` or
+   the weight id, the size, and a GGUF run command. Check whether `crispasr` or
    upstream llama.cpp can already load it.
-2. Run a canary on one repository sample on CPU. Record wall time and RSS.
+2. Run a canary on one repository sample on the Cezanne GPU, on the same
+   backend as Cohere. Record wall time and VRAM/RSS.
 3. Only if (2) passes: run the Cohere-vs-R2T2 benchmark on the same samples.
    Then add an `r2t2` engine modeled on `cohere.go`.
