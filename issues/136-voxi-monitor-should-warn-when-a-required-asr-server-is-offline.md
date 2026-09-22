@@ -54,3 +54,30 @@ not-applicable-engine cases.
 - Related UX gap, out of scope here: nothing restarts these servers. If R2T2
   becomes a regular engine it needs a systemd user unit carrying the capped
   command from 134 §5.
+
+## 4. M2 — show the backend when it IS online (2026-09-22)
+
+M1 landed as `9280686`: a warning appears only when the endpoint is unreachable.
+User feedback on the live TUI: silence is ambiguous — "online" and "never
+probed" look identical, and the health box says nothing about the ASR server at
+all.
+
+/goal for M2: the `[d] active daemons & health` box always carries one line for
+the active model's backend, in the same style as the other daemons there
+(`voxi-modifierd (PID …, 4.3 MB) · dotoold (…)`). Online shows the endpoint and
+that it answered; offline shows the endpoint and that it did not, keeping M1's
+warning. Engines with no server (whisper/voxtype, cohere-transcribe/crispasr)
+state that plainly instead, e.g. "asr: crispasr (no server)", so the line is
+never missing and never misleading.
+
+Notes:
+- Reuse `checkASRBackend`/`probeASRBackend` and the 5 s cache from M1
+  (`internal/monitor/collector.go`); the snapshot needs an online/offline/
+  not-applicable state, not just a warning string.
+- Where possible show something useful alongside, e.g. the port, but do not add
+  a second probe or an HTTP round trip to get it.
+- Unrelated wording bug seen in the same screenshot: the `[s] voice & speed` box
+  labels the GPU backend as `engine: AMD Radeon Vulkan 1.4`. "Engine" now means
+  the ASR engine (whisper / cohere-transcribe / openai-transcribe) everywhere
+  else, so this label should change (e.g. `accel:`). Fix it here while in the
+  file.
