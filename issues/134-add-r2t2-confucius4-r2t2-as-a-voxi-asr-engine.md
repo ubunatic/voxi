@@ -72,3 +72,36 @@ bench clip, with RTF recorded next to the numbers in 131 §7.
 - Accuracy is unmeasured. 131's option 2 (a WER comparison against Cohere and
   whisper) is not part of this ticket, but do not claim R2T2 is better than
   small.en until it exists.
+
+## 5. M1 Progress & Resource Trap (2026-09-22)
+
+M1 is **not finished**. Two canary attempts were interrupted; nothing landed in
+the repo.
+
+### Carried-over finding
+- The `language English<asr_text>` prefix seen from the CLI (131 §6) **also
+  appears over HTTP** (reported, from an interrupted run; re-verify and quote
+  the body). So M2 needs an explicit strip step wherever the response is read.
+
+### Resource trap — read before starting llama-server here
+On this T14 (AMD Cezanne), GPU VRAM **is** system RAM. `llama-server` fits its
+context to the free VRAM it sees (about 27 GiB), so
+`llama-server ... -ngl 99` with no context cap inflated to **26.5 GiB VRAM and
+99% RAM** and made the machine unusable (observed 2026-09-22). The earlier M2
+run (131 §7) happened to stay near 8 GiB, so this does not show up every time.
+
+Always start it with an explicit cap, e.g.:
+
+```
+llama-server -m <gguf> --mmproj <mmproj> -ngl 99 -c 4096 --no-warmup --port 18131
+```
+
+and check `free -m` plus `/sys/class/drm/card*/device/mem_info_vram_used`
+**after** startup, not only before. Kill the server as soon as the measurement
+is done. Two earlier heavy builds also pushed desktop apps into swap; do not
+run parallel builds above `-j 6` on this machine.
+
+### M1 remaining
+Steps 3-5 of M1 above: POST the bench clip to `/v1/audio/transcriptions` exactly
+as `transcribeOpenAIWAV` does, record status, verbatim body, and wall time, then
+decide (a) spec-only or (b) Go changes.
