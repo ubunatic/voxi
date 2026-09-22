@@ -31,4 +31,40 @@ Use the existing voxi transcription samples and current Cohere path as the compa
 
 ---
 
-Reserved placeholder ticket.
+## 4. Advisory Findings (2026-09-22, quick research)
+
+Unverified web claims are marked *(reported)*; code refs were spot-checked.
+
+- **Identity**: the model is **R2T2** by NetEase Youdao, repo
+  <https://github.com/netease-youdao/Confucius4-R2T2>, site <https://r2t2.ai/>.
+  "R2T2.ai" is the marketing domain, not the vendor. "S2T2" does not exist.
+- **License** *(reported)*: code Apache-2.0; weights under NetEase's own
+  Model Use License Agreement. Review the terms before bundling or downloading
+  the weights by default.
+- **Model** *(reported)*: Qwen3-ASR based, true streaming and append-only
+  (committed text is never revised), chunks of 80 ms to 2 s, about 200-600 ms
+  latency. Optimized for Chinese and English, also supports DE, FR, ES, IT,
+  JA, KO, PT, RU, AR. Local weights only; no hosted API.
+- **Runtimes** *(reported)*: vLLM (CUDA, primary), Transformers, and a
+  llama.cpp/GGUF backend. Only the GGUF path fits voxi's CPU desktop use.
+  **Unverified**: the GGUF instructions, the HF weight id, and the file size.
+- **Documented canary** (vLLM path):
+  `./run_example.sh audio.wav --model_path <Confucius4-R2T2> --infer_mode stream_vllm --language English --chunk_size_ms 160`
+
+### Integration surface in voxi
+
+- `internal/eager/cohere.go:17`: `cohereTranscribeEngine`, which wraps the
+  external `crispasr` binary around GGUF weights; `crispASRTranscribeArgs` is at `:54`.
+- `internal/eager/eager.go:327,337`: engine switch (`cohere-transcribe`,
+  OpenAI); more per-engine branches at `:570-596` and `:702`.
+- `spec/models.yaml:94`: the `engine:` registry. A new `r2t2` engine is added
+  here first (Spec.md: no duplicated values in Go).
+
+### Next steps (pre-work for M1)
+
+1. Fetch the repo README's GGUF/llama.cpp section and the HF card to confirm
+   the weight id, the size, and a CPU command. Check whether `crispasr` or
+   upstream llama.cpp can already load it.
+2. Run a canary on one repository sample on CPU. Record wall time and RSS.
+3. Only if (2) passes: run the Cohere-vs-R2T2 benchmark on the same samples.
+   Then add an `r2t2` engine modeled on `cohere.go`.
