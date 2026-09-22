@@ -95,3 +95,34 @@ Build llama.cpp with Vulkan in a scratch directory, then run Q4_K_M and the
 mmproj on one repository WAV. Pass means an English transcript on the GPU;
 record the latency and the VRAM used. Fail means mtmd rejects the audio mmproj.
 In that case, stop and decide between the vLLM/ROCm route and rejecting R2T2.
+
+## 6. M1 Canary Result (2026-09-22): WORKS on Vulkan
+
+- **Setup** (verified): mainline llama.cpp `f95b0d9`, built with `-DGGML_VULKAN=ON`,
+  target `llama-mtmd-cli`. Build deps were already installed. The Vulkan shader
+  compile takes several minutes.
+- **Command** (verified):
+  `llama-mtmd-cli -m Confucius4-R2T2-Q4_K_M.gguf --mmproj mmproj-Confucius4-R2T2-Q8_0.gguf --audio <wav> -p "Transcribe the audio." -ngl 99 --temp 0`
+- **GPU** (verified with `-v`): `using device Vulkan0 (AMD Radeon Graphics (RADV RENOIR))`,
+  and all layers were assigned to Vulkan0. Mainline mtmd accepts the audio mmproj,
+  with an "audio input is experimental" warning.
+- **Result** on `~/.cache/voxi/bench/jfk-reference.wav` (11.0 s), verified:
+  - Transcript: exact, "And so, my fellow Americans, ask not what your country
+    can do for you; ask what you can do for your country." The output is prefixed
+    with `language English<asr_text>`, which must be stripped.
+  - Wall time: 6.0 s, i.e. RTF 0.55 cold, including about 3.3 s of model and
+    mmproj load. Warm inference is roughly 2.7 s (RTF ≈ 0.25, *estimated* from
+    log timestamps).
+  - Peak RSS: 161 MB, because the weights live in VRAM.
+- **Comparison** with the same clip in `voxi bench` on Vulkan: small.en 0.14,
+  large-v3-turbo 0.45. Cohere/crispasr is not benched yet (issue 133).
+- **Caveats**: this was one run of one clip, done batch-style through the CLI.
+  Streaming (80 ms–2 s chunks) is not exercised, and a CLI run reloads the model
+  every time, so real use needs a resident server (`llama-server` with audio) or a
+  library binding.
+
+### Next
+M2: keep the model resident and measure warm RTF and latency on the bench clips
+(llama-server with audio input, if supported), then decide the integration path
+(a server process like crispasr vs. in-process). Also check whether streaming
+chunk input is reachable through mainline llama.cpp at all.
