@@ -105,3 +105,41 @@ run parallel builds above `-j 6` on this machine.
 Steps 3-5 of M1 above: POST the bench clip to `/v1/audio/transcriptions` exactly
 as `transcribeOpenAIWAV` does, record status, verbatim body, and wall time, then
 decide (a) spec-only or (b) Go changes.
+
+## 6. M1 Result (2026-09-22): DECIDED — (b) Go changes needed
+
+Measured against a resident `llama-server` with the capped command from §5.
+Resources stayed safe: VRAM peaked at 2.78 GiB, available RAM never dropped
+below 18.8 GB, and `n_ctx_slot = 4096` confirms the `-c` cap held. So the
+`-c 4096` cap is what makes this safe — without it, see §5.
+
+- `response_format=text` → **HTTP 400** (verified):
+  `Only 'json' response_format is supported for transcription`
+- `response_format=json` → **HTTP 200 in 1.99 s** (verified), body verbatim:
+  `{"type":"transcript.text.done","text":"language English<asr_text>And so, my fellow Americans, ask not what your country can do for you; ask what you can do for your country.","usage":{...}}`
+- Transcript content is correct; the `language English<asr_text>` prefix leaks
+  into the HTTP response, as suspected.
+- GPU use was **not** logged at this verbosity and is only inferred from timing
+  and VRAM (*unverified*). 131 §7 verified `offloaded 29/29 layers to GPU` for
+  the same binary and flags, so this is not a new risk — but don't cite M1 as
+  GPU evidence.
+
+### Why spec-only is impossible
+`internal/eager/openai_transcribe.go` hardcodes `response_format=text` (`:100`)
+and returns the **raw body** with no JSON parsing at all (verified: zero
+`json.Unmarshal` in that file). Against llama-server that yields a 400, and
+even on success the body would be JSON, not a transcript.
+
+### M2 scope (replaces the M2 sketch in §3)
+1. Per-backend `response_format`: this engine must send `json`. Drive it from
+   `spec/models.yaml`, not a hardcoded branch on the model name.
+2. Parse the JSON envelope: read `.text` from
+   `{"type":"transcript.text.done","text":...}`. Keep the existing raw-text
+   path working for whisper-server/agy (issue 126), which returns plain text.
+3. Strip the `language English<asr_text>` prefix. Make it an explicit,
+   spec-driven cleanup rule with a test, not a silent regex buried in the
+   engine.
+4. Process ownership: llama-server must be started with the §5 capped command.
+   Decide documented-manual-start vs. supervision, and write the choice down.
+   An uncapped start is a machine-hanging bug, so if voxi ever starts it, the
+   cap is not optional.
