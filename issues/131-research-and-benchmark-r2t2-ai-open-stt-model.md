@@ -126,3 +126,11 @@ M2: keep the model resident and measure warm RTF and latency on the bench clips
 (llama-server with audio input, if supported), then decide the integration path
 (a server process like crispasr vs. in-process). Also check whether streaming
 chunk input is reachable through mainline llama.cpp at all.
+
+### Local artifacts (reusable)
+- Models: `~/.cache/voxi/models/Confucius4-R2T2-Q4_K_M.gguf`,
+  `~/.cache/voxi/models/mmproj-Confucius4-R2T2-Q8_0.gguf`
+- llama.cpp `f95b0d9` with a Vulkan build of `llama-mtmd-cli` and `llama-server`:
+  `~/.cache/voxi/llama.cpp/build/bin/`. It was rebuilt in place after the move,
+  because the CMake RUNPATH is absolute and a moved build dir can't find its
+  libraries.
