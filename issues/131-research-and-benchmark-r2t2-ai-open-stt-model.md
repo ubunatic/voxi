@@ -134,3 +134,43 @@ chunk input is reachable through mainline llama.cpp at all.
   `~/.cache/voxi/llama.cpp/build/bin/`. It was rebuilt in place after the move,
   because the CMake RUNPATH is absolute and a moved build dir can't find its
   libraries.
+
+## 7. M2 Result (2026-09-22): resident llama-server, warm
+
+- **Server** (verified): `llama-server -m Confucius4-R2T2-Q4_K_M.gguf --mmproj mmproj-Confucius4-R2T2-Q8_0.gguf -ngl 99`.
+  The log shows `offloaded 29/29 layers to GPU` on Vulkan0. The server takes about
+  24 s to become ready: model load plus the first Vulkan shader compile.
+- **Warm** `jfk-reference.wav` (11.0 s), 3 runs after one warm-up (verified):
+  median 2.02 s, **RTF 0.18**. The transcript is exact.
+  - Server timings: prompt 113 ms and decode 1.79 s at 16 tok/s, so text decode
+    dominates.
+  - Caveat: `cache_n=170` shows the identical request hit the prompt cache, so
+    audio encoding may have been skipped. M1 measured the audio encode at about
+    0.5 s, which puts a realistic warm RTF on new audio at about 0.2–0.25
+    (*estimated*).
+- **Comparison**, same clip, Vulkan, `voxi bench`: small.en 0.14, R2T2 ~0.2,
+  large-v3-turbo 0.45.
+- **VRAM**: about 1.4 GiB of model files, plus about 0.9 GiB reserved for the
+  mmproj (reported). The system-wide 8 GiB reading isn't specific to this
+  process and is ignored.
+- **Streaming** (verified): the server accepts one whole `input_audio` blob
+  per request (`tools/server/server-common.cpp:1251-1263`). Neither
+  `tools/server` nor `tools/mtmd` has an incremental or partial-audio input
+  path (reported, grep only). R2T2's native 80 ms–2 s chunk streaming is **not
+  reachable** through mainline llama.cpp. It is whole-utterance only, like
+  crispasr/Cohere today.
+- **Only one bench clip** exists locally (`~/.cache/voxi/bench/`), so there is
+  no spread across clips.
+
+### Verdict and next options
+R2T2 via llama-server works as a GPU utterance engine. It is faster than
+large-v3-turbo and close to small.en, and should be more accurate than
+small.en (unverified). It does not deliver its headline feature, low-latency
+streaming, without upstream work. Options:
+1. Integrate it as an engine alongside `cohere-transcribe`: a resident
+   llama-server with an OpenAI `input_audio` request. Bench it via issue 133's
+   engine dispatch.
+2. Accuracy check first: run a WER comparison against Cohere and whisper on
+   more than one clip, which needs a small labelled clip set.
+3. Native streaming needs NetEase's own runtime (vLLM/transformers, likely
+   ROCm) and is out of scope unless streaming latency becomes the goal.
