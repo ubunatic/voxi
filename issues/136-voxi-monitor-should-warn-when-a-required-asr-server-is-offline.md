@@ -81,3 +81,26 @@ Notes:
   the ASR engine (whisper / cohere-transcribe / openai-transcribe) everywhere
   else, so this label should change (e.g. `accel:`). Fix it here while in the
   file.
+
+## 5. M3 — the line is invisible in practice (2026-09-22)
+
+M2 (`312f86c`) appends the ASR state to the END of the daemons line
+(`render.go:537`, `strings.Join(procSummaries, " · ") + " · " + asrLine`). On a
+real terminal that line is already truncated mid-process
+(`voxi-modifierd (…) · dotoold (…) · harnez (PID …`), so the ASR state is cut
+off and the user never sees it. Verified from a live TUI capture.
+
+/goal: the ASR backend state is visible in the `[d] active daemons & health`
+box at a normal terminal width, i.e. it is its own line rather than a suffix on
+an overflowing one, and it is not truncated away. Prefer it FIRST in that box —
+it is the line that explains why dictation is failing.
+
+Notes:
+- `formatASRBackendLine` (`render.go:560`) already produces the text; this is
+  about placement, not wording.
+- The box is width-aware; check how other lines are truncated
+  (`asr.StripANSI`, `:253`) and keep the new line inside the same discipline so
+  it degrades gracefully rather than wrapping the box.
+- Same screenshot, minor: the `[s]` status line truncates the model to
+  `r2t2-confu...`. Consider showing the model alone on its line, or shortening
+  the `(neither / …)` prefix. Optional.
