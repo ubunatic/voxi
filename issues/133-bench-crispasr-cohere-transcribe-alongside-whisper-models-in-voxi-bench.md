@@ -1,4 +1,4 @@
-# 133 — Bench crispasr (cohere-transcribe) alongside whisper models in voxi bench
+# 133 — Bench Cohere Transcribe via crispasr alongside whisper models in voxi bench
 
 **Status**: Open
 **Priority**: P2 (Medium)
@@ -23,7 +23,8 @@ The comparison matters now because:
 
 ## 2. /goal
 
-`voxi bench` with no arguments includes the `cohere-transcribe` models in the
+`voxi bench` with no arguments includes the Cohere Transcribe model, run through
+crispasr (e.g. row `cohere-transcribe`, detected `crispasr:cpu`), in the
 same results table as the whisper models. Each row shows the model name, the
 requested backend (gpu/cpu), RTF, speedup, and the backend crispasr actually
 reported. Failures, such as a missing binary or no GPU backend, appear as
