@@ -1,6 +1,6 @@
 # 135 — voxi monitor shows the default ASR model, not the selected one
 
-**Status**: Open
+**Status**: Closed — fixed in ca72ba2: monitor resolves ASR model from user settings first
 **Priority**: P2 (Medium)
 **Severity**: Major
 **Category**: Bug
