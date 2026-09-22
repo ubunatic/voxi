@@ -121,3 +121,4 @@
 | 137 | [137-wire-corpus-keyterms-into-openai-transcribe-prompt-for-vocabulary-biasing.md](137-wire-corpus-keyterms-into-openai-transcribe-prompt-for-vocabulary-biasing.md) | Wire corpus keyterms into openai-transcribe prompt for vocabulary biasing | Open |
 | 138 | [138-treat-r2t2-language-none-scaffold-as-an-explicit-no-speech-result.md](138-treat-r2t2-language-none-scaffold-as-an-explicit-no-speech-result.md) | Treat R2T2 "language None" scaffold as an explicit no-speech result | Open |
 | 139 | [139-ship-a-systemd-user-unit-for-the-r2t2-llama-server-backend.md](139-ship-a-systemd-user-unit-for-the-r2t2-llama-server-backend.md) | Ship a systemd user unit for the R2T2 llama-server backend | Open |
+| 140 | [140-harden-the-agent-harness-against-resource-hazardous-local-inference-runs.md](140-harden-the-agent-harness-against-resource-hazardous-local-inference-runs.md) | Harden the agent harness against resource-hazardous local inference runs | Open |
