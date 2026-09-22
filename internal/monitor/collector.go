@@ -55,7 +55,12 @@ type VoiceResourceReport struct {
 	// ASR backend and that backend did not answer a probe -- issue 136.
 	// Empty for engines with no server (whisper, cohere-transcribe) or
 	// when the backend is reachable.
-	ASRWarning     string
+	ASRWarning string
+	// ASRBackend is the tri-state (online/offline/not-applicable) view of
+	// the active model's ASR backend, always populated so the daemons &
+	// health box can show one line about it, even when never probed --
+	// issue 136 M2.
+	ASRBackend     ASRBackendState
 	ModifierStatus string
 	MicLevel       float64
 	MicAvailable   bool
@@ -88,7 +93,8 @@ func CollectVoiceResources(ctx context.Context, d deps.Dependencies, mic audiole
 		MicLevel:     mic.Level,
 		MicAvailable: mic.Available,
 	}
-	report.ASRWarning = checkASRBackend(d, report.ActiveModel)
+	report.ASRBackend = checkASRBackendState(d, report.ActiveModel)
+	report.ASRWarning = report.ASRBackend.Warning
 
 	modReader := modifiers.NewModifierReader("")
 	if mask, err := modReader.ReadMask(); err == nil {
@@ -340,13 +346,32 @@ var (
 	asrProbeLock     sync.Mutex
 	asrProbeEndpoint string
 	asrProbeWarning  string
+	asrProbeOnline   bool
 	asrProbeCachedAt time.Time
 )
 
-// checkASRBackend resolves modelName's engine and, for the openai-transcribe
-// engine, probes its HTTP endpoint, returning a non-empty warning string
-// naming the endpoint when it is unreachable. Engines with no server
-// (whisper, cohere-transcribe) are never probed and always return "".
+// ASRBackendState is a tri-state view of the active model's ASR backend --
+// issue 136 M2. Exactly one of the three states applies:
+//   - NotApplicable: the engine has no server to probe (whisper via
+//     voxtype, cohere-transcribe via crispasr). Binary names the local
+//     transcription binary for display, e.g. "voxtype" or "crispasr".
+//   - Online: the HTTP engine's endpoint answered the probe.
+//   - !Online && Applicable: the HTTP engine's endpoint did not answer;
+//     Warning carries M1's message naming the endpoint.
+type ASRBackendState struct {
+	Applicable bool
+	Online     bool
+	Engine     string
+	Endpoint   string
+	Binary     string
+	Warning    string
+}
+
+// checkASRBackendState resolves modelName's engine and, for the
+// openai-transcribe engine, probes its HTTP endpoint, returning a tri-state
+// result: not-applicable for engines with no server (whisper, cohere-
+// transcribe, never probed), or applicable with Online/Warning set from the
+// probe.
 //
 // Probe shape: a plain TCP dial, not a GET /health request. llama-server
 // (issue 134's R2T2 backend) does answer /health with {"status":"ok"}, but
@@ -360,14 +385,24 @@ var (
 //
 // The result is cached for asrProbeCacheTTL so repeated TUI refreshes do
 // not re-dial the backend on every frame.
-func checkASRBackend(d deps.Dependencies, modelName string) string {
+func checkASRBackendState(d deps.Dependencies, modelName string) ASRBackendState {
 	s, err := spec.LoadModels()
 	if err != nil {
-		return ""
+		return ASRBackendState{}
 	}
 	model, ok := s.Models[modelName]
-	if !ok || model.Engine != "openai-transcribe" {
-		return ""
+	if !ok {
+		return ASRBackendState{}
+	}
+	switch model.Engine {
+	case "", "whisper":
+		return ASRBackendState{Applicable: false, Engine: "whisper", Binary: "voxtype"}
+	case "cohere-transcribe":
+		return ASRBackendState{Applicable: false, Engine: "cohere-transcribe", Binary: "crispasr"}
+	case "openai-transcribe":
+		// falls through to the HTTP probe below.
+	default:
+		return ASRBackendState{}
 	}
 
 	globalBaseURL := ""
@@ -381,23 +416,37 @@ func checkASRBackend(d deps.Dependencies, modelName string) string {
 		baseURL = eager.DefaultOpenAIASRBaseURL
 	}
 
-	return probeASRBackend(d, baseURL)
+	online, warning := probeASRBackendState(d, baseURL)
+	return ASRBackendState{
+		Applicable: true,
+		Online:     online,
+		Engine:     model.Engine,
+		Endpoint:   baseURL,
+		Warning:    warning,
+	}
 }
 
-// probeASRBackend dials baseURL's host:port and returns a warning string
-// naming the endpoint when it is unreachable, or "" when it answers. The
+// checkASRBackend is a thin wrapper over checkASRBackendState kept for M1's
+// tests and callers that only need the warning string.
+func checkASRBackend(d deps.Dependencies, modelName string) string {
+	return checkASRBackendState(d, modelName).Warning
+}
+
+// probeASRBackendState dials baseURL's host:port and reports whether it
+// answered, plus a warning string naming the endpoint when it did not. The
 // result is cached per-endpoint for asrProbeCacheTTL.
-func probeASRBackend(d deps.Dependencies, baseURL string) string {
+func probeASRBackendState(d deps.Dependencies, baseURL string) (bool, string) {
 	addr, err := asrProbeAddr(baseURL)
 	if err != nil {
-		return ""
+		return false, ""
 	}
 
 	asrProbeLock.Lock()
 	if asrProbeEndpoint == addr && time.Since(asrProbeCachedAt) < asrProbeCacheTTL {
 		warning := asrProbeWarning
+		online := asrProbeOnline
 		asrProbeLock.Unlock()
-		return warning
+		return online, warning
 	}
 	asrProbeLock.Unlock()
 
@@ -406,19 +455,29 @@ func probeASRBackend(d deps.Dependencies, baseURL string) string {
 		dial = net.DialTimeout
 	}
 	warning := ""
+	online := false
 	conn, dialErr := dial("tcp", addr, asrProbeDialTimeout)
 	if dialErr != nil {
 		warning = fmt.Sprintf("ASR backend OFFLINE: %s unreachable (%s)", baseURL, dialErr)
 	} else {
 		conn.Close()
+		online = true
 	}
 
 	asrProbeLock.Lock()
 	asrProbeEndpoint = addr
 	asrProbeWarning = warning
+	asrProbeOnline = online
 	asrProbeCachedAt = time.Now()
 	asrProbeLock.Unlock()
 
+	return online, warning
+}
+
+// probeASRBackend is a thin wrapper over probeASRBackendState kept for M1's
+// tests and callers that only need the warning string.
+func probeASRBackend(d deps.Dependencies, baseURL string) string {
+	_, warning := probeASRBackendState(d, baseURL)
 	return warning
 }
 

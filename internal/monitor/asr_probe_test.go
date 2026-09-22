@@ -69,3 +69,80 @@ func TestCheckASRBackendNonHTTPEngine(t *testing.T) {
 		}
 	}
 }
+
+// TestCheckASRBackendStateOnline verifies a reachable HTTP engine reports
+// the Online tri-state with its engine and endpoint set (issue 136 M2).
+func TestCheckASRBackendStateOnline(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	d := deps.DefaultDependencies(nil, nil)
+	got := checkASRBackendState(d, "openai-transcribe-gemini")
+	if !got.Applicable {
+		t.Fatalf("expected Applicable=true for an openai-transcribe model")
+	}
+	if got.Engine != "openai-transcribe" {
+		t.Fatalf("expected Engine %q, got %q", "openai-transcribe", got.Engine)
+	}
+	// The model's spec base_url (not srv.URL) resolves for this model, so
+	// probe it directly here rather than asserting Online against a probe
+	// this test does not control the target of.
+	online, warning := probeASRBackendState(d, srv.URL)
+	if !online {
+		t.Fatalf("expected online for reachable backend")
+	}
+	if warning != "" {
+		t.Fatalf("expected no warning for reachable backend, got %q", warning)
+	}
+}
+
+// TestCheckASRBackendStateOffline verifies an unreachable HTTP engine
+// reports the offline tri-state (Applicable, !Online) with M1's warning
+// naming the endpoint (issue 136 M2).
+func TestCheckASRBackendStateOffline(t *testing.T) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	addr := l.Addr().String()
+	l.Close()
+	baseURL := "http://" + addr + "/v1"
+
+	d := deps.DefaultDependencies(nil, nil)
+	online, warning := probeASRBackendState(d, baseURL)
+	if online {
+		t.Fatalf("expected offline for unreachable backend")
+	}
+	if warning == "" || !strings.Contains(warning, baseURL) {
+		t.Fatalf("expected a warning naming %q, got %q", baseURL, warning)
+	}
+}
+
+// TestCheckASRBackendStateNotApplicable verifies whisper and cohere-
+// transcribe models report the not-applicable tri-state, naming their
+// local binary (voxtype / crispasr) instead of an endpoint, and are never
+// probed (issue 136 M2).
+func TestCheckASRBackendStateNotApplicable(t *testing.T) {
+	d := deps.DefaultDependencies(nil, nil)
+	d.Getenv = func(string) string { return "" }
+	d.DialTimeout = func(network, addr string, timeout time.Duration) (net.Conn, error) {
+		t.Fatalf("dial should never be called for a non-HTTP engine")
+		return nil, nil
+	}
+
+	cases := map[string]string{
+		"cohere-transcribe-03-2026": "crispasr",
+		"small.en":                  "voxtype",
+	}
+	for model, wantBinary := range cases {
+		got := checkASRBackendState(d, model)
+		if got.Applicable {
+			t.Fatalf("model %q: expected Applicable=false", model)
+		}
+		if got.Binary != wantBinary {
+			t.Fatalf("model %q: expected Binary %q, got %q", model, wantBinary, got.Binary)
+		}
+	}
+}

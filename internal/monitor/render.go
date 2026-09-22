@@ -415,7 +415,7 @@ func PrintVoiceResourceReport(w io.Writer, r VoiceResourceReport, sec ResourceSe
 	}
 	speedLines := []string{
 		fmt.Sprintf("status:  %s (%s / %s)", formatRecordState(r.RecordStatus, r.MicLevel, r.MicAvailable), r.Mode, r.ActiveModel),
-		fmt.Sprintf("engine:  \x1b[32m%s\x1b[0m  ·  mods: %s", r.GPUAccel, modStr),
+		fmt.Sprintf("accel:   \x1b[32m%s\x1b[0m  ·  mods: %s", r.GPUAccel, modStr),
 	}
 	if r.ASRWarning != "" {
 		speedLines = append(speedLines, fmt.Sprintf("\x1b[31;1m⚠️ %s\x1b[0m", r.ASRWarning))
@@ -524,7 +524,7 @@ func PrintVoiceResourceReport(w io.Writer, r VoiceResourceReport, sec ResourceSe
 	if sec.Daemons {
 		var daemonLines []string
 		if len(r.Processes) == 0 {
-			daemonLines = append(daemonLines, "\x1b[90mNo active voice processes running.\x1b[0m")
+			daemonLines = append(daemonLines, fmt.Sprintf("\x1b[90mNo active voice processes running.\x1b[0m  ·  %s", formatASRBackendLine(r.ASRBackend)))
 		} else {
 			var procSummaries []string
 			for _, p := range r.Processes {
@@ -534,7 +534,7 @@ func PrintVoiceResourceReport(w io.Writer, r VoiceResourceReport, sec ResourceSe
 			if len(r.ZombieWarnings) > 0 {
 				healthBadge = fmt.Sprintf("\x1b[31;1m⚠️ %s\x1b[0m", r.ZombieWarnings[0])
 			}
-			daemonLines = append(daemonLines, fmt.Sprintf("%s  ·  %s", strings.Join(procSummaries, "  ·  "), healthBadge))
+			daemonLines = append(daemonLines, fmt.Sprintf("%s  ·  %s  ·  %s", strings.Join(procSummaries, "  ·  "), healthBadge, formatASRBackendLine(r.ASRBackend)))
 		}
 		boxDaemons := BoxSpec{Title: actionBoxTitle("daemons"), Lines: daemonLines, Width: totalWidth}
 		for _, line := range RenderBoxLines(boxDaemons) {
@@ -554,6 +554,27 @@ func PrintVoiceResourceReport(w io.Writer, r VoiceResourceReport, sec ResourceSe
 // actionKeyAndLabel resolves an action's canonical display key (its first configured
 // key in spec/actions.yaml) and short label, so box titles and footer badges can never
 // drift out of sync with the spec that defines those hotkeys.
+// formatASRBackendLine renders the active model's ASR backend as one
+// compact, colored fragment for the daemons & health box, always non-empty
+// so "online" and "never probed" never look identical -- issue 136 M2.
+func formatASRBackendLine(s ASRBackendState) string {
+	if !s.Applicable {
+		binary := s.Binary
+		if binary == "" {
+			binary = s.Engine
+		}
+		return fmt.Sprintf("\x1b[90masr: %s (no server)\x1b[0m", binary)
+	}
+	addr := s.Endpoint
+	if a, err := asrProbeAddr(s.Endpoint); err == nil {
+		addr = a
+	}
+	if s.Online {
+		return fmt.Sprintf("\x1b[32masr: %s @ %s (online)\x1b[0m", s.Engine, addr)
+	}
+	return fmt.Sprintf("\x1b[31;1masr: %s @ %s (OFFLINE)\x1b[0m", s.Engine, addr)
+}
+
 func actionKeyAndLabel(id string) (key, short string) {
 	a := loadedActions().Actions[id]
 	key = "?"
