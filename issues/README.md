@@ -116,3 +116,4 @@
 | 132 | [132-evaluate-qwen3-8-live-stt-after-release.md](132-evaluate-qwen3-8-live-stt-after-release.md) | Evaluate Qwen3.8 live STT after release | Open |
 | 133 | [133-bench-crispasr-cohere-transcribe-alongside-whisper-models-in-voxi-bench.md](133-bench-crispasr-cohere-transcribe-alongside-whisper-models-in-voxi-bench.md) | Bench Cohere Transcribe via crispasr alongside whisper models in voxi bench | Open |
 | 134 | [134-add-r2t2-confucius4-r2t2-as-a-voxi-asr-engine.md](134-add-r2t2-confucius4-r2t2-as-a-voxi-asr-engine.md) | Add R2T2 (Confucius4-R2T2) as a voxi ASR engine | Open |
+| 135 | [135-voxi-monitor-shows-the-default-asr-model-not-the-selected-one.md](135-voxi-monitor-shows-the-default-asr-model-not-the-selected-one.md) | voxi monitor shows the default ASR model, not the selected one | Open |
