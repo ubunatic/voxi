@@ -523,8 +523,12 @@ func PrintVoiceResourceReport(w io.Writer, r VoiceResourceReport, sec ResourceSe
 
 	if sec.Daemons {
 		var daemonLines []string
+		// ASR backend state comes first -- it explains why dictation is failing,
+		// and as its own line it survives truncation of the (often overflowing)
+		// process list below it -- issue 136 M3.
+		daemonLines = append(daemonLines, formatASRBackendLine(r.ASRBackend))
 		if len(r.Processes) == 0 {
-			daemonLines = append(daemonLines, fmt.Sprintf("\x1b[90mNo active voice processes running.\x1b[0m  ·  %s", formatASRBackendLine(r.ASRBackend)))
+			daemonLines = append(daemonLines, "\x1b[90mNo active voice processes running.\x1b[0m")
 		} else {
 			var procSummaries []string
 			for _, p := range r.Processes {
@@ -534,7 +538,7 @@ func PrintVoiceResourceReport(w io.Writer, r VoiceResourceReport, sec ResourceSe
 			if len(r.ZombieWarnings) > 0 {
 				healthBadge = fmt.Sprintf("\x1b[31;1m⚠️ %s\x1b[0m", r.ZombieWarnings[0])
 			}
-			daemonLines = append(daemonLines, fmt.Sprintf("%s  ·  %s  ·  %s", strings.Join(procSummaries, "  ·  "), healthBadge, formatASRBackendLine(r.ASRBackend)))
+			daemonLines = append(daemonLines, fmt.Sprintf("%s  ·  %s", strings.Join(procSummaries, "  ·  "), healthBadge))
 		}
 		boxDaemons := BoxSpec{Title: actionBoxTitle("daemons"), Lines: daemonLines, Width: totalWidth}
 		for _, line := range RenderBoxLines(boxDaemons) {
