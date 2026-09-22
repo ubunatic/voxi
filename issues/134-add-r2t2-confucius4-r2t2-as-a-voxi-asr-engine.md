@@ -143,3 +143,47 @@ even on success the body would be JSON, not a transcript.
    Decide documented-manual-start vs. supervision, and write the choice down.
    An uncapped start is a machine-hanging bug, so if voxi ever starts it, the
    cap is not optional.
+
+## 7. M3 Result (2026-09-22): live corpus run, engine works, accuracy is the problem
+
+Ran `VOXI_LIVE_ASR=1 go test -count=1 ./internal/eager/ -run TestLiveASR_R2T2Corpus -v`
+against a capped llama-server (§5 command), over the 24 labelled clips in
+`~/.config/voxi/samples/corpus.tsv`. Resources stayed safe: VRAM 2.63 GiB,
+available RAM never below 18.9 GB.
+
+**The plumbing works.** Per-model `base_url` routes to :18131, the JSON envelope
+is parsed, and the `<asr_text>` marker never leaked in 24 live responses. That
+is M2's contract verified end to end, not by mock.
+
+**Latency** (verified): short clips 0.5-1.0 s, ordinary sentences 1.4-2.0 s,
+the two multi-sentence clips 3.8 s and 4.6 s. Whole corpus in 35 s.
+
+**Accuracy** (verified, word-level similarity against the corrected transcripts):
+- 11 of 24 clips exact or near-exact (100%), including both multi-sentence clips
+  and the noise/silence robustness clips.
+- **2 clips returned an EMPTY transcript**: `bug-d-etc` (a full sentence,
+  "So we either extend the classification system") and `short-uh`. The test
+  flagged both. An empty return on a real utterance is a correctness bug, not a
+  wording difference — in eager mode it would silently drop speech.
+- **Domain vocabulary fails badly**: "Voxi" -> "Foxy"/"Voxie"/"Boxey",
+  "voxtype" -> "box type", "PipeWire" -> "pipe wire", "harnez" -> "harness",
+  "uman" -> "human", "Golang" -> "GoLand", "systemd" -> "system d".
+  Similarity 38-54% on the voxi-jargon clips.
+
+### Verdict
+R2T2 is usable as an engine but is **not ready to be a default**. The vocabulary
+misses are exactly what `keyterms` in corpus.tsv exist for, and issue 074 §5
+records that crispasr's `--prompt`/`--hotwords` are no-ops for Cohere too — so
+voxi currently has no working vocabulary-biasing hook on either non-whisper
+engine. Whisper's `initial_prompt` does work (`voxtype`), which is why small.en
+handles this jargon better.
+
+### Open follow-ups (not in this ticket)
+1. **Empty-transcript bug**: reproduce `bug-d-etc` and `short-uh` directly
+   against llama-server. Is it VAD, clip length, or the ASR prompt? Needs its
+   own ticket.
+2. **Vocabulary biasing** for openai-transcribe: llama-server takes a `prompt`
+   field; check whether R2T2 honours it, and wire corpus keyterms if so.
+3. **Accuracy comparison** against Cohere and small.en on this same corpus
+   (131 option 2). `scripts/speech_context_bench` already reads corpus.tsv but
+   is voxtype-only (`main.go:61`), the same gap as issue 133.
