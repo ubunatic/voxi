@@ -594,11 +594,12 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 	// below already expects.
 	runTranscribe := func(ctx context.Context, wavPath string) (string, error) {
 		if engine == openaiTranscribeEngine {
-			baseURL := ""
-			if userSettings != nil {
-				baseURL = userSettings.OpenAIASRBaseURL
-			}
 			m := modelSpec.Models[modelName]
+			globalBaseURL := ""
+			if userSettings != nil {
+				globalBaseURL = userSettings.OpenAIASRBaseURL
+			}
+			baseURL := resolveOpenAIASRBaseURL(m.BaseURL, globalBaseURL)
 			return transcribeOpenAIWAV(ctx, wavPath, baseURL, m.APIModel, m.ResponseFormat, m.StripBeforeMarker)
 		}
 		cmd := exec.CommandContext(ctx, transcribeBinPath, buildTranscribeArgs(wavPath)...)

@@ -95,6 +95,10 @@
           "strip_before_marker": {
             "type": "string",
             "description": "For an openai-transcribe engine, discards everything up to and including the last occurrence of this literal substring in the transcript text, keeping only what follows -- used when a backend prepends metadata before the actual transcript (e.g. R2T2's \"language <NAME><asr_text>...\" leak, issue 134 §6). A no-op when unset or when the marker is not found in the text. Ignored by engines other than openai-transcribe."
+          },
+          "base_url": {
+            "type": "string",
+            "description": "Overrides the global openai_asr_base_url user setting for this specific openai-transcribe model, so two openai-transcribe backends on different ports can coexist (e.g. agy whisper-server vs. llama-server/R2T2, issue 134). Resolution order: this field, else the global setting, else the engine's built-in default. Omitted means no override. Ignored by engines other than openai-transcribe."
           }
         },
         "additionalProperties": false

@@ -53,6 +53,16 @@ type Model struct {
 	// multilingual backend. Ignored when empty, and a no-op when the
 	// marker is not found in the text.
 	StripBeforeMarker string `yaml:"strip_before_marker"`
+	// BaseURL, when set, overrides the global OpenAIASRBaseURL setting for
+	// this specific openai-transcribe model. Needed because two
+	// openai-transcribe backends can be live at once on different ports
+	// (e.g. agy whisper-server on :8090 and llama-server/R2T2 on :18131,
+	// issue 134) and the global setting can only point at one of them.
+	// Resolution order (see internal/eager/eager.go): this field, else the
+	// global OpenAIASRBaseURL setting, else transcribeOpenAIWAV's built-in
+	// default. Empty means "no override" -- fall through. Ignored by
+	// engines other than openai-transcribe.
+	BaseURL string `yaml:"base_url"`
 }
 
 // StopWord is a shipped hallucination filter. ID is stable so a user can

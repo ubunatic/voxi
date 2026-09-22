@@ -30,6 +30,21 @@ const openaiTranscribeEngine = "openai-transcribe"
 // local LLM cleanup server (issue 106).
 const defaultOpenAIASRBaseURL = "http://127.0.0.1:8090/v1"
 
+// resolveOpenAIASRBaseURL picks the endpoint an openai-transcribe model
+// call should use (issue 134 review gap: OpenAIASRBaseURL was a single
+// global setting, so two openai-transcribe backends on different ports --
+// agy whisper-server on :8090 and llama-server/R2T2 on :18131 -- could not
+// both be live). Resolution order: modelBaseURL (the model's own spec
+// base_url, set per-entry in spec/models.yaml) if non-empty, else
+// globalBaseURL (the user's OpenAIASRBaseURL setting) if non-empty, else ""
+// -- transcribeOpenAIWAV then falls back to defaultOpenAIASRBaseURL itself.
+func resolveOpenAIASRBaseURL(modelBaseURL, globalBaseURL string) string {
+	if modelBaseURL != "" {
+		return modelBaseURL
+	}
+	return globalBaseURL
+}
+
 // transcribeOpenAIWAV posts wavPath to baseURL's OpenAI-compatible
 // /v1/audio/transcriptions endpoint and returns the transcript text.
 // responseFormat selects the request/response shape: "" or "text" (the
