@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -49,6 +51,11 @@ type VoiceResourceReport struct {
 	VRAMTotalBytes int64
 	GPUAccel       string
 	ActiveModel    string
+	// ASRWarning is set when the active model's engine requires an HTTP
+	// ASR backend and that backend did not answer a probe -- issue 136.
+	// Empty for engines with no server (whisper, cohere-transcribe) or
+	// when the backend is reachable.
+	ASRWarning     string
 	ModifierStatus string
 	MicLevel       float64
 	MicAvailable   bool
@@ -81,6 +88,7 @@ func CollectVoiceResources(ctx context.Context, d deps.Dependencies, mic audiole
 		MicLevel:     mic.Level,
 		MicAvailable: mic.Available,
 	}
+	report.ASRWarning = checkASRBackend(d, report.ActiveModel)
 
 	modReader := modifiers.NewModifierReader("")
 	if mask, err := modReader.ReadMask(); err == nil {
@@ -313,6 +321,127 @@ func detectActiveModel(d deps.Dependencies) string {
 
 	// 3. spec/models.yaml default.
 	return defaultModel
+}
+
+// asrProbeCacheTTL bounds how often checkASRBackend actually dials the
+// backend. The TUI refreshes far more often than an ASR server's up/down
+// state changes, so probing every frame would add needless latency and
+// load to a server that may itself be under memory/GPU pressure (issue
+// 134). A refresh cadence of a few seconds keeps the warning timely without
+// probing on every draw.
+const asrProbeCacheTTL = 5 * time.Second
+
+// asrProbeDialTimeout bounds a single probe so an unreachable backend can
+// never stall the TUI: TCP connect to a dead port either refuses instantly
+// or would otherwise hang, so this timeout is the hard ceiling on that hang.
+const asrProbeDialTimeout = 300 * time.Millisecond
+
+var (
+	asrProbeLock     sync.Mutex
+	asrProbeEndpoint string
+	asrProbeWarning  string
+	asrProbeCachedAt time.Time
+)
+
+// checkASRBackend resolves modelName's engine and, for the openai-transcribe
+// engine, probes its HTTP endpoint, returning a non-empty warning string
+// naming the endpoint when it is unreachable. Engines with no server
+// (whisper, cohere-transcribe) are never probed and always return "".
+//
+// Probe shape: a plain TCP dial, not a GET /health request. llama-server
+// (issue 134's R2T2 backend) does answer /health with {"status":"ok"}, but
+// /health is not part of the OpenAI-compatible surface and nothing
+// guarantees other backends implement it -- a dial works against any
+// HTTP(S) endpoint regardless of what routes it serves, and it reproduces
+// the exact failure this issue is about ("dial tcp ...: connection
+// refused", observed live against openai_transcribe.go's actual POST
+// path). A dial cannot false-negative on a backend that simply lacks
+// /health, so it is the more portable check.
+//
+// The result is cached for asrProbeCacheTTL so repeated TUI refreshes do
+// not re-dial the backend on every frame.
+func checkASRBackend(d deps.Dependencies, modelName string) string {
+	s, err := spec.LoadModels()
+	if err != nil {
+		return ""
+	}
+	model, ok := s.Models[modelName]
+	if !ok || model.Engine != "openai-transcribe" {
+		return ""
+	}
+
+	globalBaseURL := ""
+	if home := d.Getenv("HOME"); home != "" {
+		if settings, err := config.LoadUserSettings(home); err == nil {
+			globalBaseURL = settings.OpenAIASRBaseURL
+		}
+	}
+	baseURL := eager.ResolveOpenAIASRBaseURL(model.BaseURL, globalBaseURL)
+	if baseURL == "" {
+		baseURL = eager.DefaultOpenAIASRBaseURL
+	}
+
+	return probeASRBackend(d, baseURL)
+}
+
+// probeASRBackend dials baseURL's host:port and returns a warning string
+// naming the endpoint when it is unreachable, or "" when it answers. The
+// result is cached per-endpoint for asrProbeCacheTTL.
+func probeASRBackend(d deps.Dependencies, baseURL string) string {
+	addr, err := asrProbeAddr(baseURL)
+	if err != nil {
+		return ""
+	}
+
+	asrProbeLock.Lock()
+	if asrProbeEndpoint == addr && time.Since(asrProbeCachedAt) < asrProbeCacheTTL {
+		warning := asrProbeWarning
+		asrProbeLock.Unlock()
+		return warning
+	}
+	asrProbeLock.Unlock()
+
+	dial := d.DialTimeout
+	if dial == nil {
+		dial = net.DialTimeout
+	}
+	warning := ""
+	conn, dialErr := dial("tcp", addr, asrProbeDialTimeout)
+	if dialErr != nil {
+		warning = fmt.Sprintf("ASR backend OFFLINE: %s unreachable (%s)", baseURL, dialErr)
+	} else {
+		conn.Close()
+	}
+
+	asrProbeLock.Lock()
+	asrProbeEndpoint = addr
+	asrProbeWarning = warning
+	asrProbeCachedAt = time.Now()
+	asrProbeLock.Unlock()
+
+	return warning
+}
+
+// asrProbeAddr extracts the "host:port" dial target from an HTTP(S) base
+// URL, applying the scheme's default port when none is given.
+func asrProbeAddr(baseURL string) (string, error) {
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		return "", err
+	}
+	host := u.Hostname()
+	if host == "" {
+		return "", fmt.Errorf("no host in %q", baseURL)
+	}
+	port := u.Port()
+	if port == "" {
+		if u.Scheme == "https" {
+			port = "443"
+		} else {
+			port = "80"
+		}
+	}
+	return net.JoinHostPort(host, port), nil
 }
 
 func collectVoiceProcesses() []ProcessResource {

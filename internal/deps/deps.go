@@ -3,6 +3,7 @@ package deps
 import (
 	"context"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -32,6 +33,11 @@ type Dependencies struct {
 	AfterAudioRead func()
 	Stdin          io.Reader
 	Stdout         io.Writer
+	// DialTimeout opens a TCP connection to addr ("host:port"), failing
+	// after timeout. Used to cheaply probe whether an HTTP ASR backend is
+	// reachable (issue 136) without depending on a real network dial in
+	// tests, which inject a fake here instead.
+	DialTimeout func(network, addr string, timeout time.Duration) (net.Conn, error)
 }
 
 // lookPathWithFallbacks resolves binaries via standard exec.LookPath, falling back to
@@ -92,8 +98,9 @@ func DefaultDependencies(in io.Reader, out io.Writer) Dependencies {
 			pid := cmd.Process.Pid
 			return pid, cmd.Wait()
 		},
-		Sleep:  time.Sleep,
-		Stdin:  in,
-		Stdout: out,
+		Sleep:       time.Sleep,
+		Stdin:       in,
+		Stdout:      out,
+		DialTimeout: net.DialTimeout,
 	}
 }

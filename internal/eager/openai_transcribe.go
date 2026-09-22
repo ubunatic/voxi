@@ -45,6 +45,18 @@ func resolveOpenAIASRBaseURL(modelBaseURL, globalBaseURL string) string {
 	return globalBaseURL
 }
 
+// ResolveOpenAIASRBaseURL exports resolveOpenAIASRBaseURL for other
+// packages (e.g. internal/monitor, issue 136) that must match the same
+// endpoint resolution order rather than duplicating it.
+func ResolveOpenAIASRBaseURL(modelBaseURL, globalBaseURL string) string {
+	return resolveOpenAIASRBaseURL(modelBaseURL, globalBaseURL)
+}
+
+// DefaultOpenAIASRBaseURL exports defaultOpenAIASRBaseURL for callers that
+// need the same built-in fallback used when neither a model base_url nor
+// the global setting is configured.
+const DefaultOpenAIASRBaseURL = defaultOpenAIASRBaseURL
+
 // transcribeOpenAIWAV posts wavPath to baseURL's OpenAI-compatible
 // /v1/audio/transcriptions endpoint and returns the transcript text.
 // responseFormat selects the request/response shape: "" or "text" (the

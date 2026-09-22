@@ -417,6 +417,9 @@ func PrintVoiceResourceReport(w io.Writer, r VoiceResourceReport, sec ResourceSe
 		fmt.Sprintf("status:  %s (%s / %s)", formatRecordState(r.RecordStatus, r.MicLevel, r.MicAvailable), r.Mode, r.ActiveModel),
 		fmt.Sprintf("engine:  \x1b[32m%s\x1b[0m  ·  mods: %s", r.GPUAccel, modStr),
 	}
+	if r.ASRWarning != "" {
+		speedLines = append(speedLines, fmt.Sprintf("\x1b[31;1m⚠️ %s\x1b[0m", r.ASRWarning))
+	}
 	if r.EagerMetrics != nil && r.EagerMetrics.TotalChunks > 0 {
 		m := r.EagerMetrics
 		if m.LastUtterance != nil {
