@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -78,6 +80,102 @@ func TestDetectActiveModel(t *testing.T) {
 		Getenv: func(key string) string {
 			if key == "HOME" {
 				return "/tmp/nonexistent-home"
+			}
+			return ""
+		},
+		Run: func(_ context.Context, _ string, _ ...string) error {
+			return errors.New("service inactive")
+		},
+	}
+	model := detectActiveModel(d)
+	if model != "cohere-transcribe-03-2026" {
+		t.Fatalf("expected cohere-transcribe-03-2026 default, got %q", model)
+	}
+}
+
+// TestDetectActiveModel_UserSettingsWin is the issue 135 regression: voxi
+// user settings name a non-default model and voxtype.service is inactive,
+// so the monitor must report that model, not the spec default.
+func TestDetectActiveModel_UserSettingsWin(t *testing.T) {
+	home := t.TempDir()
+	voxiDir := filepath.Join(home, ".config", "voxi")
+	if err := os.MkdirAll(voxiDir, 0o755); err != nil {
+		t.Fatalf("mkdir voxi config dir: %v", err)
+	}
+	yaml := "asr_model: r2t2-confucius4\n"
+	if err := os.WriteFile(filepath.Join(voxiDir, "config.yaml"), []byte(yaml), 0o644); err != nil {
+		t.Fatalf("write config.yaml: %v", err)
+	}
+
+	d := deps.Dependencies{
+		Getenv: func(key string) string {
+			if key == "HOME" {
+				return home
+			}
+			return ""
+		},
+		Run: func(_ context.Context, _ string, _ ...string) error {
+			return errors.New("service inactive")
+		},
+	}
+	model := detectActiveModel(d)
+	if model != "r2t2-confucius4" {
+		t.Fatalf("expected r2t2-confucius4 from user settings, got %q", model)
+	}
+}
+
+// TestDetectActiveModel_LegacyVoxtypeFallback covers the case where voxi's
+// own user settings cannot be resolved (e.g. a broken config.yaml) but
+// voxtype.service is the real active backend: the legacy config.toml model
+// must still win.
+func TestDetectActiveModel_LegacyVoxtypeFallback(t *testing.T) {
+	home := t.TempDir()
+	voxiDir := filepath.Join(home, ".config", "voxi")
+	if err := os.MkdirAll(voxiDir, 0o755); err != nil {
+		t.Fatalf("mkdir voxi config dir: %v", err)
+	}
+	// Malformed YAML makes config.LoadUserSettings return an error, so
+	// detectActiveModel must fall through to the legacy voxtype path.
+	if err := os.WriteFile(filepath.Join(voxiDir, "config.yaml"), []byte("asr_model: [unterminated\n"), 0o644); err != nil {
+		t.Fatalf("write config.yaml: %v", err)
+	}
+
+	voxtypeDir := filepath.Join(home, ".config", "voxtype")
+	if err := os.MkdirAll(voxtypeDir, 0o755); err != nil {
+		t.Fatalf("mkdir voxtype config dir: %v", err)
+	}
+	toml := "model = \"whisper-large-v3\"\n"
+	if err := os.WriteFile(filepath.Join(voxtypeDir, "config.toml"), []byte(toml), 0o644); err != nil {
+		t.Fatalf("write config.toml: %v", err)
+	}
+
+	d := deps.Dependencies{
+		Getenv: func(key string) string {
+			if key == "HOME" {
+				return home
+			}
+			return ""
+		},
+		Run: func(_ context.Context, _ string, _ ...string) error {
+			return nil // voxtype.service active
+		},
+	}
+	model := detectActiveModel(d)
+	if model != "whisper-large-v3" {
+		t.Fatalf("expected whisper-large-v3 from legacy voxtype config, got %q", model)
+	}
+}
+
+// TestDetectActiveModel_SpecDefaultFallback covers the case where neither
+// voxi user settings nor the legacy voxtype path yield anything useful and
+// voxtype.service is inactive: the spec default must be reported.
+func TestDetectActiveModel_SpecDefaultFallback(t *testing.T) {
+	home := t.TempDir()
+
+	d := deps.Dependencies{
+		Getenv: func(key string) string {
+			if key == "HOME" {
+				return home
 			}
 			return ""
 		},

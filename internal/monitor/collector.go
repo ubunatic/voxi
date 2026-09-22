@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"ubunatic.com/voxi/audiolevel"
+	"ubunatic.com/voxi/internal/config"
 	"ubunatic.com/voxi/internal/deps"
 	"ubunatic.com/voxi/internal/eager"
 	"ubunatic.com/voxi/internal/mode"
@@ -279,12 +280,21 @@ func detectActiveModel(d deps.Dependencies) string {
 	if s, err := spec.LoadModels(); err == nil && s.DefaultModel != "" {
 		defaultModel = s.DefaultModel
 	}
+
+	home := d.Getenv("HOME")
+
+	// 1. voxi's own user settings (config.yaml / env) — this is what the
+	// daemon itself actually launches with, see eager_backend.go:55-56.
+	if settings, err := config.LoadUserSettings(home); err == nil && settings.ASRModel != "" {
+		return settings.ASRModel
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 
-	// Only read voxtype's legacy config.toml if voxtype.service is currently active
+	// 2. Legacy voxtype config.toml, but only if voxtype.service is currently
+	// active — i.e. voxtype, not voxi's own daemon, is the real backend.
 	if d.Run != nil && d.Run(ctx, "systemctl", "--user", "is-active", "--quiet", "voxtype.service") == nil {
-		home := d.Getenv("HOME")
 		if home != "" {
 			configPath := filepath.Join(home, ".config", "voxtype", "config.toml")
 			if content, err := os.ReadFile(configPath); err == nil {
@@ -300,6 +310,8 @@ func detectActiveModel(d deps.Dependencies) string {
 			}
 		}
 	}
+
+	// 3. spec/models.yaml default.
 	return defaultModel
 }
 
