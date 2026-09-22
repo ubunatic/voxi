@@ -187,3 +187,42 @@ handles this jargon better.
 3. **Accuracy comparison** against Cohere and small.en on this same corpus
    (131 option 2). `scripts/speech_context_bench` already reads corpus.tsv but
    is voxtype-only (`main.go:61`), the same gap as issue 133.
+
+## 8. Probe of the §7 follow-ups (2026-09-22)
+
+### A. The "empty transcripts" are a no-speech sentinel, not an empty string
+Both clips return a filled envelope whose text is the bare scaffold (verified):
+`{"type":"transcript.text.done","text":"language None<asr_text>",...}` — note
+`language None`, and exactly 4 output tokens. Our `<asr_text>` marker strip then
+yields `""`, which is why the live test reported "empty".
+
+**Correction to the §7 wording and to the probe's own theory**: this is not a
+duration effect. `short-yes` (0.92 s) transcribes fine, while `short-uh`
+(1.06 s) does not. And `bug-d-etc.wav` is **0.64 s long while its corpus row
+claims a 7-word sentence** — that row is mislabelled or its audio is truncated,
+so it is not evidence of a model bug at all. What is left: R2T2 emits
+`language None` for audio it judges to contain no lexical speech ("Uh!", a
+truncated fragment). A `prompt` does not change it (byte-identical responses).
+
+So the actionable part is on voxi's side: `language None<asr_text>` with no
+content is a **distinct no-speech signal** and must not be conflated with a
+successful empty transcript. In eager mode the difference decides whether to
+type nothing quietly or to surface a failure.
+
+### B. Keyterm biasing works, partially (verified)
+`/v1/audio/transcriptions` does accept a `prompt` field, and llama.cpp uses it
+as the literal ASR instruction (`tools/server/server-chat.cpp:653`, falling back
+to `common_chat_get_asr_prompt` at :659-666).
+
+Same clip, `kt-core.wav`, verbatim:
+- no prompt: `...<asr_text>Box C uses box type with two tool on pipe wire and wayland.`
+- prompt `Voxi|voxtype|dotool|PipeWire|Wayland`:
+  `...<asr_text>Voxi uses voxtype with two tool on PipeWire and Wayland.`
+
+Voxi, voxtype and PipeWire are all fixed; "dotool" -> "two tool" survives even
+though it is in the keyterm list. So biasing is real but partial, and raw
+pipe-separated terms may not be the best prompt shape.
+
+This also closes a longer-standing gap: 074 §5 recorded that crispasr's
+`--prompt` is a no-op for Cohere, so voxi had no vocabulary hook on any
+non-whisper engine. The openai-transcribe engine now demonstrably has one.
