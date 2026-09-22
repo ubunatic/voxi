@@ -114,3 +114,4 @@
 | 130 | [130-standalone-dotool-injection-exits-successfully-but-produces-no-visible-typing-on-gnome.md](130-standalone-dotool-injection-exits-successfully-but-produces-no-visible-typing-on-gnome.md) | Standalone dotool injection exits successfully but produces no visible typing on GNOME | Open |
 | 131 | [131-research-and-benchmark-r2t2-ai-open-stt-model.md](131-research-and-benchmark-r2t2-ai-open-stt-model.md) | Research and benchmark R2T2.ai open STT model | Open |
 | 132 | [132-evaluate-qwen3-8-live-stt-after-release.md](132-evaluate-qwen3-8-live-stt-after-release.md) | Evaluate Qwen3.8 live STT after release | Open |
+| 133 | [133-bench-crispasr-cohere-transcribe-alongside-whisper-models-in-voxi-bench.md](133-bench-crispasr-cohere-transcribe-alongside-whisper-models-in-voxi-bench.md) | Bench crispasr (cohere-transcribe) alongside whisper models in voxi bench | Open |
