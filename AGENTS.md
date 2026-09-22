@@ -60,6 +60,12 @@ Docs in `./docs/` are managed by harnez. <!-- harnez:bundled -->
 
 Cross-project operations go through `uman`.
 Project website publishes from `website/` via `uman website sync voxi`.
+
+## Speech Samples
+
+`~/.config/voxi/samples/` usually holds a developer machine's private `corpus.tsv`
+(id, wav, expected transcript, keyterms) plus its WAVs — a local, uncommitted
+labelled corpus for ASR accuracy checks.
 <!-- harnez:begin Repo Setup -->
 ## Repo Setup
 - Solo/hobby repo — single default branch, no PR workflow.
