@@ -3,6 +3,7 @@ package eager
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -30,18 +31,27 @@ const openaiTranscribeEngine = "openai-transcribe"
 const defaultOpenAIASRBaseURL = "http://127.0.0.1:8090/v1"
 
 // transcribeOpenAIWAV posts wavPath to baseURL's OpenAI-compatible
-// /v1/audio/transcriptions endpoint with response_format=text and returns
-// the raw transcript body. response_format=text (rather than json) means
-// the response body is already the plain transcript, matching the raw
-// stdout shape the CLI engines (voxtype, crispasr) produce -- so the
-// caller's downstream cleanup/safety pipeline needs no engine-specific
-// parsing branch.
-func transcribeOpenAIWAV(ctx context.Context, wavPath, baseURL, model string) (string, error) {
+// /v1/audio/transcriptions endpoint and returns the transcript text.
+// responseFormat selects the request/response shape: "" or "text" (the
+// issue 126 whisper-server contract) sends response_format=text and
+// returns the response body verbatim, already the plain transcript,
+// matching the raw stdout shape the CLI engines (voxtype, crispasr)
+// produce. "json" (issue 134, R2T2/llama-server) sends
+// response_format=json and parses the {"type":...,"text":...} envelope
+// instead, since some backends reject response_format=text outright.
+// stripBeforeMarker, when non-empty, discards everything up to and
+// including the last occurrence of that literal substring in the
+// resulting text (see parseOpenAITranscribeResponse); it is a no-op when
+// unset or not found.
+func transcribeOpenAIWAV(ctx context.Context, wavPath, baseURL, model, responseFormat, stripBeforeMarker string) (string, error) {
 	if baseURL == "" {
 		baseURL = defaultOpenAIASRBaseURL
 	}
+	if responseFormat == "" {
+		responseFormat = "text"
+	}
 
-	body, contentType, err := buildOpenAITranscribeRequestBody(wavPath, model)
+	body, contentType, err := buildOpenAITranscribeRequestBody(wavPath, model, responseFormat)
 	if err != nil {
 		return "", fmt.Errorf("openai-transcribe: build request: %w", err)
 	}
@@ -67,15 +77,47 @@ func transcribeOpenAIWAV(ctx context.Context, wavPath, baseURL, model string) (s
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return "", fmt.Errorf("openai-transcribe: %s returned %s: %s", reqURL, resp.Status, bytes.TrimSpace(out))
 	}
-	return string(out), nil
+	return parseOpenAITranscribeResponse(out, responseFormat, stripBeforeMarker)
+}
+
+// openaiJSONTranscript is the subset of llama-server's
+// {"type":"transcript.text.done","text":"...","usage":{...}} envelope this
+// engine needs (issue 134 §6 M1): only the transcript text itself.
+type openaiJSONTranscript struct {
+	Text string `json:"text"`
+}
+
+// parseOpenAITranscribeResponse extracts the transcript text from a
+// successful (2xx) response body given the response_format that was
+// requested, then applies stripBeforeMarker cleanup. For responseFormat
+// "json" it unmarshals body as openaiJSONTranscript and returns an error if
+// that fails (a malformed/unexpected body must not be silently treated as a
+// transcript); for anything else (including "text") it returns body
+// unchanged as the plain transcript, matching the issue 126 whisper-server
+// contract exactly.
+func parseOpenAITranscribeResponse(body []byte, responseFormat, stripBeforeMarker string) (string, error) {
+	text := string(body)
+	if responseFormat == "json" {
+		var envelope openaiJSONTranscript
+		if err := json.Unmarshal(body, &envelope); err != nil {
+			return "", fmt.Errorf("openai-transcribe: parse json response: %w", err)
+		}
+		text = envelope.Text
+	}
+	if stripBeforeMarker != "" {
+		if idx := strings.LastIndex(text, stripBeforeMarker); idx >= 0 {
+			text = text[idx+len(stripBeforeMarker):]
+		}
+	}
+	return text, nil
 }
 
 // buildOpenAITranscribeRequestBody mirrors voxi-clients' example
 // transcribe-client (examples/transcribe-client/main.go): a "file"
 // multipart field plus "model" (for client-contract compatibility; ignored
 // by whisper-server, may select a model on other OpenAI-compatible
-// backends) and response_format=text.
-func buildOpenAITranscribeRequestBody(wavPath, model string) (io.Reader, string, error) {
+// backends) and response_format (see transcribeOpenAIWAV).
+func buildOpenAITranscribeRequestBody(wavPath, model, responseFormat string) (io.Reader, string, error) {
 	f, err := os.Open(wavPath)
 	if err != nil {
 		return nil, "", err
@@ -97,7 +139,7 @@ func buildOpenAITranscribeRequestBody(wavPath, model string) (io.Reader, string,
 	if err := w.WriteField("model", model); err != nil {
 		return nil, "", err
 	}
-	if err := w.WriteField("response_format", "text"); err != nil {
+	if err := w.WriteField("response_format", responseFormat); err != nil {
 		return nil, "", err
 	}
 	if err := w.Close(); err != nil {

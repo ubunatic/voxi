@@ -86,6 +86,15 @@
           "cpu_fallback": {
             "type": "string",
             "description": "Model to substitute when requires_gpu is true and no GPU render node is present. Must name another entry in models, and that entry must not itself require a GPU. Ignored when requires_gpu is false."
+          },
+          "response_format": {
+            "type": "string",
+            "enum": ["text", "json"],
+            "description": "The \"response_format\" field sent to an openai-transcribe engine's /v1/audio/transcriptions endpoint. Omitted/\"text\" (the default) sends response_format=text and treats the response body as the plain transcript (issue 126 whisper-server contract). \"json\" sends response_format=json and parses the {\"type\":...,\"text\":...} envelope some backends require instead (see issue 134). Ignored by engines other than openai-transcribe."
+          },
+          "strip_before_marker": {
+            "type": "string",
+            "description": "For an openai-transcribe engine, discards everything up to and including the last occurrence of this literal substring in the transcript text, keeping only what follows -- used when a backend prepends metadata before the actual transcript (e.g. R2T2's \"language <NAME><asr_text>...\" leak, issue 134 §6). A no-op when unset or when the marker is not found in the text. Ignored by engines other than openai-transcribe."
           }
         },
         "additionalProperties": false

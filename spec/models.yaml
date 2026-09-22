@@ -123,3 +123,29 @@ models:
     # target (see issue 126): if lmcoder's endpoint returns raw ASR output
     # instead, flip this to false so voxi's own cleanup still runs for it.
     does_llm_cleanup: true
+
+  r2t2-confucius4:
+    label: "R2T2 Confucius4 (llama-server, local GPU)"
+    engine: openai-transcribe
+    # llama-server's R2T2 endpoint (see issue 134 §6, M1): the "model"
+    # field is required by spec validation for this engine, though this
+    # single-model llama-server target does not otherwise use it.
+    api_model: r2t2
+    # llama-server rejects response_format=text with HTTP 400 ("Only
+    # 'json' response_format is supported for transcription") -- verified
+    # in issue 134 §6 M1 -- so this backend must send json, unlike the
+    # openai-transcribe-gemini/whisper-server entry above.
+    response_format: json
+    # llama-server's json response leaks a "language <NAME><asr_text>"
+    # prefix ahead of the actual transcript (verified in issue 134 §6 M1).
+    # <NAME> varies per utterance since R2T2 is multilingual, so this cuts
+    # at the literal marker rather than matching a language-specific
+    # prefix string.
+    strip_before_marker: "<asr_text>"
+    # M1 measured this GPU-bound (2.78 GiB VRAM, ~2s for a short clip);
+    # no CPU timing was measured and none is expected to be practical.
+    requires_gpu: true
+    # No live-corpus hallucination data yet for this engine (new, issue
+    # 134) -- reuse common_stop_words as a safe starting point, same as
+    # the other engines above.
+    stop_words: *common_stop_words

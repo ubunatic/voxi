@@ -598,7 +598,8 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 			if userSettings != nil {
 				baseURL = userSettings.OpenAIASRBaseURL
 			}
-			return transcribeOpenAIWAV(ctx, wavPath, baseURL, modelSpec.Models[modelName].APIModel)
+			m := modelSpec.Models[modelName]
+			return transcribeOpenAIWAV(ctx, wavPath, baseURL, m.APIModel, m.ResponseFormat, m.StripBeforeMarker)
 		}
 		cmd := exec.CommandContext(ctx, transcribeBinPath, buildTranscribeArgs(wavPath)...)
 		cmd.Env = append(os.Environ(), "NO_COLOR=1", "RUST_LOG=error")

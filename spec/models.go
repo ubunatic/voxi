@@ -37,6 +37,22 @@ type Model struct {
 	// request that omits or misnames it, even though today's single-model
 	// canary target (whisper-server) ignores the field.
 	APIModel string `yaml:"api_model"`
+	// ResponseFormat is the "response_format" field sent to an
+	// openai-transcribe engine's endpoint. Empty means "text" (the
+	// original issue 126 whisper-server contract, a plain-text body).
+	// "json" selects the {"type":...,"text":...} envelope shape some
+	// backends (e.g. llama-server/R2T2, issue 134) require instead.
+	ResponseFormat string `yaml:"response_format"`
+	// StripBeforeMarker, when set, discards everything up to and
+	// including the last occurrence of this literal substring in the
+	// transcript text, keeping only what follows. Used for backends that
+	// prepend metadata before the actual transcript (e.g. R2T2's
+	// "language English<asr_text>..." leak -- see issue 134 §6). The
+	// marker is matched literally, not as a language-specific prefix,
+	// because the prepended language name varies per utterance for a
+	// multilingual backend. Ignored when empty, and a no-op when the
+	// marker is not found in the text.
+	StripBeforeMarker string `yaml:"strip_before_marker"`
 }
 
 // StopWord is a shipped hallucination filter. ID is stable so a user can
@@ -121,6 +137,9 @@ func parseModelSpec(data []byte) (*ModelSpec, error) {
 		}
 		if m.Engine == "openai-transcribe" && m.APIModel == "" {
 			return nil, fmt.Errorf("spec: model %q has engine %q and must set api_model", name, m.Engine)
+		}
+		if m.ResponseFormat != "" && m.ResponseFormat != "text" && m.ResponseFormat != "json" {
+			return nil, fmt.Errorf("spec: model %q has invalid response_format %q, must be \"text\" or \"json\"", name, m.ResponseFormat)
 		}
 		if m.CPUFallback == "" {
 			continue
