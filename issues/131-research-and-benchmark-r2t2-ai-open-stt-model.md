@@ -72,3 +72,26 @@ Unverified web claims are marked *(reported)*; code refs were spot-checked.
    backend as Cohere. Record wall time and VRAM/RSS.
 3. Only if (2) passes: run the Cohere-vs-R2T2 benchmark on the same samples.
    Then add an `r2t2` engine modeled on `cohere.go`.
+
+## 5. GGUF / GPU Probe (2026-09-22)
+
+- **Weights** *(reported)*: the official GGUF is `netease-youdao/Confucius4-R2T2-GGUF`,
+  in Q4_K_M 1.0 GiB, Q8_0 1.7 GiB, and f16 3.2 GiB. It also needs an audio
+  **mmproj** file (f16 0.6 GiB, Q8_0 0.3 GiB) because it is a multimodal
+  Qwen3-ASR model. The original weights are `netease-youdao/Confucius4-R2T2`.
+- **Documented command** *(reported)*: `llama-cli -hf netease-youdao/Confucius4-R2T2-GGUF:Q4_K_M`.
+  The model card warns that standard llama.cpp text workflows may not apply.
+  **Unknown**: whether mainline llama.cpp's mtmd supports this audio mmproj.
+- **Local crispasr** (verified): `~/.local/bin/crispasr` 0.8.32 reports
+  `ggml backends : cpu`. This build has no Vulkan or HIP, which contradicts
+  the assumption that Cohere runs on the GPU; that needs resolving
+  separately. Its help lists no Qwen3-ASR or R2T2 model family.
+- **Verdict**: crispasr cannot run R2T2 today. The most plausible route on the
+  Cezanne GPU is upstream llama.cpp built with `GGML_VULKAN`.
+
+### Revised next step (M1 canary)
+
+Build llama.cpp with Vulkan in a scratch directory, then run Q4_K_M and the
+mmproj on one repository WAV. Pass means an English transcript on the GPU;
+record the latency and the VRAM used. Fail means mtmd rejects the audio mmproj.
+In that case, stop and decide between the vLLM/ROCm route and rejecting R2T2.
