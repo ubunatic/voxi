@@ -30,6 +30,7 @@ import (
 	"ubunatic.com/voxi/internal/shortcut"
 	"ubunatic.com/voxi/internal/telemetry"
 	"ubunatic.com/voxi/internal/typing"
+	"ubunatic.com/voxi/pkg/pipeline"
 	"ubunatic.com/voxi/spec"
 )
 
@@ -149,6 +150,8 @@ func main() {
 	eagerCmd.Flags().StringVar(&eagerOpts.Model, "model", eagerOpts.Model, fmt.Sprintf("model name, see spec/models.yaml (default: %s, engine cohere-transcribe via crispasr; explicit whisper-engine models need voxtype)", eagerOpts.Model))
 	eagerCmd.Flags().BoolVar(&eagerOpts.SpeechContext, "speech-context", eagerOpts.SpeechContext, "bounded local vocabulary hints for Whisper small.en (default: on; ignored by default Cohere; use --speech-context=false to disable)")
 	eagerCmd.Flags().StringSliceVar(&eagerOpts.Vocabulary, "vocabulary", eagerOpts.Vocabulary, "additional comma-separated speech-context terms (requires --speech-context)")
+	eagerCmd.Flags().StringVar(&eagerOpts.EntitiesConfig, "entities-config", eagerOpts.EntitiesConfig, "path to entities.yaml configuration file")
+	eagerCmd.Flags().BoolVar(&eagerOpts.NoEntities, "no-entities", eagerOpts.NoEntities, "disable Needle entity post-processor")
 
 	// 4. monitor / top / resources command
 	var watch bool
@@ -365,6 +368,44 @@ func main() {
 		panic(fmt.Sprintf("load embedded model specification: %v", err))
 	}
 	configCmd.AddCommand(feedback.NewConfigImportCommand(d.Stdout, d.Getenv("HOME"), modelSpec.SpeechContext.MaxTermChars))
+
+	var testFilterEntities bool
+	var testFilterEntitiesConfig string
+	var testFilterNoEntities bool
+	testFilterCmd := &cobra.Command{
+		Use:   "test-filter [TEXT]",
+		Short: "Test transcript post-processing pipeline on text input",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			var input string
+			if len(args) > 0 {
+				input = strings.Join(args, " ")
+			} else {
+				data, err := io.ReadAll(d.Stdin)
+				if err != nil {
+					return fmt.Errorf("read stdin: %w", err)
+				}
+				input = strings.TrimSpace(string(data))
+			}
+
+			disabled := testFilterNoEntities || !testFilterEntities
+			pp, err := pipeline.NewPostProcessor(pipeline.PostProcessorOptions{
+				ConfigPath: testFilterEntitiesConfig,
+				Disabled:   disabled,
+			})
+			if err != nil {
+				return err
+			}
+
+			out := pp.Process(cmd.Context(), input)
+			fmt.Fprintln(d.Stdout, out)
+			return nil
+		},
+	}
+	testFilterCmd.Flags().BoolVar(&testFilterEntities, "entities", true, "enable entity post-processing")
+	testFilterCmd.Flags().StringVar(&testFilterEntitiesConfig, "entities-config", "", "path to entities.yaml configuration file")
+	testFilterCmd.Flags().BoolVar(&testFilterNoEntities, "no-entities", false, "disable entity post-processing")
+	root.AddCommand(testFilterCmd)
+
 	root.AddCommand(modeCmd, recordCmd, eagerCmd, monitorCmd, historyCmd, configCmd, daemonCmd, benchCmd, settings.NewCommand(d, modelSpec.Names()), shortcut.NewCommand(d), telemetry.NewCommand(d.Stdout, d.Getenv), feedback.NewCommand(d.Stdout, d.Getenv("HOME"), modelSpec.BuiltinStopWords(modelSpec.DefaultModel), modelSpec.SpeechContext.MaxTermChars, modelSpec.SpeechContext.Terms, d, eager.TranscribeCohereWAV), agent.NewCommand(d), chunks.NewCommand(d, nil))
 	installEffects := install.DefaultEffects()
 	installEffects.Home = d.Getenv("HOME")

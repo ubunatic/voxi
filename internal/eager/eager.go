@@ -33,6 +33,7 @@ import (
 	"ubunatic.com/voxi/internal/speechcontext"
 	"ubunatic.com/voxi/internal/telemetry"
 	"ubunatic.com/voxi/internal/typing"
+	"ubunatic.com/voxi/pkg/pipeline"
 	spec "ubunatic.com/voxi/spec"
 )
 
@@ -49,6 +50,8 @@ type EagerOptions struct {
 	Model         string
 	SpeechContext bool
 	Vocabulary    []string
+	EntitiesConfig string
+	NoEntities     bool
 }
 
 // DefaultEagerOptions returns standard defaults for eager sentence streaming dictation.
@@ -605,6 +608,10 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 		deliveryPath = filepath.Join(filepath.Dir(telemetry.Path(d.Getenv("XDG_DATA_HOME"), d.Getenv("HOME"))), "eager-delivery-ledger.jsonl")
 	}
 	delivery := newDeliveryLedger(deliveryPath)
+	postProcessor, _ := pipeline.NewPostProcessor(pipeline.PostProcessorOptions{
+		ConfigPath: opts.EntitiesConfig,
+		Disabled:   opts.NoEntities,
+	})
 
 	// Start sequential transcription worker
 	transWg.Add(1)
@@ -702,6 +709,7 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 					_ = recorder.Record(telemetry.Event{Event: telemetry.LLMCleanupFallback, Timestamp: time.Now(), SessionID: sessionID, ChunkID: chunkID, ChunkIndex: job.Index, CancelReason: llmRecord.FallbackReason})
 				}
 			}
+			text = postProcessor.Process(drain.ctx, text)
 			accepted := acceptTranscript(err, text, stopWords, silenceArtifacts)
 			safety := asr.CheckTranscriptSafety(text, modelSpec.TranscriptSafety)
 			if safety.Reason != "" {
