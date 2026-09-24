@@ -36,6 +36,8 @@ type Action string
 
 const (
 	ActionPlayPause Action = "play-pause"
+	ActionPause     Action = "pause"
+	ActionResume    Action = "resume"
 	ActionPrevious  Action = "previous"
 	ActionNext      Action = "next"
 	ActionStop      Action = "stop"
@@ -204,7 +206,7 @@ func (s *Server) handle(conn net.Conn) {
 		} else {
 			res.Accepted = count
 		}
-	case ActionPlayPause, ActionPrevious, ActionNext, ActionStop, ActionClear:
+	case ActionPlayPause, ActionPause, ActionResume, ActionPrevious, ActionNext, ActionStop, ActionClear:
 		if err := s.controller.Control(req.Command); err != nil {
 			res.Error = err.Error()
 		}

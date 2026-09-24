@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	"ubunatic.com/voxi/internal/agent"
 	"ubunatic.com/voxi/internal/deps"
 	"ubunatic.com/voxi/internal/eager"
 	"ubunatic.com/voxi/internal/mode"
+	"ubunatic.com/voxi/internal/tts"
 	"ubunatic.com/voxi/spec"
 )
 
@@ -43,6 +45,11 @@ func defaultEngineNeedsVoxtype() bool {
 
 // ControlRecording sends a recording control action to the active speech engine.
 func ControlRecording(ctx context.Context, d deps.Dependencies, action RecordAction) error {
+	if action == RecordActionStart || action == RecordActionToggle {
+		if err := stopTTSForRecording(ctx, d); err != nil {
+			return err
+		}
+	}
 	if status, err := agent.DefaultClient().Record(ctx, agent.RecordAction(action)); err == nil {
 		if d.Stdout != nil {
 			fmt.Fprintln(d.Stdout, agent.RecordingMessage(status.Recording))
@@ -76,6 +83,18 @@ func ControlRecording(ctx context.Context, d deps.Dependencies, action RecordAct
 		}
 	default:
 		return fmt.Errorf("unknown record action %q (want toggle, start, or stop)", action)
+	}
+	return nil
+}
+
+func stopTTSForRecording(ctx context.Context, d deps.Dependencies) error {
+	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
+	if d.Getenv != nil {
+		runtimeDir = d.Getenv("XDG_RUNTIME_DIR")
+	}
+	err := (tts.Client{SocketPath: tts.SocketPath(runtimeDir, os.Getuid())}).Control(ctx, tts.ActionStop)
+	if err != nil && !errors.Is(err, tts.ErrNoMonitor) {
+		return fmt.Errorf("stop TTS before recording: %w", err)
 	}
 	return nil
 }

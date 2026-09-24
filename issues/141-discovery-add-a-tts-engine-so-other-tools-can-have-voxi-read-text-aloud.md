@@ -204,3 +204,20 @@ Monitor keys: m play/pause, b/n prev/next, x stop, k clear.
   `Queue: emptynk(s)`. Clear each rendered TTS line to end of line (or pad it
   to the panel width, measuring display width) the way the other monitor rows
   do. Add a render test where a long state is followed by a shorter one.
+
+### M3 results (2026-09-24)
+
+- **Panel line clearing:** every TTS panel row now erases to end-of-line; a
+  render regression test emits a long state followed by a shorter idle state.
+- **MPRIS:** `voxi monitor -w` owns `org.mpris.MediaPlayer2.voxi` on the session
+  bus. It exports the MPRIS root/player properties and PlayPause, Play, Pause,
+  Previous, Next, and Stop methods; playback status and current chunk metadata
+  follow the monitor queue. A session-bus integration test verified discovery
+  and that Next reaches the queue controller.
+- **Recording/self-transcription:** `voxi record start` and `toggle` send Stop
+  to the monitor-owned TTS queue before starting the selected capture backend.
+  With no monitor, the bounded no-monitor response is ignored and recording
+  proceeds normally. Super+X uses this same `voxi record toggle` path.
+- **Verification:** `go test ./...` and `make install` passed. The test stops
+  playback before capture; no recording of Voxi's own TTS is accepted by the
+  recording path.

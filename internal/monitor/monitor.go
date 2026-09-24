@@ -127,6 +127,11 @@ func RunWatchResources(ctx context.Context, d deps.Dependencies, interval time.D
 		return fmt.Errorf("start monitor TTS socket: %w", err)
 	}
 	defer ttsServer.Close()
+	mpris, err := tts.StartMPRIS(sigCtx, ttsManager)
+	if err != nil {
+		return fmt.Errorf("start monitor MPRIS player: %w", err)
+	}
+	defer mpris.Close()
 
 	oldState, err := exec.Command("stty", "-F", "/dev/tty", "-g").Output()
 	if err == nil {

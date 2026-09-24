@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"ubunatic.com/voxi/internal/deps"
+	"ubunatic.com/voxi/internal/tts"
 )
 
 func TestControlRecordingVoxtype(t *testing.T) {
@@ -42,6 +43,36 @@ func TestControlRecordingVoxtype(t *testing.T) {
 	if invokedCmd != "voxtype" || len(invokedArgs) != 2 || invokedArgs[0] != "record" || invokedArgs[1] != "toggle" {
 		t.Fatalf("unexpected call: %s %v", invokedCmd, invokedArgs)
 	}
+}
+
+func TestStopTTSForRecordingSendsStopToMonitor(t *testing.T) {
+	runtimeDir := t.TempDir()
+	t.Setenv("XDG_RUNTIME_DIR", runtimeDir)
+	events := make(chan string, 1)
+	controller := &recordingTTSController{events: events}
+	server, err := tts.StartServer(context.Background(), tts.SocketPath(runtimeDir, os.Getuid()), controller)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+
+	d := deps.Dependencies{Getenv: os.Getenv}
+	if err := stopTTSForRecording(context.Background(), d); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-events; got != "tts-stop" {
+		t.Fatalf("event = %q, want TTS stop", got)
+	}
+}
+
+type recordingTTSController struct{ events chan<- string }
+
+func (c *recordingTTSController) Enqueue(string) (int, error) { return 0, nil }
+func (c *recordingTTSController) Control(action tts.Action) error {
+	if action == tts.ActionStop {
+		c.events <- "tts-stop"
+	}
+	return nil
 }
 
 // listenEagerSocket starts a fake eager-daemon listener at

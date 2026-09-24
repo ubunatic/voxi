@@ -562,39 +562,44 @@ func PrintTTSPanel(w io.Writer, s tts.Snapshot) {
 	if width < 24 {
 		width = 24
 	}
-	fmt.Fprintf(w, "\n \x1b[1mTTS · %s\x1b[0m\n", s.Status)
+	fmt.Fprintln(w)
+	writeTTSLine(w, fmt.Sprintf(" \x1b[1mTTS · %s\x1b[0m", s.Status))
 	if s.Current == "" {
-		fmt.Fprintln(w, "  Now: (idle)")
+		writeTTSLine(w, "  Now: (idle)")
 	} else {
-		fmt.Fprintf(w, "  %s\n", TruncateLineANSI("Now: "+s.Current, width))
+		writeTTSLine(w, "  "+TruncateLineANSI("Now: "+s.Current, width))
 	}
 	if len(s.Queue) == 0 {
-		fmt.Fprintln(w, "  Queue: empty")
+		writeTTSLine(w, "  Queue: empty")
 	} else {
-		fmt.Fprintf(w, "  Queue: %d chunk(s)\n", len(s.Queue))
+		writeTTSLine(w, fmt.Sprintf("  Queue: %d chunk(s)", len(s.Queue)))
 		shown := len(s.Queue)
 		if shown > 3 {
 			shown = 3
 		}
 		for i := 0; i < shown; i++ {
-			fmt.Fprintf(w, "  %d. %s\n", i+1, TruncateLineANSI(s.Queue[i], width-4))
+			writeTTSLine(w, fmt.Sprintf("  %d. %s", i+1, TruncateLineANSI(s.Queue[i], width-4)))
 		}
 		if remaining := len(s.Queue) - shown; remaining > 0 {
-			fmt.Fprintf(w, "  … and %d more\n", remaining)
+			writeTTSLine(w, fmt.Sprintf("  … and %d more", remaining))
 		}
 	}
 	if s.TimeToFirstAudio > 0 {
-		fmt.Fprintf(w, "  First audio: %s\n", s.TimeToFirstAudio.Round(time.Millisecond))
+		writeTTSLine(w, fmt.Sprintf("  First audio: %s", s.TimeToFirstAudio.Round(time.Millisecond)))
 	}
 	if s.LastError != "" {
-		fmt.Fprintf(w, "  \x1b[31mTTS error: %s\x1b[0m\n", TruncateLineANSI(s.LastError, width))
+		writeTTSLine(w, fmt.Sprintf("  \x1b[31mTTS error: %s\x1b[0m", TruncateLineANSI(s.LastError, width)))
 	}
-	fmt.Fprintf(w, "  %s  %s  %s  %s  %s\n",
+	writeTTSLine(w, fmt.Sprintf("  %s  %s  %s  %s  %s",
 		formatActionLabel("tts-play-pause"),
 		formatActionLabel("tts-previous"),
 		formatActionLabel("tts-next"),
 		formatActionLabel("tts-stop"),
-		formatActionLabel("tts-clear"))
+		formatActionLabel("tts-clear")))
+}
+
+func writeTTSLine(w io.Writer, line string) {
+	fmt.Fprintf(w, "%s\x1b[K\n", line)
 }
 
 // actionKeyAndLabel resolves an action's canonical display key (its first configured

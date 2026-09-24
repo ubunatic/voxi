@@ -379,6 +379,36 @@ func (m *Manager) applyCommand(
 			return commandResult{err: err}
 		}
 		return commandResult{}
+	case ActionPause:
+		if *paused {
+			return commandResult{}
+		}
+		*paused = true
+		if *player != nil {
+			err := (*player).Pause()
+			*status = statusPaused
+			return commandResult{err: err}
+		}
+		if *currentJob != nil || *cursor < len(*items) {
+			*status = statusPaused
+		}
+		return commandResult{}
+	case ActionResume:
+		if !*paused {
+			return commandResult{}
+		}
+		*paused = false
+		if *player != nil {
+			err := (*player).Resume()
+			*status = statusPlaying
+			return commandResult{err: err}
+		}
+		if *currentJob != nil || *cursor < len(*items) {
+			*status = statusSynthesizing
+		} else {
+			*status = statusIdle
+		}
+		return commandResult{}
 	case ActionPrevious:
 		if *cursor == 0 {
 			return commandResult{}

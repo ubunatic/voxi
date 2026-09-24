@@ -24,3 +24,22 @@ func TestPrintTTSPanelShowsCurrentQueueTimingAndControls(t *testing.T) {
 		}
 	}
 }
+
+func TestPrintTTSPanelClearsEveryLineForShorterNextFrame(t *testing.T) {
+	var out bytes.Buffer
+	PrintTTSPanel(&out, tts.Snapshot{
+		Status:  "synthesizing",
+		Current: "A long paragraph remains on this line after the next frame.",
+		Queue:   []string{"Another lengthy paragraph remains in the queue."},
+	})
+	PrintTTSPanel(&out, tts.Snapshot{Status: "idle"})
+
+	frames := strings.Split(out.String(), "\n")
+	for i, line := range frames {
+		if strings.Contains(line, "TTS") || strings.Contains(line, "Now:") || strings.Contains(line, "Queue:") || strings.Contains(line, "[m]") {
+			if !strings.Contains(line, "\x1b[K") {
+				t.Errorf("TTS line %d lacks erase-to-end: %q", i+1, line)
+			}
+		}
+	}
+}
