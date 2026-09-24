@@ -24,6 +24,21 @@ func TestClientWithoutMonitorFailsQuickly(t *testing.T) {
 	}
 }
 
+func TestClientReportsConfigurationOptOutWhileMonitorRuns(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tts.sock")
+	manager := NewManagerWithEnabled(context.Background(), &fakeBackend{}, false)
+	defer manager.Close()
+	server, err := StartServer(context.Background(), path, manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+	_, err = (Client{SocketPath: path}).Enqueue(context.Background(), "not spoken")
+	if !errors.Is(err, ErrTTSDisabled) {
+		t.Fatalf("Enqueue() error = %v, want TTS-disabled response", err)
+	}
+}
+
 func TestClientWithStaleSocketReportsNoMonitorQuickly(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "stale.sock")
 	stale, err := net.Listen("unix", path)

@@ -18,9 +18,13 @@ const (
 	statusPaused       = "paused"
 )
 
+// ErrTTSDisabled indicates TTS is turned off in the user's configuration.
+var ErrTTSDisabled = errors.New("TTS is disabled by configuration (set tts_enabled: true to enable it)")
+
 // Snapshot is the monitor panel's current playback and queue view.
 type Snapshot struct {
 	Status           string
+	BackendStatus    string
 	Current          string
 	Queue            []string
 	TimeToFirstAudio time.Duration
@@ -53,25 +57,41 @@ type synthJob struct {
 
 // Manager owns the in-memory queue for one monitor watch session.
 type Manager struct {
-	ctx      context.Context
-	cancel   context.CancelFunc
-	backend  EngineBackend
-	commands chan command
-	done     chan struct{}
-	mu       sync.RWMutex
-	snapshot Snapshot
+	ctx           context.Context
+	cancel        context.CancelFunc
+	backend       EngineBackend
+	enabled       bool
+	backendStatus string
+	commands      chan command
+	done          chan struct{}
+	mu            sync.RWMutex
+	snapshot      Snapshot
 }
 
 // NewManager starts a monitor-scoped queue and playback worker.
 func NewManager(ctx context.Context, backend EngineBackend) *Manager {
+	return NewManagerWithEnabled(ctx, backend, true)
+}
+
+// NewManagerWithEnabled creates a monitor-scoped manager respecting the user's TTS setting.
+func NewManagerWithEnabled(ctx context.Context, backend EngineBackend, enabled bool) *Manager {
 	managerCtx, cancel := context.WithCancel(ctx)
+	backendStatus := "unknown"
+	if status, ok := backend.(interface{ BackendStatus() string }); ok {
+		backendStatus = status.BackendStatus()
+	}
+	if !enabled {
+		backendStatus = "disabled by configuration"
+	}
 	m := &Manager{
-		ctx:      managerCtx,
-		cancel:   cancel,
-		backend:  backend,
-		commands: make(chan command, 32),
-		done:     make(chan struct{}),
-		snapshot: Snapshot{Status: statusIdle},
+		ctx:           managerCtx,
+		cancel:        cancel,
+		backend:       backend,
+		enabled:       enabled,
+		backendStatus: backendStatus,
+		commands:      make(chan command, 32),
+		done:          make(chan struct{}),
+		snapshot:      Snapshot{Status: statusIdle, BackendStatus: backendStatus},
 	}
 	go m.run()
 	return m
@@ -79,6 +99,9 @@ func NewManager(ctx context.Context, backend EngineBackend) *Manager {
 
 // Enqueue appends text chunks to the monitor's queue.
 func (m *Manager) Enqueue(text string) (int, error) {
+	if !m.enabled {
+		return 0, ErrTTSDisabled
+	}
 	if len(text) > maxTextBytes {
 		return 0, fmt.Errorf("text exceeds %d byte limit", maxTextBytes)
 	}
@@ -92,6 +115,9 @@ func (m *Manager) Enqueue(text string) (int, error) {
 
 // Control applies a monitor playback control.
 func (m *Manager) Control(action Action) error {
+	if !m.enabled {
+		return ErrTTSDisabled
+	}
 	_, err := m.request(command{action: action})
 	return err
 }
@@ -136,7 +162,7 @@ func (m *Manager) publish(status, current string, items []string, cursor int, fi
 		queue = append(queue, items[i])
 	}
 	m.mu.Lock()
-	m.snapshot = Snapshot{Status: status, Current: current, Queue: queue, TimeToFirstAudio: first, LastError: lastErr}
+	m.snapshot = Snapshot{Status: status, BackendStatus: m.backendStatus, Current: current, Queue: queue, TimeToFirstAudio: first, LastError: lastErr}
 	m.mu.Unlock()
 }
 

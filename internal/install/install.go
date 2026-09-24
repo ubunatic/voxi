@@ -2,6 +2,7 @@
 package install
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -25,23 +26,25 @@ import (
 // Effects contains host operations used by Install. Tests can inject every
 // operation that changes or interrogates the host.
 type Effects struct {
-	GOOS          string
-	GOARCH        string
-	Home          string
-	Executable    func() (string, error)
-	BuildModifier func(context.Context, string) (string, error)
-	LookPath      func(string) (string, error)
-	MkdirAll      func(string, os.FileMode) error
-	ReadFile      func(string) ([]byte, error)
-	Stat          func(string) (os.FileInfo, error)
-	WriteFile     func(string, []byte, os.FileMode) error
-	Chmod         func(string, os.FileMode) error
-	Run           func(context.Context, string, ...string) error
-	RunOutput     func(context.Context, string, ...string) (string, error)
-	RunStdin      func(context.Context, string, string, ...string) error
-	Symlink       func(string, string) error
-	Remove        func(string) error
-	DownloadHTTP  func(context.Context, string, string) error
+	GOOS           string
+	GOARCH         string
+	Home           string
+	Executable     func() (string, error)
+	BuildModifier  func(context.Context, string) (string, error)
+	LookPath       func(string) (string, error)
+	MkdirAll       func(string, os.FileMode) error
+	ReadFile       func(string) ([]byte, error)
+	Stat           func(string) (os.FileInfo, error)
+	WriteFile      func(string, []byte, os.FileMode) error
+	Chmod          func(string, os.FileMode) error
+	Run            func(context.Context, string, ...string) error
+	RunInteractive func(context.Context, string, ...string) error
+	Confirm        func(string) (bool, error)
+	RunOutput      func(context.Context, string, ...string) (string, error)
+	RunStdin       func(context.Context, string, string, ...string) error
+	Symlink        func(string, string) error
+	Remove         func(string) error
+	DownloadHTTP   func(context.Context, string, string) error
 }
 
 // DefaultEffects binds Install to the current Linux host.
@@ -70,6 +73,14 @@ func DefaultEffects() Effects {
 		Run: func(ctx context.Context, name string, args ...string) error {
 			return exec.CommandContext(ctx, name, args...).Run()
 		},
+		RunInteractive: func(ctx context.Context, name string, args ...string) error {
+			cmd := exec.CommandContext(ctx, name, args...)
+			cmd.Stdin = os.Stdin
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			return cmd.Run()
+		},
+		Confirm: confirmOnTTY,
 		RunOutput: func(ctx context.Context, name string, args ...string) (string, error) {
 			out, err := exec.CommandContext(ctx, name, args...).Output()
 			return string(out), err
@@ -85,16 +96,52 @@ func DefaultEffects() Effects {
 	}
 }
 
+func confirmOnTTY(prompt string) (bool, error) {
+	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+	if err != nil {
+		return false, nil
+	}
+	defer tty.Close()
+	if _, err := fmt.Fprintf(tty, "%s [Y/n] ", prompt); err != nil {
+		return false, err
+	}
+	answer, err := bufio.NewReader(tty).ReadString('\n')
+	if err != nil && err != io.EOF {
+		return false, err
+	}
+	if err == io.EOF && strings.TrimSpace(answer) == "" {
+		return false, nil
+	}
+	switch strings.ToLower(strings.TrimSpace(answer)) {
+	case "", "y", "yes":
+		return true, nil
+	default:
+		return false, nil
+	}
+}
+
+// InstallOptions controls optional installer behavior without weakening the
+// separate privileged --modifierd boundary.
+type InstallOptions struct {
+	Modifierd  bool
+	DisableTTS bool
+}
+
 // Install performs the user installation and, when requested, the privileged
 // modifier daemon installation. It stops at the first failed phase.
 func Install(ctx context.Context, out io.Writer, e Effects, modifierd bool) error {
+	return InstallWithOptions(ctx, out, e, InstallOptions{Modifierd: modifierd})
+}
+
+// InstallWithOptions performs the user installation with explicit feature options.
+func InstallWithOptions(ctx context.Context, out io.Writer, e Effects, options InstallOptions) error {
 	if e.GOOS != "linux" {
 		return fmt.Errorf("install: unsupported platform %q (Voxi install requires Linux)", e.GOOS)
 	}
 	if e.Home == "" {
 		return fmt.Errorf("install: HOME is empty; set HOME to a user home directory")
 	}
-	if e.Executable == nil || e.BuildModifier == nil || e.LookPath == nil || e.MkdirAll == nil || e.ReadFile == nil || e.Stat == nil || e.WriteFile == nil || e.Chmod == nil || e.Run == nil || e.RunOutput == nil || e.RunStdin == nil || e.Symlink == nil || e.Remove == nil || e.DownloadHTTP == nil {
+	if e.Executable == nil || e.BuildModifier == nil || e.LookPath == nil || e.MkdirAll == nil || e.ReadFile == nil || e.Stat == nil || e.WriteFile == nil || e.Chmod == nil || e.Run == nil || e.RunInteractive == nil || e.Confirm == nil || e.RunOutput == nil || e.RunStdin == nil || e.Symlink == nil || e.Remove == nil || e.DownloadHTTP == nil {
 		return fmt.Errorf("install: incomplete host effects")
 	}
 	userBin := filepath.Join(e.Home, ".local", "bin")
@@ -103,6 +150,12 @@ func Install(ctx context.Context, out io.Writer, e Effects, modifierd bool) erro
 	settings, err := config.LoadUserSettings(e.Home)
 	if err != nil {
 		return fmt.Errorf("install: load user settings: %w", err)
+	}
+	if options.DisableTTS {
+		if err := config.SetTTSEnabled(e.Home, false); err != nil {
+			return fmt.Errorf("install: save TTS opt-out: %w", err)
+		}
+		settings.TTSEnabled = false
 	}
 	models, err := spec.LoadModels()
 	if err != nil {
@@ -186,6 +239,13 @@ func Install(ctx context.Context, out io.Writer, e Effects, modifierd bool) erro
 	}); err != nil {
 		return err
 	}
+	if settings.TTSEnabled {
+		if err := phase("TTS system packages", func() error { return installTTSDependencies(ctx, out, e) }); err != nil {
+			return err
+		}
+	} else {
+		fmt.Fprintln(out, "[TTS] disabled by config (tts_enabled: false); system packages not changed")
+	}
 
 	if err := phase("user service units", func() error {
 		if err := e.MkdirAll(serviceDir, 0755); err != nil {
@@ -256,7 +316,7 @@ func Install(ctx context.Context, out io.Writer, e Effects, modifierd bool) erro
 		return err
 	}
 
-	if !modifierd {
+	if !options.Modifierd {
 		fmt.Fprintln(out, "[modifier daemon] skipped (use --modifierd to request privileged system setup)")
 		return nil
 	}
@@ -414,6 +474,61 @@ func installUserDependencies(ctx context.Context, e Effects, userBin, serviceDir
 	}
 	_ = serviceDir // unit installation is kept in the following phase.
 	return nil
+}
+
+func installTTSDependencies(ctx context.Context, out io.Writer, e Effects) error {
+	missing := missingTTSTools(e.LookPath)
+	if len(missing) == 0 {
+		fmt.Fprintln(out, "TTS engine, fallback, and audio player already available")
+		return nil
+	}
+	manager := ""
+	packages := []string{}
+	if _, err := e.LookPath("dnf"); err == nil {
+		manager = "dnf"
+		packages = []string{"festival", "espeak-ng", "pipewire-utils"}
+	} else if _, err := e.LookPath("apt-get"); err == nil {
+		manager = "apt-get"
+		packages = []string{"festival", "espeak-ng", "pipewire-bin"}
+	}
+	if manager == "" {
+		fmt.Fprintf(out, "TTS tools missing (%s); install Festival, espeak-ng, and pw-play/paplay with your package manager\n", strings.Join(missing, ", "))
+		return nil
+	}
+	confirmed, err := e.Confirm(fmt.Sprintf("Install TTS dependencies (%s) with sudo %s?", strings.Join(packages, ", "), manager))
+	if err != nil {
+		fmt.Fprintf(out, "TTS package installation skipped because confirmation failed: %v\n", err)
+		return nil
+	}
+	if !confirmed {
+		fmt.Fprintf(out, "TTS package installation skipped; missing: %s\n", strings.Join(missing, ", "))
+		return nil
+	}
+	args := append([]string{manager, "install"}, packages...)
+	if err := e.RunInteractive(ctx, "sudo", args...); err != nil {
+		return fmt.Errorf("install TTS packages with sudo %s: %w", manager, err)
+	}
+	if remaining := missingTTSTools(e.LookPath); len(remaining) != 0 {
+		return fmt.Errorf("TTS package installation completed but required tools are still missing: %s", strings.Join(remaining, ", "))
+	}
+	fmt.Fprintln(out, "TTS engine, fallback, and audio player installed")
+	return nil
+}
+
+func missingTTSTools(lookPath func(string) (string, error)) []string {
+	var missing []string
+	if _, err := lookPath("text2wave"); err != nil {
+		missing = append(missing, "text2wave (Festival)")
+	}
+	if _, err := lookPath("espeak-ng"); err != nil {
+		missing = append(missing, "espeak-ng")
+	}
+	if _, err := lookPath("pw-play"); err != nil {
+		if _, paplayErr := lookPath("paplay"); paplayErr != nil {
+			missing = append(missing, "pw-play or paplay")
+		}
+	}
+	return missing
 }
 
 func downloadCrispASR(ctx context.Context, e Effects, archive, url string) error {
@@ -613,17 +728,19 @@ func buildModifier(ctx context.Context, dir string) (string, error) {
 // NewCommand returns the Cobra command used by the main CLI.
 func NewCommand(e Effects, out io.Writer) *cobra.Command {
 	var modifierd bool
+	var noTTS bool
 	cmd := &cobra.Command{
 		Use:   "install",
 		Short: "Install Voxi for this user (optional: --modifierd needs sudo)",
 		Long: "Install the CLI and systemd user services under your home directory, then enable and start voxi-agent.service.\n" +
-			"This default path never invokes sudo or writes system locations.\n\n" +
-			"Use --modifierd only to install the optional system-wide physical modifier daemon; it requires sudo and Linux systemd.",
+			"When TTS tools are missing, Voxi asks before using sudo and the system package manager.\n\n" +
+			"Use --no-tts to persistently opt out of TTS packages. Use --modifierd for the optional system-wide physical modifier daemon; it also requires sudo and Linux systemd.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return Install(cmd.Context(), out, e, modifierd)
+			return InstallWithOptions(cmd.Context(), out, e, InstallOptions{Modifierd: modifierd, DisableTTS: noTTS})
 		},
 	}
 	cmd.Flags().BoolVar(&modifierd, "modifierd", false, "also install the optional system-wide modifier daemon (requires sudo)")
+	cmd.Flags().BoolVar(&noTTS, "no-tts", false, "disable TTS and skip Festival/espeak-ng system packages")
 	return cmd
 }

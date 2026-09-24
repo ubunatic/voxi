@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"ubunatic.com/voxi/audiolevel"
+	"ubunatic.com/voxi/internal/config"
 	"ubunatic.com/voxi/internal/deps"
 	"ubunatic.com/voxi/internal/tts"
 	"ubunatic.com/voxi/spec"
@@ -116,22 +117,32 @@ func RunWatchResources(ctx context.Context, d deps.Dependencies, interval time.D
 	sigCtx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	home := os.Getenv("HOME")
+	if d.Getenv != nil {
+		home = d.Getenv("HOME")
+	}
+	userSettings, err := config.LoadUserSettings(home)
+	if err != nil {
+		return fmt.Errorf("load monitor TTS setting: %w", err)
+	}
 	executable, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("resolve voxi executable for TTS supervision: %w", err)
 	}
-	ttsManager := tts.NewManager(sigCtx, tts.NewEngine(d, executable))
+	ttsManager := tts.NewManagerWithEnabled(sigCtx, tts.NewEngine(d, executable), userSettings.TTSEnabled)
 	defer ttsManager.Close()
 	ttsServer, err := tts.StartServer(sigCtx, "", ttsManager)
 	if err != nil {
 		return fmt.Errorf("start monitor TTS socket: %w", err)
 	}
 	defer ttsServer.Close()
-	mpris, err := tts.StartMPRIS(sigCtx, ttsManager)
-	if err != nil {
-		return fmt.Errorf("start monitor MPRIS player: %w", err)
+	if userSettings.TTSEnabled {
+		mpris, err := tts.StartMPRIS(sigCtx, ttsManager)
+		if err != nil {
+			return fmt.Errorf("start monitor MPRIS player: %w", err)
+		}
+		defer mpris.Close()
 	}
-	defer mpris.Close()
 
 	oldState, err := exec.Command("stty", "-F", "/dev/tty", "-g").Output()
 	if err == nil {

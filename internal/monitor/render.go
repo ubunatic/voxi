@@ -564,6 +564,9 @@ func PrintTTSPanel(w io.Writer, s tts.Snapshot) {
 	}
 	fmt.Fprintln(w)
 	writeTTSLine(w, fmt.Sprintf(" \x1b[1mTTS · %s\x1b[0m", s.Status))
+	if s.BackendStatus != "" {
+		writeTTSLine(w, "  Backend: "+s.BackendStatus)
+	}
 	if s.Current == "" {
 		writeTTSLine(w, "  Now: (idle)")
 	} else {

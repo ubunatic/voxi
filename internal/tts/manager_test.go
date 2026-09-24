@@ -90,6 +90,17 @@ func TestManagerRejectsOversizedText(t *testing.T) {
 	}
 }
 
+func TestDisabledManagerReportsConfigOptOutAndRejectsSpeech(t *testing.T) {
+	manager := NewManagerWithEnabled(context.Background(), &fakeBackend{}, false)
+	defer manager.Close()
+	if _, err := manager.Enqueue("must not play"); !errors.Is(err, ErrTTSDisabled) {
+		t.Fatalf("Enqueue() error = %v, want disabled", err)
+	}
+	if got := manager.Snapshot().BackendStatus; got != "disabled by configuration" {
+		t.Fatalf("BackendStatus = %q", got)
+	}
+}
+
 func TestManagerCloseStopsPlaybackAndDiscardsQueue(t *testing.T) {
 	backend := &fakeBackend{started: make(chan string, 4), players: make(chan *fakePlayback, 4)}
 	manager := NewManager(context.Background(), backend)

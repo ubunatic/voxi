@@ -30,6 +30,7 @@ type UserSettings struct {
 	TypeDelayMs      int    `json:"type_delay_ms" yaml:"type_delay_ms"`
 	DictationHistory bool   `json:"dictation_history" yaml:"dictation_history"`
 	ModifierGating   bool   `json:"modifier_gating" yaml:"modifier_gating"`
+	TTSEnabled       bool   `json:"tts_enabled" yaml:"tts_enabled"`
 }
 
 // DefaultUserSettings returns standard user settings.
@@ -45,7 +46,57 @@ func DefaultUserSettings() *UserSettings {
 		TypeDelayMs:      0,
 		DictationHistory: true,
 		ModifierGating:   true,
+		TTSEnabled:       true,
 	}
+}
+
+// SetTTSEnabled updates only tts_enabled in config.yaml, preserving other keys
+// and their comments when the installer records --no-tts.
+func SetTTSEnabled(home string, enabled bool) error {
+	if home == "" {
+		if h, err := os.UserHomeDir(); err == nil {
+			home = h
+		}
+	}
+	path := VoxiConfigYAMLPath(home)
+	data, err := os.ReadFile(path)
+	doc := &yaml.Node{Kind: yaml.DocumentNode}
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("read %s: %w", path, err)
+	}
+	if err == nil {
+		if err := yaml.Unmarshal(data, doc); err != nil {
+			return fmt.Errorf("parse %s: %w", path, err)
+		}
+	}
+	if len(doc.Content) == 0 {
+		doc.Content = []*yaml.Node{{Kind: yaml.MappingNode, Tag: "!!map"}}
+	}
+	root := doc.Content[0]
+	if root.Kind != yaml.MappingNode {
+		return fmt.Errorf("parse %s: configuration must be a YAML mapping", path)
+	}
+	for i := 0; i+1 < len(root.Content); i += 2 {
+		if root.Content[i].Value == "tts_enabled" {
+			root.Content[i+1].Kind = yaml.ScalarNode
+			root.Content[i+1].Tag = "!!bool"
+			root.Content[i+1].Value = strconv.FormatBool(enabled)
+			encoded, err := yaml.Marshal(doc)
+			if err != nil {
+				return fmt.Errorf("encode %s: %w", path, err)
+			}
+			return WriteConfigAtomic(path, encoded)
+		}
+	}
+	root.Content = append(root.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "tts_enabled"},
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: strconv.FormatBool(enabled)},
+	)
+	encoded, err := yaml.Marshal(doc)
+	if err != nil {
+		return fmt.Errorf("encode %s: %w", path, err)
+	}
+	return WriteConfigAtomic(path, encoded)
 }
 
 // VoxiConfigDir is ~/.config/voxi.

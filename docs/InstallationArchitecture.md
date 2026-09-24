@@ -12,6 +12,7 @@ Voxi has one application-level installation entry point after acquiring the CLI:
 go install ./cmd/voxi    # from a source checkout
 ~/go/bin/voxi install    # complete user-scoped installation
 make install             # build locally, then run voxi install
+voxi install --no-tts    # persistently opt out of TTS packages and playback
 voxi install --modifierd # optional system-scoped modifier gating
 ```
 
@@ -21,9 +22,17 @@ binary, user service units, CrispASR, dotool/dotoold, and the enabled and active
 `dotoold.service`, and `voxi-r2t2.service`; R2T2 is enabled only when the
 selected model's endpoint matches its loopback address and port. The R2T2
 unit's port comes from the model spec, and installation requires both weight
-files before enabling it. It does not invoke `sudo`, write `/usr/local`, or
-alter system services. The `--modifierd` flag is an explicit privilege boundary for
-installing and enabling `voxi-modifierd.service`.
+files before enabling it. The `tts_enabled` setting defaults to true. If TTS
+tools are missing, installation asks before invoking `sudo` and the system
+package manager to install Festival, espeak-ng, and a PipeWire playback tool.
+Package managers retain their normal transaction confirmation; Voxi never
+passes an automatic `--yes` flag. In a non-interactive install, package setup is
+skipped and the monitor reports missing TTS tools; rerun `voxi install` from a
+terminal to approve it. `voxi install --no-tts` writes
+`tts_enabled: false` to `~/.config/voxi/config.yaml`, skips package changes, and
+disables TTS playback/MPRIS. Set it back to `true` and rerun the installer to
+enable TTS again. The `--modifierd` flag remains the separate explicit
+privilege boundary for installing and enabling `voxi-modifierd.service`.
 
 The release download script also invokes `voxi install` after placing the
 prebuilt binaries. `make install-all` is a compatibility alias for `make install`;
@@ -73,7 +82,8 @@ The normal voice-input path should work entirely inside the logged-in user's
 systemd session. Physical modifier monitoring is different: it reads evdev
 devices and therefore needs a system service with root/device permissions. A
 fresh install must not unexpectedly prompt for a password or imply that this
-optional safety component is present.
+optional safety component is present. TTS package installation is also gated:
+it has a separate explicit confirmation before `sudo`, and `--no-tts` opts out.
 
 Each installation phase reports independently. A failed privileged phase must
 not be reported as a complete install, while a successful user phase remains

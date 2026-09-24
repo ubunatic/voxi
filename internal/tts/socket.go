@@ -101,6 +101,9 @@ func (c Client) request(ctx context.Context, req request) (response, error) {
 		return response{}, fmt.Errorf("read TTS response: %w", err)
 	}
 	if res.Error != "" {
+		if res.Error == ErrTTSDisabled.Error() {
+			return response{}, ErrTTSDisabled
+		}
 		return response{}, errors.New(res.Error)
 	}
 	return res, nil

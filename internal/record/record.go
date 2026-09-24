@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"ubunatic.com/voxi/internal/agent"
 	"ubunatic.com/voxi/internal/deps"
@@ -23,6 +24,8 @@ const (
 	RecordActionStart  RecordAction = "start"
 	RecordActionStop   RecordAction = "stop"
 )
+
+const ttsStopBeforeRecordTimeout = 150 * time.Millisecond
 
 // defaultEngineNeedsVoxtype reports whether the model spec's currently
 // configured default model resolves to the "whisper" engine -- the only
@@ -92,9 +95,15 @@ func stopTTSForRecording(ctx context.Context, d deps.Dependencies) error {
 	if d.Getenv != nil {
 		runtimeDir = d.Getenv("XDG_RUNTIME_DIR")
 	}
-	err := (tts.Client{SocketPath: tts.SocketPath(runtimeDir, os.Getuid())}).Control(ctx, tts.ActionStop)
-	if err != nil && !errors.Is(err, tts.ErrNoMonitor) {
-		return fmt.Errorf("stop TTS before recording: %w", err)
+	stopCtx, cancel := context.WithTimeout(ctx, ttsStopBeforeRecordTimeout)
+	defer cancel()
+	err := (tts.Client{SocketPath: tts.SocketPath(runtimeDir, os.Getuid())}).Control(stopCtx, tts.ActionStop)
+	if err != nil && !errors.Is(err, tts.ErrNoMonitor) && !errors.Is(err, tts.ErrTTSDisabled) {
+		warning := d.Stderr
+		if warning == nil {
+			warning = os.Stderr
+		}
+		fmt.Fprintf(warning, "warning: could not stop TTS before recording: %v; continuing with recording\n", err)
 	}
 	return nil
 }

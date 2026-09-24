@@ -232,3 +232,26 @@ Host review: the diff is scoped, adds godbus/dbus v5, and `go test ./...` is gre
   ahead. Also reduce the time recording can wait on TTS: a wedged monitor
   must not add up to 2 s to the Super-x start. Test both.
 - User live check: media keys (keyboard + BT speaker) and Super-x stop work.
+
+### M4 Pre-Work results
+- `stopTTSForRecording` now bounds its attempt to 150 ms. No-monitor and
+  configured-disabled results are silent; other socket/control failures emit a
+  warning to stderr but never prevent capture. A delayed socket regression test
+  verifies the helper returns in under 500 ms and records the warning.
+
+### M4 results (2026-09-24)
+- `tts_enabled` defaults to true. `voxi install` checks for Festival,
+  `espeak-ng`, and a supported WAV player; if any are missing, it asks before
+  invoking the interactive `sudo dnf install` or `sudo apt-get install` path.
+  Package-manager transaction prompts remain enabled. Non-interactive runs
+  skip system package changes and report missing tools.
+- `voxi install --no-tts` writes `tts_enabled: false` to the user's YAML config.
+  Re-running install honors the setting; the monitor disables playback/MPRIS,
+  reports the disabled state, and `voxi say` returns a specific disabled error.
+  Setting it back to true and rerunning install opts back in.
+- The monitor panel reports Festival, the espeak-ng fallback, the available
+  player, or missing dependencies. `InstallationArchitecture.md` and
+  `VoiceInput.md` document package prompts, opt-out, and runtime behavior.
+- Tests cover warn-only/short dictation waits, preserved config opt-out,
+  dnf/apt package mappings and consent, disabled runtime behavior, and backend
+  status. `go test ./...` and `make install` passed.

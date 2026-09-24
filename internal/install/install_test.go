@@ -3,10 +3,13 @@ package install
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"ubunatic.com/voxi/internal/config"
 )
 
 func testEffects(t *testing.T) (*Effects, *[]string) {
@@ -47,6 +50,11 @@ func testEffects(t *testing.T) (*Effects, *[]string) {
 		commands = append(commands, strings.Join(append([]string{name}, args...), " "))
 		return nil
 	}
+	e.Confirm = func(string) (bool, error) { return false, nil }
+	e.RunInteractive = func(_ context.Context, name string, args ...string) error {
+		commands = append(commands, strings.Join(append([]string{name}, args...), " "))
+		return nil
+	}
 	e.RunStdin = func(_ context.Context, stdin, name string, args ...string) error {
 		commands = append(commands, strings.Join(append([]string{name}, args...), " ")+" [stdin:"+string(stdin)+"]")
 		return nil
@@ -55,6 +63,133 @@ func testEffects(t *testing.T) (*Effects, *[]string) {
 		return errors.New("mock download disabled")
 	}
 	return &e, &commands
+}
+
+func TestInstallTTSDependenciesPromptsBeforeDnf(t *testing.T) {
+	available := map[string]bool{"dnf": true}
+	e := DefaultEffects()
+	e.LookPath = func(name string) (string, error) {
+		if available[name] {
+			return "/usr/bin/" + name, nil
+		}
+		return "", os.ErrNotExist
+	}
+	prompted := ""
+	command := ""
+	e.Confirm = func(message string) (bool, error) {
+		prompted = message
+		return true, nil
+	}
+	e.RunInteractive = func(_ context.Context, name string, args ...string) error {
+		command = strings.Join(append([]string{name}, args...), " ")
+		available["text2wave"] = true
+		available["espeak-ng"] = true
+		available["pw-play"] = true
+		return nil
+	}
+	var out strings.Builder
+	if err := installTTSDependencies(context.Background(), &out, e); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(prompted, "sudo dnf") || !strings.Contains(prompted, "festival") {
+		t.Fatalf("confirmation prompt = %q", prompted)
+	}
+	if command != "sudo dnf install festival espeak-ng pipewire-utils" {
+		t.Fatalf("interactive package command = %q", command)
+	}
+	if strings.Contains(command, "-y") {
+		t.Fatalf("package manager was passed automatic confirmation: %q", command)
+	}
+}
+
+func TestInstallTTSDependenciesDeclineDoesNotInvokeSystemPackageManager(t *testing.T) {
+	e := DefaultEffects()
+	e.LookPath = func(name string) (string, error) {
+		if name == "dnf" {
+			return "/usr/bin/dnf", nil
+		}
+		return "", os.ErrNotExist
+	}
+	e.Confirm = func(string) (bool, error) { return false, nil }
+	var invoked bool
+	e.RunInteractive = func(context.Context, string, ...string) error {
+		invoked = true
+		return nil
+	}
+	var out strings.Builder
+	if err := installTTSDependencies(context.Background(), &out, e); err != nil {
+		t.Fatal(err)
+	}
+	if invoked || !strings.Contains(out.String(), "skipped") {
+		t.Fatalf("invoked=%v output=%q; expected prompted skip", invoked, out.String())
+	}
+}
+
+func TestInstallTTSDependenciesUsesAptPipeWirePackage(t *testing.T) {
+	available := map[string]bool{"apt-get": true}
+	e := DefaultEffects()
+	e.LookPath = func(name string) (string, error) {
+		if available[name] {
+			return "/usr/bin/" + name, nil
+		}
+		return "", os.ErrNotExist
+	}
+	e.Confirm = func(string) (bool, error) { return true, nil }
+	var command string
+	e.RunInteractive = func(_ context.Context, name string, args ...string) error {
+		command = strings.Join(append([]string{name}, args...), " ")
+		available["text2wave"] = true
+		available["espeak-ng"] = true
+		available["pw-play"] = true
+		return nil
+	}
+	if err := installTTSDependencies(context.Background(), io.Discard, e); err != nil {
+		t.Fatal(err)
+	}
+	if command != "sudo apt-get install festival espeak-ng pipewire-bin" {
+		t.Fatalf("interactive package command = %q", command)
+	}
+}
+
+func TestInstallNoTTSFlagPersistsConfigOptOut(t *testing.T) {
+	e, commands := testEffects(t)
+	var out strings.Builder
+	cmd := NewCommand(*e, &out)
+	cmd.SetArgs([]string{"--no-tts"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	settings, err := config.LoadUserSettings(e.Home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.TTSEnabled {
+		t.Fatal("--no-tts did not persist tts_enabled: false")
+	}
+	if strings.Contains(strings.Join(*commands, "\n"), "sudo dnf") || strings.Contains(strings.Join(*commands, "\n"), "sudo apt-get") {
+		t.Fatalf("--no-tts invoked system package manager: %v", *commands)
+	}
+	if !strings.Contains(out.String(), "disabled by config") {
+		t.Fatalf("missing TTS opt-out result: %s", out.String())
+	}
+}
+
+func TestInstallHonorsConfigTTSOptOut(t *testing.T) {
+	e, _ := testEffects(t)
+	if err := config.SetTTSEnabled(e.Home, false); err != nil {
+		t.Fatal(err)
+	}
+	e.Confirm = func(string) (bool, error) {
+		t.Fatal("package confirmation requested with TTS disabled")
+		return false, nil
+	}
+	var out strings.Builder
+	if err := Install(context.Background(), &out, *e, false); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "tts_enabled: false") {
+		t.Fatalf("installer did not report saved opt-out: %s", out.String())
+	}
 }
 
 func TestInstallDefaultIsUserScopedAndIdempotent(t *testing.T) {
@@ -115,6 +250,9 @@ func TestInstallR2T2EnablesUnitAndUsesResolvedBinary(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.LookPath = func(name string) (string, error) {
+		if name == "text2wave" || name == "espeak-ng" || name == "pw-play" {
+			return "/usr/bin/" + name, nil
+		}
 		if name != "/opt/llama/bin/llama-server" {
 			t.Fatalf("LookPath(%q), want configured path", name)
 		}
@@ -184,6 +322,9 @@ func TestInstallFindsLlamaServerOnPathWhenSettingIsEmpty(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.LookPath = func(name string) (string, error) {
+		if name == "text2wave" || name == "espeak-ng" || name == "pw-play" {
+			return "/usr/bin/" + name, nil
+		}
 		if name != "llama-server" {
 			t.Fatalf("LookPath(%q), want PATH lookup", name)
 		}
@@ -368,7 +509,7 @@ func TestInstallCommandHelpExplainsSafetyBoundary(t *testing.T) {
 	e, _ := testEffects(t)
 	cmd := NewCommand(*e, &strings.Builder{})
 	help := cmd.Long
-	if !strings.Contains(help, "--modifierd") || !strings.Contains(help, "never invokes sudo") {
+	if !strings.Contains(help, "--modifierd") || !strings.Contains(help, "--no-tts") || !strings.Contains(help, "asks before using sudo") {
 		t.Fatalf("help = %s", help)
 	}
 }

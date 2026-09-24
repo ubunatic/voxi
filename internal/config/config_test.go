@@ -103,6 +103,39 @@ func TestLoadUserSettingsDefaults(t *testing.T) {
 	if s.ModifierGating != def.ModifierGating {
 		t.Errorf("ModifierGating = %v, want %v", s.ModifierGating, def.ModifierGating)
 	}
+	if !s.TTSEnabled {
+		t.Error("TTSEnabled default = false, want true")
+	}
+}
+
+func TestTTSOptOutSettingRoundTripsAndPreservesConfig(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, ".config", "voxi")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(configDir, "config.yaml")
+	initial := "# keep this comment\nasr_model: local-model\n"
+	if err := os.WriteFile(path, []byte(initial), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetTTSEnabled(dir, false); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadUserSettings(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.TTSEnabled {
+		t.Fatal("TTSEnabled remains true after opt-out")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "# keep this comment") || !strings.Contains(string(data), "asr_model: local-model") || !strings.Contains(string(data), "tts_enabled: false") {
+		t.Fatalf("config contents lost settings/comments or omitted TTS opt-out:\n%s", data)
+	}
 }
 
 func TestSaveAndLoadUserSettings(t *testing.T) {

@@ -44,14 +44,22 @@ make install                 # build/install the CLI (~/go/bin)
 # Build/install the CLI, embed its user units, and enable the agent.
 voxi install
 
-# Optional physical modifier gating (the only privileged path).
+# Optional system-wide physical modifier daemon.
 voxi install --modifierd  # asks sudo; writes /usr/local and /etc only here
+
+# TTS is installed by default after an explicit package-install confirmation.
+voxi install
+voxi install --no-tts     # persistently disable TTS in config.yaml
 ```
 
 `voxi install` is intended for Linux user sessions with a systemd user manager. The
-default path writes only `~/.local/bin` and `~/.config/systemd/user`; it never invokes
-`sudo`, writes `/usr/local`, or changes system services. It is safe to repeat and reports
-the user binary, user units, agent activation, and optional modifier phase separately.
+default path writes the Voxi binary and user units under `~/.local/bin` and
+`~/.config/systemd/user`. If TTS tools are missing, it asks before using `sudo`
+to install system packages; it does not pass an automatic package-manager
+confirmation flag. A non-interactive install skips package changes and reports
+that TTS tools are missing. The optional `--modifierd` phase separately asks
+`sudo` to install the system modifier daemon. The installer is safe to repeat
+and reports each phase separately.
 The optional `voxi-modifierd` service reads only physical modifier state and prevents
 held Ctrl/Alt/Super/Shift keys from leaking into injected text; it requires root access
 to evdev devices. Verify the result with:
@@ -67,6 +75,25 @@ The command installs the Voxi binary and service units, downloads the supported 
 release, and installs `dotool`/`dotoold` from their Go module. External platform
 prerequisites such as `wl-clipboard` and audio capture remain package-manager concerns;
 the existing Makefile targets remain available for compatibility.
+
+## Text to speech
+
+TTS is enabled by default (`tts_enabled: true` in
+`~/.config/voxi/config.yaml`). When Festival (`festival`/`text2wave`), the
+`espeak-ng` fallback, or both supported players (`pw-play`/`paplay`) are
+missing, `voxi install` asks before invoking `sudo dnf install` on Fedora or
+`sudo apt-get install` on Debian/Ubuntu. The package manager still presents its
+normal transaction confirmation. Use `voxi install --no-tts` to persist
+`tts_enabled: false`; this skips system package changes and disables TTS queue
+playback and MPRIS. To opt back in, set `tts_enabled: true` and rerun
+`voxi install`. Non-interactive installs do not make system package changes;
+they report the missing tools for a later interactive install.
+
+While `voxi monitor -w` is open, its TTS panel reports the preferred engine or
+espeak-ng fallback, the available local player, or which dependencies are
+missing. With TTS enabled, `voxi say` sends text to its monitor-owned queue;
+media keys control playback. Starting dictation stops TTS before capture, while
+a failed TTS stop only emits a warning and cannot block recording.
 
 ## Commands
 

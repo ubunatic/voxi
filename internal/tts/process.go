@@ -275,6 +275,26 @@ func NewEngine(d deps.Dependencies, executable string) *Engine {
 	return &Engine{deps: d, executable: executable}
 }
 
+// BackendStatus describes the packaged engine and local player available on this host.
+func (e *Engine) BackendStatus() string {
+	if e.deps.LookPath == nil {
+		return "dependency probe unavailable"
+	}
+	engine := "missing (Festival / espeak-ng)"
+	if _, err := e.deps.LookPath("text2wave"); err == nil {
+		engine = "Festival"
+	} else if _, err := e.deps.LookPath("espeak-ng"); err == nil {
+		engine = "espeak-ng fallback"
+	}
+	player := "missing (pw-play / paplay)"
+	if _, err := e.deps.LookPath("pw-play"); err == nil {
+		player = "pw-play"
+	} else if _, err := e.deps.LookPath("paplay"); err == nil {
+		player = "paplay"
+	}
+	return engine + "; player " + player
+}
+
 func (e *Engine) Synthesize(ctx context.Context, text string) (audioFile, time.Duration, error) {
 	dir, err := os.MkdirTemp("", "voxi-tts-")
 	if err != nil {

@@ -33,6 +33,7 @@ type Dependencies struct {
 	AfterAudioRead func()
 	Stdin          io.Reader
 	Stdout         io.Writer
+	Stderr         io.Writer
 	// DialTimeout opens a TCP connection to addr ("host:port"), failing
 	// after timeout. Used to cheaply probe whether an HTTP ASR backend is
 	// reachable (issue 136) without depending on a real network dial in
@@ -101,6 +102,7 @@ func DefaultDependencies(in io.Reader, out io.Writer) Dependencies {
 		Sleep:       time.Sleep,
 		Stdin:       in,
 		Stdout:      out,
+		Stderr:      os.Stderr,
 		DialTimeout: net.DialTimeout,
 	}
 }

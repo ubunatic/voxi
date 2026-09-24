@@ -2,6 +2,7 @@ package record
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -65,6 +67,29 @@ func TestStopTTSForRecordingSendsStopToMonitor(t *testing.T) {
 	}
 }
 
+func TestStopTTSForRecordingWarnsAndContinuesAfterShortTimeout(t *testing.T) {
+	runtimeDir := t.TempDir()
+	t.Setenv("XDG_RUNTIME_DIR", runtimeDir)
+	server, err := tts.StartServer(context.Background(), tts.SocketPath(runtimeDir, os.Getuid()), &delayedTTSController{delay: 600 * time.Millisecond})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+
+	var warning bytes.Buffer
+	started := time.Now()
+	d := deps.Dependencies{Getenv: os.Getenv, Stderr: &warning}
+	if err := stopTTSForRecording(context.Background(), d); err != nil {
+		t.Fatalf("TTS stop failure blocked recording: %v", err)
+	}
+	if elapsed := time.Since(started); elapsed >= 500*time.Millisecond {
+		t.Fatalf("TTS stop delayed recording for %s; want < 500ms", elapsed)
+	}
+	if !strings.Contains(warning.String(), "warning") || !strings.Contains(warning.String(), "continuing") {
+		t.Fatalf("missing warn-and-continue diagnostic: %q", warning.String())
+	}
+}
+
 type recordingTTSController struct{ events chan<- string }
 
 func (c *recordingTTSController) Enqueue(string) (int, error) { return 0, nil }
@@ -73,6 +98,14 @@ func (c *recordingTTSController) Control(action tts.Action) error {
 		c.events <- "tts-stop"
 	}
 	return nil
+}
+
+type delayedTTSController struct{ delay time.Duration }
+
+func (*delayedTTSController) Enqueue(string) (int, error) { return 0, nil }
+func (c *delayedTTSController) Control(tts.Action) error {
+	time.Sleep(c.delay)
+	return errors.New("delayed test failure")
 }
 
 // listenEagerSocket starts a fake eager-daemon listener at

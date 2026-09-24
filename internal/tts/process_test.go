@@ -10,7 +10,33 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"ubunatic.com/voxi/internal/deps"
 )
+
+func TestEngineBackendStatusReportsPreferredFallbackAndMissing(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		available map[string]bool
+		want      string
+	}{
+		{name: "preferred", available: map[string]bool{"text2wave": true, "espeak-ng": true, "pw-play": true}, want: "Festival; player pw-play"},
+		{name: "fallback", available: map[string]bool{"espeak-ng": true, "paplay": true}, want: "espeak-ng fallback; player paplay"},
+		{name: "missing", available: map[string]bool{}, want: "missing (Festival / espeak-ng); player missing (pw-play / paplay)"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			engine := NewEngine(deps.Dependencies{LookPath: func(name string) (string, error) {
+				if tc.available[name] {
+					return "/usr/bin/" + name, nil
+				}
+				return "", os.ErrNotExist
+			}}, "/usr/bin/voxi")
+			if got := engine.BackendStatus(); got != tc.want {
+				t.Fatalf("BackendStatus() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
 
 func TestSupervisorHelperProcess(t *testing.T) {
 	if os.Getenv("VOXI_TTS_SUPERVISOR_TEST_HELPER") != "1" {
