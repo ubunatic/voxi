@@ -44,3 +44,36 @@ and implementation tickets or milestones are filed. No code in this ticket.
 
 - Before starting, re-check the live code and recent commits. 139 M2 may have
   changed how `voxi install` handles units.
+
+## 5. MVP decisions (user, 2026-09-24)
+
+- **Callers:** mostly other agents, which send longer agent replies to be read
+  aloud. The interface must accept multi-paragraph text and split it into
+  sentences or paragraphs that can be skipped.
+- **First engine:** the best engine that installs with plain `apt`/`dnf` and
+  needs little configuration. Findings on Fedora 44:
+  - `espeak-ng` is installed and exists on every distro, but sounds robotic.
+  - `festival` and `mimic` are packaged in Fedora. Their quality and
+    availability on Debian/Ubuntu are still to be checked.
+  - Fedora's `piper` package is the gaming-mouse tool, not Piper TTS. Neural
+    TTS such as Piper or Kokoro needs a model download, so it belongs to a
+    later milestone.
+  - Next step: a canary comparing the quality and startup time of the
+    packaged candidates, then pick one, with `espeak-ng` as the fallback.
+- **Controls:** media keys control playback while voxi is speaking:
+  - prev/next jump to the previous or next chunk;
+  - play/pause pauses and resumes.
+
+  The likely mechanism is an MPRIS player that voxi registers on the session
+  D-Bus, so GNOME sends the media keys to it; a canary should confirm this.
+  Starting a recording with Super-x stops playback, and voxi must not
+  transcribe its own voice.
+- **Install:** `voxi install` sets up TTS by default, including packages and a
+  user unit if one is needed. TTS is **opt-out** (the exact flag or setting is
+  still to be decided).
+
+### Still open
+- The transport for agents: `voxi say` CLI, the voxi-agent socket, or an
+  HTTP `/v1/audio/speech` endpoint.
+- Whether new text queues behind current playback or replaces it.
+- Whether `voxi monitor` shows TTS state.
