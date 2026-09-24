@@ -41,3 +41,9 @@ both live.
   to it? 141 chose to queue. Revisit this with the user, because "read this
   now" may mean interrupt.
 - Before starting, re-check the live code and the latest state of 141/142.
+
+## 4. Decisions (user, 2026-09-24)
+- **Keys:** `Super+Y` reads the primary selection; `Super+Shift+Y` reads the
+  clipboard.
+- **Interrupt:** the hotkey stops current playback, clears the queue, and reads
+  the new text straight away. This differs from `voxi say`, which queues.
