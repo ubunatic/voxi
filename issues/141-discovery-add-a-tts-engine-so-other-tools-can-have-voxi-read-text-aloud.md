@@ -145,3 +145,24 @@ and implementation tickets or milestones are filed. No code in this ticket.
   and reap it explicitly on normal exit. The kill canary supports this choice
   for a direct child; descendants need separate containment if any selected
   engine spawns them.
+
+### M1 user verification (2026-09-24)
+- Physical media keys on the keyboard and on a Bluetooth speaker reach the MPRIS
+  canary. MPRIS is confirmed for M3.
+- All three engines work; **Festival sounds best** and is the MVP engine.
+  `espeak-ng` stays as the fallback.
+- Debian/Ubuntu portability is out of scope for now.
+
+### M2 Pre-Work / Required Refinements
+- **Festival latency:** the whole text took about 6.5 s. Synthesize per chunk
+  (sentence or paragraph) and synthesize chunk N+1 while chunk N plays, so the
+  first audio starts quickly. Measure the time to first audio on a
+  multi-paragraph agent reply and record it. If it is still slow, consider a
+  monitor-owned `festival --server` child.
+- **Descendant containment:** `text2wave` is a wrapper script that launches
+  `festival`, which is exactly the grandchild case M1 did not cover. Run each
+  engine and player in its own process group. On monitor exit, kill the group.
+  For crash or SIGKILL, use parent-death signaling or another mechanism that
+  reaches the whole group. Add a test that SIGKILLs the owner with a real
+  Festival child and asserts no `festival` process is left.
+- Canary scripts stay under `scripts/canary_tts/`; the product code is Go.
