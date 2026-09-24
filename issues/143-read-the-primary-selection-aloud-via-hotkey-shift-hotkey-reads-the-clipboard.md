@@ -47,3 +47,14 @@ both live.
   clipboard.
 - **Interrupt:** the hotkey stops current playback, clears the queue, and reads
   the new text straight away. This differs from `voxi say`, which queues.
+
+## 5. Paused (2026-09-24)
+The host stopped developer `sel-dev` (codex:terra:low, harnez agent session
+`01a0d3cc-11c7-7b11-9405-1a36a0729809`) mid-implementation, at the user's request.
+Uncommitted work-in-progress is left in the working tree (cmd/voxi/main.go,
+internal/shortcut/*, internal/tts/{command,manager,socket}*). It is untested and
+the canary has not been run. On resume: re-check the WIP diff, finish, and run
+the tests and the canary. **Avoid multi-file `harnez read -I`**: it leaks memory
+until harnez 543 is fixed (two OOM kills at 16 GB). Use `--text`/`-L`, one file
+at a time. After 143, do the 142 §5 follow-ups (4-line feed, TTS box in the
+hardware slot).
