@@ -231,4 +231,4 @@ Host review: the diff is scoped, adds godbus/dbus v5, and `go test ./...` is gre
   TTS socket error or a 2 s timeout must only log a warning; recording goes
   ahead. Also reduce the time recording can wait on TTS: a wedged monitor
   must not add up to 2 s to the Super-x start. Test both.
-- Await the user's live media-key and Super-x check. Record findings here.
+- User live check: media keys (keyboard + BT speaker) and Super-x stop work.
