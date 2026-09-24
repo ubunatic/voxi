@@ -186,3 +186,13 @@ and implementation tickets or milestones are filed. No code in this ticket.
   exposes playback, previous/next, stop and clear controls. The runtime socket
   is removed on normal exit, stale sockets are replaced on next start, and a
   missing/stale socket returns a bounded “no monitor” error.
+
+### M2 delivered (8e07ce3): monitor-gated MVP
+Host review: the diff is scoped. The runtime-path helper also replaced the
+agent socket's hand-rolled path, which is harmless. `go test ./...` is green.
+Live: with no monitor running, `voxi say` refuses with exit 1 and a clear hint.
+Monitor keys: m play/pause, b/n prev/next, x stop, k clear.
+
+### M3 Pre-Work / Required Refinements
+- Wait for the user's live check (audible playback, the keys, and quitting the
+  monitor stopping speech) before starting M3. Record any findings here.
