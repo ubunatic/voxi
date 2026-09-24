@@ -74,23 +74,26 @@ type ResourceSections struct {
 	Hardware   bool
 	Transcript bool
 	Daemons    bool
+	TTS        bool
 }
 
-// DefaultResourceSections returns all sections enabled.
+// DefaultResourceSections returns panel visibility from spec/actions.yaml.
 func DefaultResourceSections() ResourceSections {
-	return ResourceSections{
-		Speed:      true,
-		Hardware:   true,
-		Transcript: true,
-		Daemons:    true,
+	visible := func(id string) bool {
+		a := loadedActions().Actions[id]
+		return a.Default == nil || *a.Default
 	}
+	return ResourceSections{Speed: visible("speed"), Hardware: visible("hardware"), Transcript: visible("transcript"), Daemons: visible("daemons"), TTS: visible("tts-box")}
 }
 
 // ParseSections parses a comma-separated list of section names or letters.
 func ParseSections(s string) ResourceSections {
 	trimmed := strings.TrimSpace(strings.ToLower(s))
-	if trimmed == "" || trimmed == "all" {
+	if trimmed == "" {
 		return DefaultResourceSections()
+	}
+	if trimmed == "all" {
+		return ResourceSections{Speed: true, Hardware: true, Transcript: true, Daemons: true, TTS: true}
 	}
 	sec := ResourceSections{}
 	for _, p := range strings.Split(trimmed, ",") {
@@ -102,11 +105,13 @@ func ParseSections(s string) ResourceSections {
 			sec.Hardware = true
 		case "t", "transcript", "sentences", "feed", "3":
 			sec.Transcript = true
+		case "tts", "tts-box":
+			sec.TTS = true
 		case "d", "daemons", "procs", "health", "p", "4":
 			sec.Daemons = true
 		}
 	}
-	if !sec.Speed && !sec.Hardware && !sec.Transcript && !sec.Daemons {
+	if !sec.Speed && !sec.Hardware && !sec.Transcript && !sec.Daemons && !sec.TTS {
 		return DefaultResourceSections()
 	}
 	return sec
@@ -204,6 +209,9 @@ func RunWatchResources(ctx context.Context, d deps.Dependencies, interval time.D
 		case "transcript":
 			sec.Transcript = !sec.Transcript
 			requestRedraw()
+		case "tts-box":
+			sec.TTS = !sec.TTS
+			requestRedraw()
 		case "daemons":
 			sec.Daemons = !sec.Daemons
 			requestRedraw()
@@ -223,7 +231,7 @@ func RunWatchResources(ctx context.Context, d deps.Dependencies, interval time.D
 			_ = ttsManager.Control(tts.ActionClear)
 			requestRedraw()
 		case "all":
-			sec = DefaultResourceSections()
+			sec = ResourceSections{Speed: true, Hardware: true, Transcript: true, Daemons: true, TTS: true}
 			requestRedraw()
 		case "quit":
 			secLock.Unlock()
@@ -343,8 +351,14 @@ func RunWatchResources(ctx context.Context, d deps.Dependencies, interval time.D
 
 		var buf bytes.Buffer
 		buf.WriteString("\033[H")
+		ttsSnapshot := ttsManager.Snapshot()
 		PrintVoiceResourceReport(&buf, report, activeSec)
-		PrintTTSPanel(&buf, ttsManager.Snapshot())
+		if activeSec.Transcript {
+			PrintUnifiedFeed(&buf, CombineFeed(report.EagerMetrics, ttsSnapshot.History), 0)
+		}
+		if activeSec.TTS {
+			PrintTTSBox(&buf, ttsSnapshot)
+		}
 		buf.WriteString("\033[J")
 		_, _ = d.Stdout.Write(buf.Bytes())
 	}

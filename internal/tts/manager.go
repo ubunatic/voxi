@@ -29,6 +29,15 @@ type Snapshot struct {
 	Queue            []string
 	TimeToFirstAudio time.Duration
 	LastError        string
+	History          []ChunkRecord
+}
+
+// ChunkRecord is one TTS chunk's single monitor-feed row, updated through its lifecycle.
+type ChunkRecord struct {
+	ID           uint64
+	Text, Status string
+	Timestamp    time.Time
+	UpdatedAt    time.Time
 }
 
 type command struct {
@@ -57,15 +66,20 @@ type synthJob struct {
 
 // Manager owns the in-memory queue for one monitor watch session.
 type Manager struct {
-	ctx           context.Context
-	cancel        context.CancelFunc
-	backend       EngineBackend
-	enabled       bool
-	backendStatus string
-	commands      chan command
-	done          chan struct{}
-	mu            sync.RWMutex
-	snapshot      Snapshot
+	ctx              context.Context
+	cancel           context.CancelFunc
+	backend          EngineBackend
+	enabled          bool
+	backendStatus    string
+	commands         chan command
+	done             chan struct{}
+	mu               sync.RWMutex
+	snapshot         Snapshot
+	feedHistory      []ChunkRecord
+	nextFeedID       uint64
+	feedCurrentID    uint64
+	feedCurrent      string
+	feedCurrentIndex int
 }
 
 // NewManager starts a monitor-scoped queue and playback worker.
@@ -128,6 +142,7 @@ func (m *Manager) Snapshot() Snapshot {
 	defer m.mu.RUnlock()
 	s := m.snapshot
 	s.Queue = append([]string(nil), s.Queue...)
+	s.History = append([]ChunkRecord(nil), s.History...)
 	return s
 }
 
@@ -153,6 +168,7 @@ func (m *Manager) request(c command) (commandResult, error) {
 }
 
 func (m *Manager) publish(status, current string, items []string, cursor int, first time.Duration, lastErr string) {
+	m.recordFeed(status, current, cursor)
 	queue := make([]string, 0, len(items))
 	start := cursor
 	if current != "" {
@@ -162,8 +178,58 @@ func (m *Manager) publish(status, current string, items []string, cursor int, fi
 		queue = append(queue, items[i])
 	}
 	m.mu.Lock()
-	m.snapshot = Snapshot{Status: status, BackendStatus: m.backendStatus, Current: current, Queue: queue, TimeToFirstAudio: first, LastError: lastErr}
+	m.snapshot = Snapshot{Status: status, BackendStatus: m.backendStatus, Current: current, Queue: queue, TimeToFirstAudio: first, LastError: lastErr, History: append([]ChunkRecord(nil), m.feedHistory...)}
 	m.mu.Unlock()
+}
+
+func (m *Manager) recordFeed(status, current string, index int) {
+	if current == "" {
+		return
+	}
+	if index != m.feedCurrentIndex || current != m.feedCurrent || m.feedCurrentID == 0 {
+		if m.feedCurrentID != 0 {
+			for i := range m.feedHistory {
+				if m.feedHistory[i].ID == m.feedCurrentID {
+					m.feedHistory[i].Status = "played"
+					m.feedHistory[i].UpdatedAt = time.Now()
+				}
+			}
+		}
+		m.nextFeedID++
+		m.feedCurrentID = m.nextFeedID
+		m.feedCurrent = current
+		m.feedCurrentIndex = index
+		created := time.Now()
+		m.feedHistory = retainFeedRow(m.feedHistory, ChunkRecord{ID: m.feedCurrentID, Text: current, Status: status, Timestamp: created, UpdatedAt: created})
+	}
+	for i := range m.feedHistory {
+		if m.feedHistory[i].ID == m.feedCurrentID && m.feedHistory[i].Status != status {
+			m.feedHistory[i].Status = status
+			m.feedHistory[i].UpdatedAt = time.Now()
+		}
+	}
+}
+
+func retainFeedRow(history []ChunkRecord, row ChunkRecord) []ChunkRecord {
+	history = append(history, row)
+	if len(history) > 10 {
+		history = append([]ChunkRecord(nil), history[len(history)-10:]...)
+	}
+	return history
+}
+
+func (m *Manager) finishFeed(status string) {
+	if m.feedCurrentID == 0 {
+		return
+	}
+	for i := range m.feedHistory {
+		if m.feedHistory[i].ID == m.feedCurrentID {
+			m.feedHistory[i].Status = status
+			m.feedHistory[i].UpdatedAt = time.Now()
+		}
+	}
+	m.feedCurrentID = 0
+	m.feedCurrent = ""
 }
 
 func (m *Manager) run() {
@@ -254,6 +320,7 @@ func (m *Manager) run() {
 	}
 	for {
 		if m.ctx.Err() != nil {
+			m.finishFeed("stopped")
 			cleanupCurrent()
 			cleanupPrefetch()
 			if currentJob != nil {
@@ -301,6 +368,12 @@ func (m *Manager) run() {
 		case <-m.ctx.Done():
 			continue
 		case c := <-m.commands:
+			if c.action == ActionNext || (c.action == ActionPrevious && cursor > 0) {
+				m.finishFeed("skipped")
+			}
+			if c.action == ActionStop {
+				m.finishFeed("stopped")
+			}
 			res := m.applyCommand(c, &items, &cursor, &current, &status, &paused, &firstQueuedAt, &firstAudio,
 				&currentAudio, &player, &currentJob, &prefetchJob, &prefetched, &lastErr, cleanupCurrent, cleanupPrefetch)
 			if res.err != nil {
@@ -317,6 +390,7 @@ func (m *Manager) run() {
 			if result.err != nil {
 				if !errors.Is(result.err, context.Canceled) {
 					lastErr = result.err.Error()
+					m.finishFeed("stopped")
 					cursor++
 					pruneQueueHistory(&items, &cursor)
 				}
@@ -340,6 +414,11 @@ func (m *Manager) run() {
 				prefetched = &result
 			}
 		case err := <-playerDone:
+			if err == nil {
+				m.finishFeed("played")
+			} else {
+				m.finishFeed("stopped")
+			}
 			if err != nil {
 				lastErr = err.Error()
 			}

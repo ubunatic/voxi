@@ -17,26 +17,36 @@ actions:
     short: "speed"
     keys: ["s", "S", "1", "v", "V"]
     category: "monitor"
+    default: true
   hardware:
     title: "hardware load"
     short: "hardware"
     keys: ["h", "H", "2", "c", "C", "g", "G"]
     category: "monitor"
+    default: false
   transcript:
     title: "transcript feed"
     short: "transcript"
     keys: ["t", "T", "3"]
     category: "monitor"
+    default: true
   daemons:
     title: "active daemons & health"
     short: "daemons"
     keys: ["d", "D", "4", "p", "P"]
     category: "monitor"
+    default: true
   all:
     title: "show all sections"
     short: "all"
     keys: ["a", "A"]
     category: "system"
+  tts-box:
+    title: "TTS playback"
+    short: "tts"
+    keys: ["y", "Y"]
+    category: "monitor"
+    default: true
   tts-play-pause:
     title: "TTS play/pause"
     short: "mplay/pause"

@@ -14,13 +14,20 @@ import (
 
 func TestParseSections(t *testing.T) {
 	s1 := ParseSections("all")
-	if !s1.Speed || !s1.Hardware || !s1.Transcript || !s1.Daemons {
-		t.Fatalf("expected all true for 'all', got %+v", s1)
+	if !s1.Speed || !s1.Hardware || !s1.Transcript || !s1.Daemons || !s1.TTS {
+		t.Fatalf("expected all sections for 'all', got %+v", s1)
 	}
 
 	s2 := ParseSections("s,t")
 	if !s2.Speed || !s2.Transcript || s2.Hardware || s2.Daemons {
 		t.Fatalf("expected only speed and transcript true, got %+v", s2)
+	}
+}
+
+func TestDefaultResourceSectionsFollowActionSpec(t *testing.T) {
+	got := DefaultResourceSections()
+	if !got.Speed || got.Hardware || !got.Transcript || !got.Daemons || !got.TTS {
+		t.Fatalf("unexpected default sections: %+v", got)
 	}
 }
 
@@ -67,7 +74,9 @@ func TestPrintVoiceResourceReport(t *testing.T) {
 		ActiveModel:   "small.en",
 	}
 
-	PrintVoiceResourceReport(&out, report, DefaultResourceSections())
+	sections := DefaultResourceSections()
+	sections.Hardware = true
+	PrintVoiceResourceReport(&out, report, sections)
 	output := out.String()
 
 	if !strings.Contains(output, "voice & speed") || !strings.Contains(output, "hardware load") {
@@ -188,4 +197,3 @@ func TestDetectActiveModel_SpecDefaultFallback(t *testing.T) {
 		t.Fatalf("expected cohere-transcribe-03-2026 default, got %q", model)
 	}
 }
-

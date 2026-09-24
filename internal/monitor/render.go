@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"golang.org/x/term"
 
 	"ubunatic.com/voxi/internal/asr"
+	"ubunatic.com/voxi/internal/eager"
 	"ubunatic.com/voxi/internal/tts"
 )
 
@@ -496,32 +498,6 @@ func PrintVoiceResourceReport(w io.Writer, r VoiceResourceReport, sec ResourceSe
 		}
 	}
 
-	if sec.Transcript {
-		var transLines []string
-		if r.EagerMetrics != nil && len(r.EagerMetrics.Recent) > 0 {
-			limit := 4
-			if len(r.EagerMetrics.Recent) < limit {
-				limit = len(r.EagerMetrics.Recent)
-			}
-			for i := 0; i < limit; i++ {
-				u := r.EagerMetrics.Recent[i]
-				timeStr := u.Timestamp.Format("15:04:05")
-				shortText := u.Text
-				if len(shortText) > 60 {
-					shortText = shortText[:57] + "..."
-				}
-				transLines = append(transLines,
-					fmt.Sprintf("\x1b[36m%s\x1b[0m  \x1b[32m[%4.2fs]\x1b[0m  %q", timeStr, u.TranscribeSecs, shortText))
-			}
-		} else {
-			transLines = append(transLines, "\x1b[90m(no transcriptions yet - speak with Super+X to dictate)\x1b[0m")
-		}
-		boxTrans := BoxSpec{Title: actionBoxTitle("transcript"), Lines: transLines, Width: totalWidth}
-		for _, line := range RenderBoxLines(boxTrans) {
-			fmt.Fprintln(w, line)
-		}
-	}
-
 	if sec.Daemons {
 		var daemonLines []string
 		// ASR backend state comes first -- it explains why dictation is failing,
@@ -547,58 +523,112 @@ func PrintVoiceResourceReport(w io.Writer, r VoiceResourceReport, sec ResourceSe
 		}
 	}
 
-	fmt.Fprintf(w, " %s  %s  %s  %s  \x1b[90m│\x1b[0m  %s  %s\n",
+	fmt.Fprintf(w, " %s  %s  %s  %s  %s  \x1b[90m│\x1b[0m  %s  %s\n",
 		formatActionBadge("speed", sec.Speed),
 		formatActionBadge("hardware", sec.Hardware),
 		formatActionBadge("transcript", sec.Transcript),
 		formatActionBadge("daemons", sec.Daemons),
+		formatActionBadge("tts-box", sec.TTS),
 		formatActionLabel("all"),
 		formatActionLabel("quit"))
 }
 
-// PrintTTSPanel appends the monitor-gated playback queue and its local controls.
-func PrintTTSPanel(w io.Writer, s tts.Snapshot) {
+// PrintTTSBox renders compact TTS state and local playback controls.
+func PrintTTSBox(w io.Writer, s tts.Snapshot) {
 	width := currentTerminalWidth() - 2
 	if width < 24 {
 		width = 24
 	}
-	fmt.Fprintln(w)
-	writeTTSLine(w, fmt.Sprintf(" \x1b[1mTTS · %s\x1b[0m", s.Status))
+	lines := []string{fmt.Sprintf("state: %s · queue: %d chunk(s)", s.Status, len(s.Queue))}
 	if s.BackendStatus != "" {
-		writeTTSLine(w, "  Backend: "+s.BackendStatus)
+		lines = append(lines, "backend: "+s.BackendStatus)
 	}
 	if s.Current == "" {
-		writeTTSLine(w, "  Now: (idle)")
+		lines = append(lines, "Now: (idle)")
 	} else {
-		writeTTSLine(w, "  "+TruncateLineANSI("Now: "+s.Current, width))
-	}
-	if len(s.Queue) == 0 {
-		writeTTSLine(w, "  Queue: empty")
-	} else {
-		writeTTSLine(w, fmt.Sprintf("  Queue: %d chunk(s)", len(s.Queue)))
-		shown := len(s.Queue)
-		if shown > 3 {
-			shown = 3
-		}
-		for i := 0; i < shown; i++ {
-			writeTTSLine(w, fmt.Sprintf("  %d. %s", i+1, TruncateLineANSI(s.Queue[i], width-4)))
-		}
-		if remaining := len(s.Queue) - shown; remaining > 0 {
-			writeTTSLine(w, fmt.Sprintf("  … and %d more", remaining))
-		}
+		lines = append(lines, "Now: "+s.Current)
 	}
 	if s.TimeToFirstAudio > 0 {
-		writeTTSLine(w, fmt.Sprintf("  First audio: %s", s.TimeToFirstAudio.Round(time.Millisecond)))
+		lines = append(lines, fmt.Sprintf("first audio: %s", s.TimeToFirstAudio.Round(time.Millisecond)))
 	}
 	if s.LastError != "" {
-		writeTTSLine(w, fmt.Sprintf("  \x1b[31mTTS error: %s\x1b[0m", TruncateLineANSI(s.LastError, width)))
+		lines = append(lines, "\x1b[31mTTS error: "+s.LastError+"\x1b[0m")
 	}
-	writeTTSLine(w, fmt.Sprintf("  %s  %s  %s  %s  %s",
+	lines = append(lines, fmt.Sprintf("%s  %s  %s  %s  %s",
 		formatActionLabel("tts-play-pause"),
 		formatActionLabel("tts-previous"),
 		formatActionLabel("tts-next"),
 		formatActionLabel("tts-stop"),
 		formatActionLabel("tts-clear")))
+	box := RenderBoxLines(BoxSpec{Title: actionBoxTitle("tts-box"), Lines: lines, Width: maxInt(width, 24)})
+	for _, line := range box {
+		writeTTSLine(w, TruncateLineANSI(line, maxInt(width, 24)))
+	}
+}
+
+type FeedDirection string
+
+const (
+	FeedInput  FeedDirection = "in"
+	FeedOutput FeedDirection = "out"
+)
+
+type FeedEntry struct {
+	Direction    FeedDirection
+	Text, Status string
+	Timestamp    time.Time
+	Sequence     uint64
+}
+
+func CombineFeed(metrics *eager.EagerMetrics, output []tts.ChunkRecord) []FeedEntry {
+	entries := make([]FeedEntry, 0, 20)
+	if metrics != nil {
+		for i, u := range metrics.Recent {
+			entries = append(entries, FeedEntry{Direction: FeedInput, Text: u.Text, Status: fmt.Sprintf("%4.2fs", u.TranscribeSecs), Timestamp: u.Timestamp, Sequence: uint64(i)})
+		}
+	}
+	for _, row := range output {
+		entries = append(entries, FeedEntry{Direction: FeedOutput, Text: row.Text, Status: row.Status, Timestamp: row.Timestamp, Sequence: row.ID})
+	}
+	sort.SliceStable(entries, func(i, j int) bool { return entries[i].Timestamp.Before(entries[j].Timestamp) })
+	if len(entries) > 20 {
+		entries = entries[len(entries)-20:]
+	}
+	return entries
+}
+
+func PrintUnifiedFeed(w io.Writer, entries []FeedEntry, width int) {
+	if width <= 0 {
+		width = currentTerminalWidth()
+	}
+	if width > 110 {
+		width = 110
+	}
+	if width < 30 {
+		width = 30
+	}
+	lines := make([]string, 0, len(entries))
+	for _, e := range entries {
+		prefix, color := "[IN]", "\x1b[36m"
+		if e.Direction == FeedOutput {
+			prefix, color = "[OUT]", "\x1b[32m"
+		}
+		line := fmt.Sprintf("%s%s\x1b[0m %s  %s", color, prefix, e.Text, e.Status)
+		lines = append(lines, TruncateLineANSI(line, width-4))
+	}
+	if len(lines) == 0 {
+		lines = append(lines, "(no speech yet)")
+	}
+	for _, line := range RenderBoxLines(BoxSpec{Title: actionBoxTitle("transcript"), Lines: lines, Width: width}) {
+		fmt.Fprintln(w, line)
+	}
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func writeTTSLine(w io.Writer, line string) {

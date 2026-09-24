@@ -168,12 +168,15 @@ func main() {
 			}
 			report := monitor.CollectVoiceResources(ctx, d, audiolevel.Reading{})
 			monitor.PrintVoiceResourceReport(d.Stdout, report, sections)
+			if sections.Transcript {
+				monitor.PrintUnifiedFeed(d.Stdout, monitor.CombineFeed(report.EagerMetrics, nil), 0)
+			}
 			return nil
 		},
 	}
 	monitorCmd.Flags().BoolVarP(&watch, "watch", "w", false, "continuously refresh resource metrics")
 	monitorCmd.Flags().IntVarP(&intervalSec, "interval", "i", 1, "refresh interval in seconds for --watch")
-	monitorCmd.Flags().StringVarP(&sectionsStr, "sections", "s", "all", "comma-separated sections: s(speed), h(hardware), t(transcript), d(daemons)")
+	monitorCmd.Flags().StringVarP(&sectionsStr, "sections", "s", "", "comma-separated sections: s(speed), h(hardware), t(transcript), d(daemons), tts (default: spec panel defaults)")
 
 	// 5. history command
 	historyPath := func() string { return history.HistoryPath(d.Getenv("HOME")) }

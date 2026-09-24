@@ -24,6 +24,9 @@ func TestManagerPrefetchesAndControlsQueue(t *testing.T) {
 	waitFor(t, func() bool {
 		return manager.Snapshot().Current == "First sentence." && manager.Snapshot().Status == statusPlaying
 	})
+	if rows := manager.Snapshot().History; len(rows) != 1 || rows[0].Text != "First sentence." || rows[0].Status != statusPlaying {
+		t.Fatalf("feed history while playing = %+v", rows)
+	}
 	select {
 	case got := <-backend.started:
 		if got != "First sentence." {
@@ -57,6 +60,9 @@ func TestManagerPrefetchesAndControlsQueue(t *testing.T) {
 	if !first.stopped() {
 		t.Fatal("next did not stop the first chunk")
 	}
+	if rows := manager.Snapshot().History; len(rows) != 2 || rows[0].Text != "First sentence." || rows[0].Status != "skipped" || rows[1].Text != "Second sentence." {
+		t.Fatalf("feed history after next = %+v", rows)
+	}
 	if count, err := manager.Enqueue("Third sentence."); err != nil || count != 1 {
 		t.Fatalf("Enqueue(third) = %d, %v", count, err)
 	}
@@ -79,6 +85,19 @@ func TestManagerPrefetchesAndControlsQueue(t *testing.T) {
 	}
 	if got := manager.Snapshot().Queue; len(got) != 0 {
 		t.Fatalf("queue after stop = %#v, want empty", got)
+	}
+	if rows := manager.Snapshot().History; len(rows) != 3 || rows[2].Status != "stopped" {
+		t.Fatalf("feed history after stop = %+v", rows)
+	}
+}
+
+func TestRetainFeedRowCapsOutputHistoryAtTen(t *testing.T) {
+	var rows []ChunkRecord
+	for i := 1; i <= 12; i++ {
+		rows = retainFeedRow(rows, ChunkRecord{ID: uint64(i)})
+	}
+	if len(rows) != 10 || rows[0].ID != 3 || rows[9].ID != 12 {
+		t.Fatalf("retained feed rows = %+v, want ids 3..12", rows)
 	}
 }
 

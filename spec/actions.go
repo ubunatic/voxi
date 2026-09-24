@@ -21,6 +21,7 @@ type Action struct {
 	Short    string   `yaml:"short"`
 	Keys     []string `yaml:"keys"`
 	Category string   `yaml:"category"`
+	Default  *bool    `yaml:"default"`
 }
 
 // ActionSpec is the parsed contents of spec/actions.yaml.

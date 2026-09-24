@@ -34,12 +34,25 @@ Done when the old bottom TTS panel is gone and the defaults match the above.
 There are render tests for the combined feed and the new defaults, and the user
 confirms the layout live.
 
-## 3. Notes / Uncertainties
+## 3. UI Decisions
 
-- Open questions: how input and output are marked in the log (prefix, colour
-  or icon); whether played, skipped and stopped TTS chunks stay in the log; and
-  how much text a long TTS chunk shows. Settle them with the user if they are
-  not obvious.
+- Feed rows use explicit `[IN]` and `[OUT]` prefixes, cyan for input and green
+  for output. The text labels keep direction clear without relying on colour.
+- Each output chunk has one row, created when synthesis starts and updated in
+  place through `synthesizing`, `playing`, then `played`, `skipped` or `stopped`.
+  Terminal outcome rows remain visible in the feed for the monitor session.
+- Keep the latest 10 output rows, matching the eager transcript history cap.
+  Merge them with the recent input rows and order by each row's creation time.
+- Long rows are truncated to the available terminal width with `...`.
+- The compact TTS box shows playback state, queued chunk count, current `Now:`
+  text, backend/first-audio details when available, and existing controls. It
+  does not preview each queued chunk.
+- Defaults are sourced from `spec/actions.yaml`: speed, transcript feed,
+  daemons, and TTS box on; hardware box off. The existing `h` toggle remains,
+  and `y` toggles the TTS box.
+
+## 4. Preserved behavior
+
 - Keep the 141 behaviour: the monitor keys, MPRIS, quit-stops-everything, and
   lines that clear to the end on redraw.
 - Panel toggles and their defaults live in `spec/actions.yaml`. Change the

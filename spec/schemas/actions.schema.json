@@ -37,6 +37,10 @@
             "type": "string",
             "enum": ["monitor", "system"],
             "description": "'monitor' toggles one of the resource boxes; 'system' controls the TUI itself (show-all, quit)."
+          },
+          "default": {
+            "type": "boolean",
+            "description": "Whether this monitor panel is visible by default. Omitted defaults to true for monitor actions."
           }
         },
         "additionalProperties": false
