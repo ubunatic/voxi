@@ -91,6 +91,9 @@ func TestLoadUserSettingsDefaults(t *testing.T) {
 	if s.ASRModel != def.ASRModel {
 		t.Errorf("ASRModel = %v, want %v", s.ASRModel, def.ASRModel)
 	}
+	if s.LlamaServerPath != def.LlamaServerPath {
+		t.Errorf("LlamaServerPath = %v, want %v", s.LlamaServerPath, def.LlamaServerPath)
+	}
 	if s.TypeDelayMs != def.TypeDelayMs {
 		t.Errorf("TypeDelayMs = %v, want %v", s.TypeDelayMs, def.TypeDelayMs)
 	}
@@ -110,6 +113,7 @@ func TestSaveAndLoadUserSettings(t *testing.T) {
 		CleanupModel:     "smollm3-3b-instruct-q4",
 		OpenAIBaseURL:    "http://127.0.0.1:9999/v1",
 		ASRModel:         "large-v3-turbo",
+		LlamaServerPath:  "/opt/llama/bin/llama-server",
 		TypeDelayMs:      12,
 		DictationHistory: false,
 		ModifierGating:   false,
@@ -147,6 +151,9 @@ func TestSaveAndLoadUserSettings(t *testing.T) {
 	if envMap["VOXI_ASR_MODEL"] != "large-v3-turbo" {
 		t.Errorf("VOXI_ASR_MODEL = %s, want large-v3-turbo", envMap["VOXI_ASR_MODEL"])
 	}
+	if envMap["LLAMA_SERVER_PATH"] != "/opt/llama/bin/llama-server" {
+		t.Errorf("LLAMA_SERVER_PATH = %s, want configured llama-server path", envMap["LLAMA_SERVER_PATH"])
+	}
 	if envMap["VOXI_HISTORY"] != "false" {
 		t.Errorf("VOXI_HISTORY = %s, want false", envMap["VOXI_HISTORY"])
 	}
@@ -181,6 +188,9 @@ func TestSaveAndLoadUserSettings(t *testing.T) {
 	}
 	if loaded.ASRModel != custom.ASRModel {
 		t.Errorf("loaded ASRModel = %v, want %v", loaded.ASRModel, custom.ASRModel)
+	}
+	if loaded.LlamaServerPath != custom.LlamaServerPath {
+		t.Errorf("loaded LlamaServerPath = %v, want %v", loaded.LlamaServerPath, custom.LlamaServerPath)
 	}
 	if loaded.TypeDelayMs != custom.TypeDelayMs {
 		t.Errorf("loaded TypeDelayMs = %v, want %v", loaded.TypeDelayMs, custom.TypeDelayMs)

@@ -26,6 +26,7 @@ type UserSettings struct {
 	OpenAIBaseURL    string `json:"openai_base_url" yaml:"openai_base_url"`
 	ASRModel         string `json:"asr_model" yaml:"asr_model"`
 	OpenAIASRBaseURL string `json:"openai_asr_base_url" yaml:"openai_asr_base_url"`
+	LlamaServerPath  string `json:"llama_server_path" yaml:"llama_server_path"`
 	TypeDelayMs      int    `json:"type_delay_ms" yaml:"type_delay_ms"`
 	DictationHistory bool   `json:"dictation_history" yaml:"dictation_history"`
 	ModifierGating   bool   `json:"modifier_gating" yaml:"modifier_gating"`
@@ -40,6 +41,7 @@ func DefaultUserSettings() *UserSettings {
 		OpenAIBaseURL:    "http://127.0.0.1:8734/v1",
 		ASRModel:         "cohere-transcribe-03-2026",
 		OpenAIASRBaseURL: "http://127.0.0.1:8090/v1",
+		LlamaServerPath:  "",
 		TypeDelayMs:      0,
 		DictationHistory: true,
 		ModifierGating:   true,
@@ -111,6 +113,9 @@ func LoadUserSettings(home string) (*UserSettings, error) {
 		}
 		if v, ok := envMap["OPENAI_ASR_BASE_URL"]; ok && v != "" {
 			s.OpenAIASRBaseURL = v
+		}
+		if v, ok := envMap["LLAMA_SERVER_PATH"]; ok {
+			s.LlamaServerPath = v
 		}
 		if v, ok := envMap["VOXI_HISTORY"]; ok {
 			s.DictationHistory = parseBool(v, s.DictationHistory)
@@ -189,6 +194,7 @@ func FormatEnv(s *UserSettings, existing map[string]string) []byte {
 	if s.OpenAIASRBaseURL != "" {
 		merged["OPENAI_ASR_BASE_URL"] = s.OpenAIASRBaseURL
 	}
+	merged["LLAMA_SERVER_PATH"] = s.LlamaServerPath
 	merged["VOXI_HISTORY"] = strconv.FormatBool(s.DictationHistory)
 	merged["VOXI_MODIFIER_GATING"] = strconv.FormatBool(s.ModifierGating)
 
@@ -199,6 +205,7 @@ func FormatEnv(s *UserSettings, existing map[string]string) []byte {
 		"OPENAI_BASE_URL",
 		"VOXI_ASR_MODEL",
 		"OPENAI_ASR_BASE_URL",
+		"LLAMA_SERVER_PATH",
 		"VOXI_HISTORY",
 		"VOXI_MODIFIER_GATING",
 	}

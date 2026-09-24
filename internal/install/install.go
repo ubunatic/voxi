@@ -6,7 +6,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +18,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"ubunatic.com/voxi"
+	"ubunatic.com/voxi/internal/config"
+	"ubunatic.com/voxi/spec"
 )
 
 // Effects contains host operations used by Install. Tests can inject every
@@ -94,6 +98,25 @@ func Install(ctx context.Context, out io.Writer, e Effects, modifierd bool) erro
 	userBin := filepath.Join(e.Home, ".local", "bin")
 	serviceDir := filepath.Join(e.Home, ".config", "systemd", "user")
 	voxiPath := filepath.Join(userBin, "voxi")
+	settings, err := config.LoadUserSettings(e.Home)
+	if err != nil {
+		return fmt.Errorf("install: load user settings: %w", err)
+	}
+	models, err := spec.LoadModels()
+	if err != nil {
+		return fmt.Errorf("install: load model spec: %w", err)
+	}
+	selectedModel, modelExists := models.Models[settings.ASRModel]
+	r2t2Active := modelExists && selectedModel.Engine == "openai-transcribe" && isLoopbackURL(selectedModel.BaseURL)
+	llamaServerPath, llamaErr := resolveLlamaServerPath(e, settings.LlamaServerPath)
+	if llamaErr != nil && r2t2Active {
+		return fmt.Errorf("install: R2T2 is selected but llama-server could not be resolved; set llama_server_path in ~/.config/voxi/config.yaml or install llama-server on PATH: %w", llamaErr)
+	}
+	if llamaErr != nil {
+		// The unit is installed even when disabled. Keep a valid absolute
+		// ExecStart so systemd can load it; activation will remain disabled.
+		llamaServerPath = "/usr/bin/llama-server"
+	}
 
 	phase := func(name string, fn func() error) error {
 		fmt.Fprintf(out, "[%s] ", name)
@@ -145,7 +168,7 @@ func Install(ctx context.Context, out io.Writer, e Effects, modifierd bool) erro
 		if err := e.MkdirAll(serviceDir, 0755); err != nil {
 			return fmt.Errorf("create %s: %w", serviceDir, err)
 		}
-		for _, name := range []string{"voxi-agent.service", "voxi-eager.service", "dotoold.service"} {
+		for _, name := range []string{"voxi-agent.service", "voxi-eager.service", "dotoold.service", "voxi-r2t2.service"} {
 			data, err := voxi.ServiceAsset(name)
 			if err != nil {
 				return fmt.Errorf("read embedded %s: %w", name, err)
@@ -172,6 +195,9 @@ func Install(ctx context.Context, out io.Writer, e Effects, modifierd bool) erro
 				layout := detectXKBLayout(ctx, e)
 				data = bytes.ReplaceAll(data, []byte("@DOTOOL_XKB_LAYOUT@"), []byte(layout))
 			}
+			if name == "voxi-r2t2.service" {
+				data = bytes.ReplaceAll(data, []byte("@LLAMA_SERVER_PATH@"), []byte(llamaServerPath))
+			}
 			if err := e.WriteFile(filepath.Join(serviceDir, name), data, 0644); err != nil {
 				return fmt.Errorf("write %s: %w", name, err)
 			}
@@ -190,6 +216,16 @@ func Install(ctx context.Context, out io.Writer, e Effects, modifierd bool) erro
 		}
 		if err := e.Run(ctx, "systemctl", "--user", "enable", "--now", "voxi-agent.service"); err != nil {
 			return fmt.Errorf("enable/start voxi-agent.service: %w", err)
+		}
+		if r2t2Active {
+			if err := e.Run(ctx, "systemctl", "--user", "enable", "--now", "voxi-r2t2.service"); err != nil {
+				return fmt.Errorf("enable/start voxi-r2t2.service: %w", err)
+			}
+		} else {
+			if err := e.Run(ctx, "systemctl", "--user", "disable", "--now", "voxi-r2t2.service"); err != nil {
+				return fmt.Errorf("disable/stop voxi-r2t2.service: %w", err)
+			}
+			fmt.Fprintf(out, "[R2T2 service] disabled (selected ASR model %q does not use a loopback openai-transcribe endpoint)\n", settings.ASRModel)
 		}
 		return nil
 	}); err != nil {
@@ -234,6 +270,34 @@ func Install(ctx context.Context, out io.Writer, e Effects, modifierd bool) erro
 		}
 		return nil
 	})
+}
+
+func isLoopbackURL(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Hostname() == "" {
+		return false
+	}
+	if strings.EqualFold(u.Hostname(), "localhost") {
+		return true
+	}
+	ip := net.ParseIP(u.Hostname())
+	return ip != nil && ip.IsLoopback()
+}
+
+func resolveLlamaServerPath(e Effects, configured string) (string, error) {
+	name := configured
+	if name == "" {
+		name = "llama-server"
+	}
+	path, err := e.LookPath(name)
+	if err != nil {
+		return "", fmt.Errorf("look up %q: %w", name, err)
+	}
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("make llama-server path absolute: %w", err)
+	}
+	return absolute, nil
 }
 
 // detectXKBLayout mirrors the Makefile install-dotoold target's

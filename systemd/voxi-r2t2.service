@@ -1,0 +1,15 @@
+[Unit]
+Description=Voxi R2T2 local transcription server
+Documentation=https://codeberg.org/ubunatic/voxi
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=@LLAMA_SERVER_PATH@ -m %h/.cache/voxi/models/Confucius4-R2T2-Q4_K_M.gguf --mmproj %h/.cache/voxi/models/mmproj-Confucius4-R2T2-Q8_0.gguf -ngl 99 -c 4096 --no-warmup --port 18131
+Restart=on-failure
+RestartSec=3
+MemoryMax=8G
+
+[Install]
+WantedBy=graphical-session.target

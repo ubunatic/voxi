@@ -69,7 +69,7 @@ func TestInstallDefaultIsUserScopedAndIdempotent(t *testing.T) {
 	if strings.Contains(strings.Join(*commands, "\n"), "sudo") {
 		t.Fatalf("default install invoked sudo: %v", *commands)
 	}
-	if got := len(*commands); got != 14 {
+	if got := len(*commands); got != 16 {
 		t.Fatalf("commands = %d, want complete dependency/service sequence twice: %v", got, *commands)
 	}
 	if !strings.Contains((*commands)[0], "curl -fL") || !strings.Contains((*commands)[3], "go install") || !strings.Contains((*commands)[4], "daemon-reload") {
@@ -101,6 +101,122 @@ func TestInstallDefaultIsUserScopedAndIdempotent(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "modifier daemon] skipped") {
 		t.Fatalf("missing optional phase report: %s", out.String())
+	}
+}
+
+func TestInstallR2T2EnablesUnitAndUsesResolvedBinary(t *testing.T) {
+	e, commands := testEffects(t)
+	configDir := filepath.Join(e.Home, ".config", "voxi")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte("asr_model: r2t2-confucius4\nllama_server_path: /opt/llama/bin/llama-server\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	e.LookPath = func(name string) (string, error) {
+		if name != "/opt/llama/bin/llama-server" {
+			t.Fatalf("LookPath(%q), want configured path", name)
+		}
+		return name, nil
+	}
+	var out strings.Builder
+	if err := Install(context.Background(), &out, *e, false); err != nil {
+		t.Fatal(err)
+	}
+	unit, err := os.ReadFile(filepath.Join(e.Home, ".config/systemd/user/voxi-r2t2.service"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"ExecStart=/opt/llama/bin/llama-server",
+		"-c 4096",
+		"--port 18131",
+		"MemoryMax=",
+		"Restart=on-failure",
+	} {
+		if !strings.Contains(string(unit), want) {
+			t.Fatalf("R2T2 unit missing %q: %s", want, unit)
+		}
+	}
+	if strings.Contains(string(unit), "@LLAMA_SERVER_PATH@") {
+		t.Fatalf("R2T2 unit retains a binary placeholder: %s", unit)
+	}
+	if !strings.Contains(strings.Join(*commands, "\n"), "systemctl --user enable --now voxi-r2t2.service") {
+		t.Fatalf("R2T2 unit not enabled for selected loopback backend: %v", *commands)
+	}
+}
+
+func TestInstallDisablesR2T2UnitWhenBackendIsNotSelected(t *testing.T) {
+	e, commands := testEffects(t)
+	e.LookPath = func(string) (string, error) { return "", errors.New("not found") }
+	var out strings.Builder
+	if err := Install(context.Background(), &out, *e, false); err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(*commands, "\n")
+	if !strings.Contains(joined, "systemctl --user disable --now voxi-r2t2.service") {
+		t.Fatalf("R2T2 unit not disabled when backend is not selected: %v", *commands)
+	}
+	if !strings.Contains(out.String(), "[R2T2 service] disabled") {
+		t.Fatalf("install did not explain why R2T2 is inactive: %s", out.String())
+	}
+	unit, err := os.ReadFile(filepath.Join(e.Home, ".config/systemd/user/voxi-r2t2.service"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(unit), "@LLAMA_SERVER_PATH@") {
+		t.Fatalf("inactive unit retains a binary placeholder: %s", unit)
+	}
+}
+
+func TestInstallFindsLlamaServerOnPathWhenSettingIsEmpty(t *testing.T) {
+	e, commands := testEffects(t)
+	configDir := filepath.Join(e.Home, ".config", "voxi")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte("asr_model: r2t2-confucius4\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	e.LookPath = func(name string) (string, error) {
+		if name != "llama-server" {
+			t.Fatalf("LookPath(%q), want PATH lookup", name)
+		}
+		return "/opt/llama/bin/llama-server", nil
+	}
+	var out strings.Builder
+	if err := Install(context.Background(), &out, *e, false); err != nil {
+		t.Fatal(err)
+	}
+	unit, err := os.ReadFile(filepath.Join(e.Home, ".config/systemd/user/voxi-r2t2.service"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(unit), "ExecStart=/opt/llama/bin/llama-server") {
+		t.Fatalf("PATH resolved binary missing from unit: %s", unit)
+	}
+	if !strings.Contains(strings.Join(*commands, "\n"), "systemctl --user enable --now voxi-r2t2.service") {
+		t.Fatalf("R2T2 unit not enabled with PATH binary: %v", *commands)
+	}
+}
+
+func TestInstallRequiresLlamaServerOnlyForActiveLoopbackBackend(t *testing.T) {
+	e, commands := testEffects(t)
+	configDir := filepath.Join(e.Home, ".config", "voxi")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte("asr_model: r2t2-confucius4\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	e.LookPath = func(string) (string, error) { return "", errors.New("not found") }
+	var out strings.Builder
+	err := Install(context.Background(), &out, *e, false)
+	if err == nil || !strings.Contains(err.Error(), "llama_server_path") {
+		t.Fatalf("Install error = %v, want actionable llama_server_path error", err)
+	}
+	if strings.Contains(strings.Join(*commands, "\n"), "enable --now voxi-r2t2.service") {
+		t.Fatalf("R2T2 unit activated without a resolved binary: %v", *commands)
 	}
 }
 
@@ -246,6 +362,3 @@ func TestInstallDownloadFailureProvidesActionableRemediation(t *testing.T) {
 		t.Fatalf("expected detailed actionable error message, got: %s", msg)
 	}
 }
-
-
-
