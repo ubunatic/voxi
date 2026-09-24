@@ -118,21 +118,21 @@ and implementation tickets or milestones are filed. No code in this ticket.
   22,050 Hz / 12.31 s, Festival at 16,000 Hz / 13.57 s, Mimic at 44,100 Hz /
   13.49 s. First and repeat process wall times were respectively 0.01 / 0.01 s,
   6.47 / 6.56 s, and 0.30 / 0.31 s. These are synthesis startup timings, not
-  listening-quality judgments; engine quality selection remains for the user
-  after listening.
+  listening-quality judgments. The user selected Festival as MVP and
+  espeak-ng as fallback in M1 user verification below.
 - **Package availability:** this Fedora 44 host has Fedora packages available
   for all three (`espeak-ng` 1.52.0-3.fc44, `festival` 2.5.0-29.fc44,
   `mimic` 1.3.0.1-16.fc43). Debian/Ubuntu package names and availability were
-  not verified because this host has no `apt` tooling; that portability check
-  remains open.
+  not verified because this host has no `apt` tooling; the user has since
+  marked Debian/Ubuntu portability out of scope.
 - **MPRIS canary:** `scripts/canary_tts/mpris.py` registered
   `org.mpris.MediaPlayer2.VoxiCanary`; a direct D-Bus `PlayPause` call appeared
   in the canary method log. With GNOME running and dotoold active, sending
   `XF86AudioPlay`, `XF86AudioNext`, and `XF86AudioPrev` through `dotoolc`
   produced no canary method calls. Firefox also owned an MPRIS name in this
-  session, so injected-key routing to this canary is not confirmed. The user
-  still needs to check physical media keys and routing with other players
-  stopped.
+  session, so dotool-injected routing was not confirmed. The subsequent M1
+  physical-key check below confirmed keyboard and Bluetooth-speaker media keys
+  reach the canary.
 - **Ownership/crash canary:** `scripts/canary_tts/ownership.py` started a
   dummy direct playback child configured with Linux `PR_SET_PDEATHSIG`, then
   `SIGKILL`ed its owner. The child exited and the canary passed. This validates
@@ -166,3 +166,23 @@ and implementation tickets or milestones are filed. No code in this ticket.
   reaches the whole group. Add a test that SIGKILLs the owner with a real
   Festival child and asserts no `festival` process is left.
 - Canary scripts stay under `scripts/canary_tts/`; the product code is Go.
+
+### M2 results (2026-09-24)
+
+- **First audio:** `scripts/canary_tts/first_audio/` measured 2.328 s from
+  starting a multi-paragraph reply to the first Festival WAV being ready and a
+  silent `pw-play` test process starting. It emitted no audio. The next
+  paragraph finished synthesis while that player process was still active,
+  confirming prefetch overlap. This measures readiness/player launch, not
+  acoustic onset on a physical output device.
+- **Crash containment:** `scripts/canary_tts/crash/`, run against a locally
+  built `voxi`, started a real `text2wave` Festival descendant, then SIGKILLed
+  its owner. The canary passed: Festival exited and its process group was
+  empty. The hidden `voxi __tts-supervise` subcommand sets itself as a child
+  subreaper; the monitor starts it with `PR_SET_PDEATHSIG`. Normal shutdown
+  also stops and reaps the engine/player process groups.
+- **MVP:** `voxi say` accepts arguments or stdin only while `voxi monitor -w`
+  owns the queue socket. It queues sentence/paragraph chunks; the monitor panel
+  exposes playback, previous/next, stop and clear controls. The runtime socket
+  is removed on normal exit, stale sockets are replaced on next start, and a
+  missing/stale socket returns a bounded “no monitor” error.

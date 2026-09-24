@@ -37,6 +37,31 @@ actions:
     short: "all"
     keys: ["a", "A"]
     category: "system"
+  tts-play-pause:
+    title: "TTS play/pause"
+    short: "mplay/pause"
+    keys: ["m", "M"]
+    category: "monitor"
+  tts-previous:
+    title: "previous TTS chunk"
+    short: "bprevious"
+    keys: ["b", "B"]
+    category: "monitor"
+  tts-next:
+    title: "next TTS chunk"
+    short: "nnext"
+    keys: ["n", "N"]
+    category: "monitor"
+  tts-stop:
+    title: "stop TTS"
+    short: "xstop"
+    keys: ["x"]
+    category: "monitor"
+  tts-clear:
+    title: "clear TTS queue"
+    short: "kclear"
+    keys: ["k"]
+    category: "monitor"
   quit:
     title: "quit monitor"
     short: "quit"

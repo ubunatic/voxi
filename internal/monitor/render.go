@@ -11,6 +11,7 @@ import (
 	"golang.org/x/term"
 
 	"ubunatic.com/voxi/internal/asr"
+	"ubunatic.com/voxi/internal/tts"
 )
 
 // cachedTerminalWidth holds a terminal width refreshed on SIGWINCH by
@@ -553,6 +554,47 @@ func PrintVoiceResourceReport(w io.Writer, r VoiceResourceReport, sec ResourceSe
 		formatActionBadge("daemons", sec.Daemons),
 		formatActionLabel("all"),
 		formatActionLabel("quit"))
+}
+
+// PrintTTSPanel appends the monitor-gated playback queue and its local controls.
+func PrintTTSPanel(w io.Writer, s tts.Snapshot) {
+	width := currentTerminalWidth() - 2
+	if width < 24 {
+		width = 24
+	}
+	fmt.Fprintf(w, "\n \x1b[1mTTS · %s\x1b[0m\n", s.Status)
+	if s.Current == "" {
+		fmt.Fprintln(w, "  Now: (idle)")
+	} else {
+		fmt.Fprintf(w, "  %s\n", TruncateLineANSI("Now: "+s.Current, width))
+	}
+	if len(s.Queue) == 0 {
+		fmt.Fprintln(w, "  Queue: empty")
+	} else {
+		fmt.Fprintf(w, "  Queue: %d chunk(s)\n", len(s.Queue))
+		shown := len(s.Queue)
+		if shown > 3 {
+			shown = 3
+		}
+		for i := 0; i < shown; i++ {
+			fmt.Fprintf(w, "  %d. %s\n", i+1, TruncateLineANSI(s.Queue[i], width-4))
+		}
+		if remaining := len(s.Queue) - shown; remaining > 0 {
+			fmt.Fprintf(w, "  … and %d more\n", remaining)
+		}
+	}
+	if s.TimeToFirstAudio > 0 {
+		fmt.Fprintf(w, "  First audio: %s\n", s.TimeToFirstAudio.Round(time.Millisecond))
+	}
+	if s.LastError != "" {
+		fmt.Fprintf(w, "  \x1b[31mTTS error: %s\x1b[0m\n", TruncateLineANSI(s.LastError, width))
+	}
+	fmt.Fprintf(w, "  %s  %s  %s  %s  %s\n",
+		formatActionLabel("tts-play-pause"),
+		formatActionLabel("tts-previous"),
+		formatActionLabel("tts-next"),
+		formatActionLabel("tts-stop"),
+		formatActionLabel("tts-clear"))
 }
 
 // actionKeyAndLabel resolves an action's canonical display key (its first configured

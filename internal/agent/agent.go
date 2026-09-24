@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"ubunatic.com/voxi/internal/deps"
+	"ubunatic.com/voxi/internal/runtimepath"
 )
 
 // Mode identifies the transcription backend selected by the Voxi agent.
@@ -100,11 +101,7 @@ type persistedState struct {
 
 // DefaultSocketPath returns the per-user Unix socket used by the agent.
 func DefaultSocketPath() string {
-	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
-	if runtimeDir == "" {
-		runtimeDir = fmt.Sprintf("/run/user/%d", os.Getuid())
-	}
-	return filepath.Join(runtimeDir, "voxi", "agent.sock")
+	return filepath.Join(runtimepath.VoxiDir(os.Getenv("XDG_RUNTIME_DIR"), os.Getuid()), "agent.sock")
 }
 
 // DefaultStatePath returns the persistent selected-mode state location.

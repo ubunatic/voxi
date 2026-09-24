@@ -14,6 +14,7 @@ import (
 
 	"ubunatic.com/voxi/audiolevel"
 	"ubunatic.com/voxi/internal/deps"
+	"ubunatic.com/voxi/internal/tts"
 	"ubunatic.com/voxi/spec"
 )
 
@@ -115,6 +116,18 @@ func RunWatchResources(ctx context.Context, d deps.Dependencies, interval time.D
 	sigCtx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	executable, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("resolve voxi executable for TTS supervision: %w", err)
+	}
+	ttsManager := tts.NewManager(sigCtx, tts.NewEngine(d, executable))
+	defer ttsManager.Close()
+	ttsServer, err := tts.StartServer(sigCtx, "", ttsManager)
+	if err != nil {
+		return fmt.Errorf("start monitor TTS socket: %w", err)
+	}
+	defer ttsServer.Close()
+
 	oldState, err := exec.Command("stty", "-F", "/dev/tty", "-g").Output()
 	if err == nil {
 		_ = exec.Command("stty", "-F", "/dev/tty", "cbreak", "-echo").Run()
@@ -177,6 +190,21 @@ func RunWatchResources(ctx context.Context, d deps.Dependencies, interval time.D
 			requestRedraw()
 		case "daemons":
 			sec.Daemons = !sec.Daemons
+			requestRedraw()
+		case "tts-play-pause":
+			_ = ttsManager.Control(tts.ActionPlayPause)
+			requestRedraw()
+		case "tts-previous":
+			_ = ttsManager.Control(tts.ActionPrevious)
+			requestRedraw()
+		case "tts-next":
+			_ = ttsManager.Control(tts.ActionNext)
+			requestRedraw()
+		case "tts-stop":
+			_ = ttsManager.Control(tts.ActionStop)
+			requestRedraw()
+		case "tts-clear":
+			_ = ttsManager.Control(tts.ActionClear)
 			requestRedraw()
 		case "all":
 			sec = DefaultResourceSections()
@@ -300,6 +328,7 @@ func RunWatchResources(ctx context.Context, d deps.Dependencies, interval time.D
 		var buf bytes.Buffer
 		buf.WriteString("\033[H")
 		PrintVoiceResourceReport(&buf, report, activeSec)
+		PrintTTSPanel(&buf, ttsManager.Snapshot())
 		buf.WriteString("\033[J")
 		_, _ = d.Stdout.Write(buf.Bytes())
 	}

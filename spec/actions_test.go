@@ -18,7 +18,7 @@ func TestLoadActions(t *testing.T) {
 			t.Errorf("action %q: keys must not be empty", id)
 		}
 	}
-	for _, id := range []string{"speed", "hardware", "transcript", "daemons", "all", "quit"} {
+	for _, id := range []string{"speed", "hardware", "transcript", "daemons", "all", "tts-play-pause", "tts-previous", "tts-next", "tts-stop", "tts-clear", "quit"} {
 		if _, ok := s.Actions[id]; !ok {
 			t.Errorf("expected action %q to be defined", id)
 		}
@@ -42,6 +42,9 @@ func TestKeyDispatch(t *testing.T) {
 	}
 	if dispatch[27] != "quit" {
 		t.Errorf(`dispatch[27] (<esc>) = %q, want "quit"`, dispatch[27])
+	}
+	if dispatch['m'] != "tts-play-pause" || dispatch['b'] != "tts-previous" || dispatch['n'] != "tts-next" || dispatch['x'] != "tts-stop" || dispatch['k'] != "tts-clear" {
+		t.Errorf("TTS dispatch = m:%q b:%q n:%q x:%q k:%q", dispatch['m'], dispatch['b'], dispatch['n'], dispatch['x'], dispatch['k'])
 	}
 }
 
