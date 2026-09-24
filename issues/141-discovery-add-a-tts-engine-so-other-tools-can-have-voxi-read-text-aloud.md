@@ -221,3 +221,14 @@ Monitor keys: m play/pause, b/n prev/next, x stop, k clear.
 - **Verification:** `go test ./...` and `make install` passed. The test stops
   playback before capture; no recording of Voxi's own TTS is accepted by the
   recording path.
+
+### M3 delivered (4724490): MPRIS media keys, Super-x stops TTS, panel fix
+Host review: the diff is scoped, adds godbus/dbus v5, and `go test ./...` is green.
+
+### M4 Pre-Work / Required Refinements
+- **Dictation must never depend on TTS.** `stopTTSForRecording` returns an
+  error for any failure other than no-monitor, which aborts the recording. A
+  TTS socket error or a 2 s timeout must only log a warning; recording goes
+  ahead. Also reduce the time recording can wait on TTS: a wedged monitor
+  must not add up to 2 s to the Super-x start. Test both.
+- Await the user's live media-key and Super-x check. Record findings here.
