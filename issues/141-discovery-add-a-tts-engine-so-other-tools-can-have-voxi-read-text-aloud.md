@@ -1,6 +1,6 @@
 # 141 — Discovery: add a TTS engine so other tools can have voxi read text aloud
 
-**Status**: Open
+**Status**: Closed — M1-M4 delivered and live-verified (7e86023, 8e07ce3, 4724490, c36f148)
 **Priority**: P3 (Low)
 **Severity**: Minor
 **Category**: Feature / Discovery
