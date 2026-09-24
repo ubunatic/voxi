@@ -196,3 +196,11 @@ Monitor keys: m play/pause, b/n prev/next, x stop, k clear.
 ### M3 Pre-Work / Required Refinements
 - Wait for the user's live check (audible playback, the keys, and quitting the
   monitor stopping speech) before starting M3. Record any findings here.
+- **User live check: LGTM.** Audio, keys and quit-stops-speech all work.
+  First audio in the live panel was 1.321 s.
+- **Bug: TTS panel leftovers.** When a line gets shorter, the old text is not
+  erased. Observed:
+  `TTS · idleingizing` / `Now: (idle)nd paragraph to test skipping.` /
+  `Queue: emptynk(s)`. Clear each rendered TTS line to end of line (or pad it
+  to the panel width, measuring display width) the way the other monitor rows
+  do. Add a render test where a long state is followed by a shorter one.
