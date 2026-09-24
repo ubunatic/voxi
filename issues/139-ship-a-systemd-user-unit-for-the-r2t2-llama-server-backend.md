@@ -73,3 +73,19 @@ Live findings at filing time:
   duplicating unit logic. Update `@docs/InstallationArchitecture.md` and
   `@docs/ASREngines.md`. After `make install && voxi install`, confirm on this
   machine that the port answers and `voxi monitor` shows online.
+
+### M1 delivered (5e0cb08): R2T2 unit + install
+Live: `make install` with `llama_server_path` set to lmcoder's b10590 build.
+Unit enabled and active, `:18131/health` returns ok, VRAM 8.4 GB total (includes
+the 32k-context cleanup LLM), RAM 13 GB available.
+
+### M2 Pre-Work / Required Refinements
+- The activation rule is too broad: any future loopback `openai-transcribe`
+  model would start the R2T2 server. Tie activation to the unit's own backend
+  (the selected model's `base_url` host:port equals the unit's `127.0.0.1:18131`,
+  with the port taken from one place, not duplicated) and add a test for a
+  different loopback port.
+- When the backend is active, check that the model and mmproj files exist and
+  fail with a clear message, rather than letting the unit crash-loop.
+- Unresolved path fallback `/usr/bin/llama-server`: fine, but print a line
+  saying so.
