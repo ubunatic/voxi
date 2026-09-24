@@ -77,3 +77,33 @@ and implementation tickets or milestones are filed. No code in this ticket.
   HTTP `/v1/audio/speech` endpoint.
 - Whether new text queues behind current playback or replaces it.
 - Whether `voxi monitor` shows TTS state.
+
+## 6. Addendum (user, 2026-09-24): gate the MVP behind `voxi monitor -w`
+
+- TTS only runs while `voxi monitor -w` is open. With no monitor running,
+  `voxi say` refuses with a clear message (it does not queue silently).
+- The monitor has TTS controls from the start: a queue/now-playing panel,
+  play/pause, prev/next, stop and clear. Media keys and Super-x come on top of
+  these controls; they don't replace them.
+- **Quitting the monitor stops everything:** playback, the queue and any engine
+  process. After you quit, nothing is left speaking or running.
+- Open design point: either the monitor process owns playback, or voxi-agent
+  owns it and the monitor holds a lease that ends playback when the monitor
+  exits (including on crash or kill). Choose in M1; the crash case needs a test.
+
+### Proposed (awaiting user confirmation)
+- Transport: `voxi say` (text from arguments or stdin), delivered to whichever
+  process owns playback.
+- New text queues behind current playback; Super-x or stop clears the queue.
+
+### Milestones (draft)
+- **M1 (canaries + ownership):** compare the packaged engines, probe MPRIS
+  media-key routing on GNOME, and decide who owns playback, including the
+  monitor-exit and crash semantics.
+- **M2 (monitor-gated MVP):** `voxi say` sends to a queue that plays only
+  while `voxi monitor -w` is open. Monitor panel and key controls.
+  Quitting the monitor stops everything.
+- **M3 (media keys + Super-x):** MPRIS prev/next/play/pause; Super-x stops
+  playback; voxi does not transcribe its own playback.
+- **M4 (install, opt-out):** `voxi install` sets up the engine by default,
+  with an opt-out setting.
