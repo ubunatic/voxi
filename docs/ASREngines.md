@@ -63,6 +63,15 @@ llama-server -m ~/.cache/voxi/models/Confucius4-R2T2-Q4_K_M.gguf \
   -ngl 99 -c 4096 --no-warmup --port 18131
 ```
 
+`voxi install` writes and manages `voxi-r2t2.service`. It resolves
+`llama_server_path` from `~/.config/voxi/config.yaml`, then falls back to
+`llama-server` on `PATH`; an active R2T2 selection fails with a clear error if
+neither resolves. The unit port is generated from this model's `base_url` in
+`spec/models.yaml`. Installation enables it only when the selected
+`openai-transcribe` model has the same `127.0.0.1` host and port, and only when
+both the model and mmproj files exist under `~/.cache/voxi/models/`. Other
+selections stop and disable the service.
+
 ### Trap: `-c 4096` is not optional on an iGPU
 
 On AMD Cezanne, VRAM *is* system RAM. `llama-server` fits its context to the free

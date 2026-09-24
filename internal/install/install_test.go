@@ -106,6 +106,7 @@ func TestInstallDefaultIsUserScopedAndIdempotent(t *testing.T) {
 
 func TestInstallR2T2EnablesUnitAndUsesResolvedBinary(t *testing.T) {
 	e, commands := testEffects(t)
+	writeR2T2Models(t, e.Home)
 	configDir := filepath.Join(e.Home, ".config", "voxi")
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		t.Fatal(err)
@@ -160,6 +161,9 @@ func TestInstallDisablesR2T2UnitWhenBackendIsNotSelected(t *testing.T) {
 	if !strings.Contains(out.String(), "[R2T2 service] disabled") {
 		t.Fatalf("install did not explain why R2T2 is inactive: %s", out.String())
 	}
+	if !strings.Contains(out.String(), "fallback /usr/bin/llama-server") {
+		t.Fatalf("install did not report fallback ExecStart path: %s", out.String())
+	}
 	unit, err := os.ReadFile(filepath.Join(e.Home, ".config/systemd/user/voxi-r2t2.service"))
 	if err != nil {
 		t.Fatal(err)
@@ -171,6 +175,7 @@ func TestInstallDisablesR2T2UnitWhenBackendIsNotSelected(t *testing.T) {
 
 func TestInstallFindsLlamaServerOnPathWhenSettingIsEmpty(t *testing.T) {
 	e, commands := testEffects(t)
+	writeR2T2Models(t, e.Home)
 	configDir := filepath.Join(e.Home, ".config", "voxi")
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		t.Fatal(err)
@@ -202,6 +207,7 @@ func TestInstallFindsLlamaServerOnPathWhenSettingIsEmpty(t *testing.T) {
 
 func TestInstallRequiresLlamaServerOnlyForActiveLoopbackBackend(t *testing.T) {
 	e, commands := testEffects(t)
+	writeR2T2Models(t, e.Home)
 	configDir := filepath.Join(e.Home, ".config", "voxi")
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		t.Fatal(err)
@@ -217,6 +223,78 @@ func TestInstallRequiresLlamaServerOnlyForActiveLoopbackBackend(t *testing.T) {
 	}
 	if strings.Contains(strings.Join(*commands, "\n"), "enable --now voxi-r2t2.service") {
 		t.Fatalf("R2T2 unit activated without a resolved binary: %v", *commands)
+	}
+}
+
+func TestInstallDoesNotStartR2T2ForDifferentLoopbackPort(t *testing.T) {
+	e, commands := testEffects(t)
+	configDir := filepath.Join(e.Home, ".config", "voxi")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte("asr_model: openai-transcribe-gemini\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	e.LookPath = func(string) (string, error) { return "", errors.New("not found") }
+	var out strings.Builder
+	if err := Install(context.Background(), &out, *e, false); err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(*commands, "\n")
+	if strings.Contains(joined, "enable --now voxi-r2t2.service") {
+		t.Fatalf("R2T2 unit started for another loopback endpoint: %v", *commands)
+	}
+	if !strings.Contains(joined, "disable --now voxi-r2t2.service") {
+		t.Fatalf("R2T2 unit was not disabled: %v", *commands)
+	}
+}
+
+func TestSameLoopbackEndpointRejectsDifferentPort(t *testing.T) {
+	if sameLoopbackEndpoint("http://127.0.0.1:8090/v1", "http://127.0.0.1:18131/v1") {
+		t.Fatal("different loopback port matched the R2T2 endpoint")
+	}
+	if !sameLoopbackEndpoint("http://127.0.0.1:18131/v1", "http://127.0.0.1:18131/v1") {
+		t.Fatal("identical R2T2 endpoint did not match")
+	}
+}
+
+func TestInstallR2T2RequiresBothModelFiles(t *testing.T) {
+	e, commands := testEffects(t)
+	modelsDir := filepath.Join(e.Home, ".cache", "voxi", "models")
+	if err := os.MkdirAll(modelsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(modelsDir, "Confucius4-R2T2-Q4_K_M.gguf"), []byte("test model"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	configDir := filepath.Join(e.Home, ".config", "voxi")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte("asr_model: r2t2-confucius4\nllama_server_path: /opt/llama/bin/llama-server\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	e.LookPath = func(string) (string, error) { return "/opt/llama/bin/llama-server", nil }
+	var out strings.Builder
+	err := Install(context.Background(), &out, *e, false)
+	if err == nil || !strings.Contains(err.Error(), "mmproj-Confucius4-R2T2-Q8_0.gguf") {
+		t.Fatalf("Install error = %v, want actionable missing mmproj error", err)
+	}
+	if strings.Contains(strings.Join(*commands, "\n"), "enable --now voxi-r2t2.service") {
+		t.Fatalf("R2T2 unit activated with missing model files: %v", *commands)
+	}
+}
+
+func writeR2T2Models(t *testing.T, home string) {
+	t.Helper()
+	modelsDir := filepath.Join(home, ".cache", "voxi", "models")
+	if err := os.MkdirAll(modelsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"Confucius4-R2T2-Q4_K_M.gguf", "mmproj-Confucius4-R2T2-Q8_0.gguf"} {
+		if err := os.WriteFile(filepath.Join(modelsDir, name), []byte("test model"), 0644); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

@@ -46,16 +46,7 @@ install-all: ⚙️ install  # compatibility alias for the converged user instal
 install-dotool: ⚙️  # install dotool (direct keystroke injection) to ~/go/bin
 	go install git.sr.ht/~geb/dotool@latest
 
-# DOTOOL_XKB_LAYOUT: auto-detected from localectl's X11 Layout (this machine's actual
-# physical keyboard layout); override per machine, e.g. `make DOTOOL_XKB_LAYOUT=us install-dotoold`
-DOTOOL_XKB_LAYOUT ?= $(shell localectl status 2>/dev/null | awk -F': *' '/X11 Layout/{print $$2}')
-
-install-dotoold: ⚙️ install-dotool  # install dotoold/dotoolc scripts + dotoold.service, enable+start it (persistent uinput daemon needed for reliable GNOME Wayland typing; issue 081)
-	install -m 0755 "$$(go list -m -f '{{.Dir}}' git.sr.ht/~geb/dotool@latest)/dotoold" "$$(go list -m -f '{{.Dir}}' git.sr.ht/~geb/dotool@latest)/dotoolc" $(HOME)/go/bin/
-	mkdir -p $(HOME)/.config/systemd/user
-	sed 's|@DOTOOL_XKB_LAYOUT@|$(DOTOOL_XKB_LAYOUT)|' systemd/dotoold.service > $(HOME)/.config/systemd/user/dotoold.service
-	systemctl --user daemon-reload
-	systemctl --user enable --now dotoold.service
+install-dotoold: ⚙️ install  # compatibility target; voxi install owns dotoold dependencies and user service (issue 081)
 
 restart-service: ⚙️ install  # rebuild, install, and restart the running voxi-agent user service
 	systemctl --user restart voxi-agent.service
@@ -82,10 +73,7 @@ install-crispasr: ⚙️  # download official CrispASR release binary (crispasr,
 install-modifierd: ⚙️ build  # install user services and optional system modifier daemon
 	./$(BINARY) install --modifierd
 
-install-user-services: ⚙️  # install systemd user service units
-	mkdir -p $(HOME)/.config/systemd/user
-	cp systemd/voxi-agent.service systemd/voxi-eager.service $(HOME)/.config/systemd/user/
-	systemctl --user daemon-reload
+install-user-services: ⚙️ install  # compatibility target; voxi install owns and activates all user service units
 
 uninstall: ⚙️  # remove installed binaries and services
 	rm -f $(HOME)/go/bin/$(BINARY) $(HOME)/go/bin/$(MODIFIER)

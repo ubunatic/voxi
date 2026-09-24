@@ -6,13 +6,13 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -33,6 +33,7 @@ type Effects struct {
 	LookPath      func(string) (string, error)
 	MkdirAll      func(string, os.FileMode) error
 	ReadFile      func(string) ([]byte, error)
+	Stat          func(string) (os.FileInfo, error)
 	WriteFile     func(string, []byte, os.FileMode) error
 	Chmod         func(string, os.FileMode) error
 	Run           func(context.Context, string, ...string) error
@@ -63,6 +64,7 @@ func DefaultEffects() Effects {
 		LookPath:  exec.LookPath,
 		MkdirAll:  os.MkdirAll,
 		ReadFile:  os.ReadFile,
+		Stat:      os.Stat,
 		WriteFile: os.WriteFile,
 		Chmod:     os.Chmod,
 		Run: func(ctx context.Context, name string, args ...string) error {
@@ -92,7 +94,7 @@ func Install(ctx context.Context, out io.Writer, e Effects, modifierd bool) erro
 	if e.Home == "" {
 		return fmt.Errorf("install: HOME is empty; set HOME to a user home directory")
 	}
-	if e.Executable == nil || e.BuildModifier == nil || e.LookPath == nil || e.MkdirAll == nil || e.ReadFile == nil || e.WriteFile == nil || e.Chmod == nil || e.Run == nil || e.RunOutput == nil || e.RunStdin == nil || e.Symlink == nil || e.Remove == nil || e.DownloadHTTP == nil {
+	if e.Executable == nil || e.BuildModifier == nil || e.LookPath == nil || e.MkdirAll == nil || e.ReadFile == nil || e.Stat == nil || e.WriteFile == nil || e.Chmod == nil || e.Run == nil || e.RunOutput == nil || e.RunStdin == nil || e.Symlink == nil || e.Remove == nil || e.DownloadHTTP == nil {
 		return fmt.Errorf("install: incomplete host effects")
 	}
 	userBin := filepath.Join(e.Home, ".local", "bin")
@@ -106,8 +108,28 @@ func Install(ctx context.Context, out io.Writer, e Effects, modifierd bool) erro
 	if err != nil {
 		return fmt.Errorf("install: load model spec: %w", err)
 	}
-	selectedModel, modelExists := models.Models[settings.ASRModel]
-	r2t2Active := modelExists && selectedModel.Engine == "openai-transcribe" && isLoopbackURL(selectedModel.BaseURL)
+	r2t2Model, modelExists := models.Models["r2t2-confucius4"]
+	if !modelExists {
+		return fmt.Errorf("install: model spec is missing r2t2-confucius4")
+	}
+	selectedModel, selectedExists := models.Models[settings.ASRModel]
+	r2t2Port, validR2T2URL := loopbackEndpointPort(r2t2Model.BaseURL)
+	if !validR2T2URL {
+		return fmt.Errorf("install: r2t2-confucius4 base_url %q must use http://127.0.0.1:<port>", r2t2Model.BaseURL)
+	}
+	r2t2Active := selectedExists && selectedModel.Engine == "openai-transcribe" && sameLoopbackEndpoint(selectedModel.BaseURL, r2t2Model.BaseURL)
+	if r2t2Active {
+		for _, name := range []string{"Confucius4-R2T2-Q4_K_M.gguf", "mmproj-Confucius4-R2T2-Q8_0.gguf"} {
+			path := filepath.Join(e.Home, ".cache", "voxi", "models", name)
+			info, err := e.Stat(path)
+			if err != nil {
+				return fmt.Errorf("install: R2T2 is selected but model file is unavailable at %s: %w", path, err)
+			}
+			if !info.Mode().IsRegular() {
+				return fmt.Errorf("install: R2T2 model path is not a regular file: %s", path)
+			}
+		}
+	}
 	llamaServerPath, llamaErr := resolveLlamaServerPath(e, settings.LlamaServerPath)
 	if llamaErr != nil && r2t2Active {
 		return fmt.Errorf("install: R2T2 is selected but llama-server could not be resolved; set llama_server_path in ~/.config/voxi/config.yaml or install llama-server on PATH: %w", llamaErr)
@@ -116,6 +138,7 @@ func Install(ctx context.Context, out io.Writer, e Effects, modifierd bool) erro
 		// The unit is installed even when disabled. Keep a valid absolute
 		// ExecStart so systemd can load it; activation will remain disabled.
 		llamaServerPath = "/usr/bin/llama-server"
+		fmt.Fprintf(out, "[R2T2 service] unresolved llama-server path; disabled unit uses fallback %s\n", llamaServerPath)
 	}
 
 	phase := func(name string, fn func() error) error {
@@ -197,6 +220,7 @@ func Install(ctx context.Context, out io.Writer, e Effects, modifierd bool) erro
 			}
 			if name == "voxi-r2t2.service" {
 				data = bytes.ReplaceAll(data, []byte("@LLAMA_SERVER_PATH@"), []byte(llamaServerPath))
+				data = bytes.ReplaceAll(data, []byte("@R2T2_PORT@"), []byte(r2t2Port))
 			}
 			if err := e.WriteFile(filepath.Join(serviceDir, name), data, 0644); err != nil {
 				return fmt.Errorf("write %s: %w", name, err)
@@ -272,16 +296,31 @@ func Install(ctx context.Context, out io.Writer, e Effects, modifierd bool) erro
 	})
 }
 
-func isLoopbackURL(rawURL string) bool {
+func loopbackEndpointPort(rawURL string) (string, bool) {
 	u, err := url.Parse(rawURL)
-	if err != nil || u.Hostname() == "" {
+	if err != nil || u.Scheme != "http" || u.Hostname() != "127.0.0.1" || u.Port() == "" {
+		return "", false
+	}
+	port, err := strconv.Atoi(u.Port())
+	if err != nil || port < 1 || port > 65535 {
+		return "", false
+	}
+	return strconv.Itoa(port), true
+}
+
+func sameLoopbackEndpoint(candidate, target string) bool {
+	if _, ok := loopbackEndpointPort(target); !ok {
 		return false
 	}
-	if strings.EqualFold(u.Hostname(), "localhost") {
-		return true
+	targetURL, err := url.Parse(target)
+	if err != nil {
+		return false
 	}
-	ip := net.ParseIP(u.Hostname())
-	return ip != nil && ip.IsLoopback()
+	candidateURL, err := url.Parse(candidate)
+	if err != nil || candidateURL.Scheme != "http" {
+		return false
+	}
+	return candidateURL.Hostname() == targetURL.Hostname() && candidateURL.Port() == targetURL.Port()
 }
 
 func resolveLlamaServerPath(e Effects, configured string) (string, error) {

@@ -2,7 +2,7 @@
 
 **Status:** Accepted  
 **Date:** 2026-09-10  
-**Related:** [Issue 104](../issues/104-add-voxi-install-command-for-complete-user-install-with-optional-privileged-setup.md), [Issue 114](../issues/114-fix-out-of-checkout-modifierd-build-fallback.md), [Issue 081](../issues/081-install-and-run-a-persistent-dotoold-systemd-user-service.md), [Issue 089](../issues/089-voxi-modifierd-not-installed-on-this-dev-machine-modifier-gating-currently-inactive.md)
+**Related:** [Issue 104](../issues/104-add-voxi-install-command-for-complete-user-install-with-optional-privileged-setup.md), [Issue 114](../issues/114-fix-out-of-checkout-modifierd-build-fallback.md), [Issue 081](../issues/081-install-and-run-a-persistent-dotoold-systemd-user-service.md), [Issue 089](../issues/089-voxi-modifierd-not-installed-on-this-dev-machine-modifier-gating-currently-inactive.md), [Issue 139](../issues/139-ship-a-systemd-user-unit-for-the-r2t2-llama-server-backend.md)
 
 ## Decision
 
@@ -17,13 +17,19 @@ voxi install --modifierd # optional system-scoped modifier gating
 
 `voxi install` converges the non-privileged parts of the installation: the Voxi
 binary, user service units, CrispASR, dotool/dotoold, and the enabled and active
-`voxi-agent.service`. It does not invoke `sudo`, write `/usr/local`, or alter
-system services. The `--modifierd` flag is an explicit privilege boundary for
+`voxi-agent.service`. It also installs and manages `voxi-eager.service`,
+`dotoold.service`, and `voxi-r2t2.service`; R2T2 is enabled only when the
+selected model's endpoint matches its loopback address and port. The R2T2
+unit's port comes from the model spec, and installation requires both weight
+files before enabling it. It does not invoke `sudo`, write `/usr/local`, or
+alter system services. The `--modifierd` flag is an explicit privilege boundary for
 installing and enabling `voxi-modifierd.service`.
 
 The release download script also invokes `voxi install` after placing the
 prebuilt binaries. `make install-all` is a compatibility alias for `make install`;
-`make install-modifierd` invokes `voxi install --modifierd`. The former
+`make install-user-services` and `make install-dotoold` are compatibility
+targets that delegate to `make install`; they do not maintain separate unit
+installation paths. `make install-modifierd` invokes `voxi install --modifierd`. The former
 `make install-system` target was removed because it only copied a binary and
 did not configure a working installation. `make install-debug` remains a
 diagnostic-only binary replacement; it does not set up services or restart
