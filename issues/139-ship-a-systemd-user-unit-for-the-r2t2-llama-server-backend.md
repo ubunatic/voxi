@@ -41,3 +41,35 @@ backend online.
   whisper or Cohere.
 - Out of scope: voxi supervising the process itself. That was rejected in 134
   §6 because it puts the safety cap in a second place where it can rot.
+
+## 4. Direction (2026-09-24)
+
+User: **"`voxi install` should take care of all units."** `voxi install`
+(`internal/install/install.go`) is the one place that writes, enables and
+starts every voxi-related user unit, including the R2T2 server. Units come
+from `systemd/*.service` through `voxi.ServiceAsset`, as the existing ones do.
+
+Live findings at filing time:
+- `voxi monitor` shows ASR OFFLINE: `asr_model: r2t2-confucius4` expects
+  `127.0.0.1:18131` (spec/models.yaml `base_url`), and nothing listens there.
+- There is no `llama-server` on `PATH`. The only build is lmcoder's vendored
+  `~/.local/share/lmcoder/llama.cpp/b10590/llama-server`, and 134 refers to
+  `~/.cache/voxi/llama.cpp`. The unit must resolve the binary deliberately
+  (install-time lookup or a config setting) and fail clearly if it is missing.
+  Never download or build llama.cpp as a side effect.
+- Models are in `~/.cache/voxi/models/` (R2T2 gguf + mmproj present).
+
+## 5. Milestones
+
+- **M1 (R2T2 unit + install):** add `systemd/voxi-r2t2.service` with the
+  capped command (`-c 4096`, `--port 18131`) plus `MemoryMax=` and
+  `Restart=on-failure`. `voxi install` always writes it. It runs
+  `enable --now` only when the selected `asr_model` is an `openai-transcribe`
+  model whose `base_url` is loopback. Otherwise it disables and stops the unit
+  and prints why. Tests use the existing fake `Effects`.
+- **M2 (all units, one source of truth):** `voxi install` covers every unit
+  voxi relies on (agent, eager, dotoold, r2t2; modifierd stays behind
+  `--modifierd`). Make targets delegate to `voxi install` rather than
+  duplicating unit logic. Update `@docs/InstallationArchitecture.md` and
+  `@docs/ASREngines.md`. After `make install && voxi install`, confirm on this
+  machine that the port answers and `voxi monitor` shows online.
