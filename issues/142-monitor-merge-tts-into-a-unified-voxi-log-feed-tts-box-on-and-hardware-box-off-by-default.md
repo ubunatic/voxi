@@ -58,3 +58,11 @@ confirms the layout live.
 - Panel toggles and their defaults live in `spec/actions.yaml`. Change the
   defaults there rather than in Go (see `@docs/Spec.md`).
 - Before starting, re-check the live code, since the monitor changes often.
+
+## 5. User live check (2026-09-24): required follow-ups
+- **The `[t]` transcript feed shows 4 lines again**, as before 142. The merged
+  IN/OUT feed must not grow taller. The 10-row OUT cap is about history, not
+  visible height.
+- **The TTS box takes the hardware box's old position** in the layout.
+  Hardware stays hidden by default; when toggled on, it goes where the TTS box
+  was.
