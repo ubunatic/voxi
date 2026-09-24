@@ -107,3 +107,41 @@ and implementation tickets or milestones are filed. No code in this ticket.
   playback; voxi does not transcribe its own playback.
 - **M4 (install, opt-out):** `voxi install` sets up the engine by default,
   with an opt-out setting.
+
+### M1 results (2026-09-24)
+
+- **Engine canary:** standalone probes in `scripts/canary_tts/` generated
+  equivalent prose WAVs for espeak-ng, Festival (`text2wave`), and Mimic. The
+  user can listen to `~/.cache/voxi/tts-canary/{espeak-ng,festival,mimic}.wav`;
+  these files are local cache artifacts and are not committed. No audio was
+  played during the probe. All files are valid mono PCM WAVs: espeak-ng at
+  22,050 Hz / 12.31 s, Festival at 16,000 Hz / 13.57 s, Mimic at 44,100 Hz /
+  13.49 s. First and repeat process wall times were respectively 0.01 / 0.01 s,
+  6.47 / 6.56 s, and 0.30 / 0.31 s. These are synthesis startup timings, not
+  listening-quality judgments; engine quality selection remains for the user
+  after listening.
+- **Package availability:** this Fedora 44 host has Fedora packages available
+  for all three (`espeak-ng` 1.52.0-3.fc44, `festival` 2.5.0-29.fc44,
+  `mimic` 1.3.0.1-16.fc43). Debian/Ubuntu package names and availability were
+  not verified because this host has no `apt` tooling; that portability check
+  remains open.
+- **MPRIS canary:** `scripts/canary_tts/mpris.py` registered
+  `org.mpris.MediaPlayer2.VoxiCanary`; a direct D-Bus `PlayPause` call appeared
+  in the canary method log. With GNOME running and dotoold active, sending
+  `XF86AudioPlay`, `XF86AudioNext`, and `XF86AudioPrev` through `dotoolc`
+  produced no canary method calls. Firefox also owned an MPRIS name in this
+  session, so injected-key routing to this canary is not confirmed. The user
+  still needs to check physical media keys and routing with other players
+  stopped.
+- **Ownership/crash canary:** `scripts/canary_tts/ownership.py` started a
+  dummy direct playback child configured with Linux `PR_SET_PDEATHSIG`, then
+  `SIGKILL`ed its owner. The child exited and the canary passed. This validates
+  direct-child termination only; engine-spawned grandchildren were not tested.
+- **Recommendation:** let `voxi monitor -w` own the TTS queue, MPRIS name, and
+  engine child. Normal monitor exit should stop and wait for the engine and
+  discard the in-memory queue; the monitor socket and MPRIS name then disappear,
+  so `voxi say` refuses until a monitor starts again. Configure the engine
+  child with parent-death signaling for monitor crash/`SIGKILL`, and still stop
+  and reap it explicitly on normal exit. The kill canary supports this choice
+  for a direct child; descendants need separate containment if any selected
+  engine spawns them.
