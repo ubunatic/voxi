@@ -1,6 +1,6 @@
 # 139 — Ship a systemd user unit for the R2T2 llama-server backend
 
-**Status**: Open
+**Status**: Closed — M2 implemented and live-verified
 **Priority**: P2 (Medium)
 **Severity**: Major
 **Category**: Feature
