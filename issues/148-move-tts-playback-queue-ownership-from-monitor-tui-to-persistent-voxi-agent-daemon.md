@@ -19,31 +19,46 @@ Voice output must be **always available and instantaneously responsive**, comple
 
 ## 2. Technical Specification / Findings
 
-### 2.1 Always-Running Daemon Architecture
-The user-scoped background daemon (`voxi-agent.service` managed by `systemd --user`) should serve as the central, lightweight supervisor managing three decoupled modular components:
-1. **Voice / Playback Component**: Always-on IPC socket listener (`/run/user/$UID/voxi/tts.sock` or unified `voxi.sock`) managing the TTS queue, synthesis worker (Piper/Festival), and `pw-play` audio playback.
+### 2.1 Always-Running Daemon Architecture & Independent Component Lifecycle
+The user-scoped background daemon (`voxi-agent.service` managed by `systemd --user`) acts as the central, lightweight supervisor managing three decoupled modular components:
+1. **Voice / Playback Component**: Always-on IPC socket listener (`/run/user/$UID/voxi/tts.sock`) managing the TTS queue, synthesis worker (Piper/Festival), MPRIS DBus player interface, and `pw-play` audio playback.
+   - **Independent Lifecycle**: Starts and binds its IPC socket immediately and runs concurrently. A crash, timeout, or startup delay in the ASR/eager pipeline MUST NOT bring down or delay the TTS playback listener.
 2. **Transcribe / ASR Component**: Handles dictation triggering (`Super+X` / modifier gating), connects to the active ASR model, and injects text via `dotool`.
 3. **LLM Cleaner Component**: Post-processes dictation when enabled.
 
-The `voxi monitor` TUI attaches to this daemon purely as an observability consumer (streaming log/telemetry events), rather than owning the playback engine or state.
+The `voxi monitor` TUI attaches to the daemon's socket purely as an observability consumer (streaming log and playback telemetry events), rather than hosting the queue.
 
-### 2.2 STT / Recording Interruption Rule
-- **Mutual Exclusion on Audio**: Starting any voice transcription / recording session (e.g. `Super+X`, modifier hold, or `voxi eager`) MUST immediately stop active live TTS speech playback and clear pending live playback queue chunks. This ensures the microphone does not capture Voxi's own speech output.
+### 2.2 STT / Recording Interruption & Audio Arbiter
+- **Audio Arbiter at Capture Transition**: When any recording path starts (e.g. `Super+X`, modifier hold, `voxi eager` daemon, signal, or CLI record), it invokes a local audio-arbiter callback to immediately interrupt live playback.
+- **Recording Epoch / Mute Gate**: To eliminate race conditions where in-flight `voxi say` commands, background LLM continuations, or prefetched synthesis chunks might enqueue and play audio *after* an initial Stop signal during an active recording session, the queue manager maintains an active recording epoch gate. All live playback remains muted/paused until the recording epoch closes.
+- **Non-Blocking Immediate Interruption**: `ActionStop` must kill the active `pw-play` playback process immediately and cancel background synthesis jobs without blocking the recording start path.
 
 ### 2.3 Safe / Isolated Offline TTS Rendering
-- Callers requesting "safe" / unmanaged TTS (e.g. generating an audio file for testing, scripts, or non-desktop sinks) should use `voxi say -o <file.wav>` (or `--no-play`), rendering the audio directly to a file without submitting it to the live daemon playback queue or disturbing active desktop audio.
+- Callers requesting "safe" / unmanaged TTS (e.g. generating an audio file for testing, scripts, or non-desktop sinks) should use `voxi say -o <file.wav>` (or `--no-play`), rendering the audio directly to a file via `Engine.Synthesize` without dialing the daemon IPC socket, starting audio players, or altering live desktop playback.
+
+### 2.4 IPC Compatibility & Socket Ownership
+- Retain the `/run/user/$UID/voxi/tts.sock` path and line-oriented protocol for seamless backward compatibility.
+- Ensure safe socket takeover with active-process verification before unlinking existing socket files.
 
 ## 3. Implementation & Verification Plan
 
-**/goal**: Move the TTS socket and playback queue lifecycle into `voxi-agent.service`, wire recording-start to automatically stop active live TTS playback, provide `voxi say -o <file>` for unmanaged offline synthesis, and decouple `voxi monitor` into a read-only telemetry client.
+**/goal**: Move the TTS socket, MPRIS interface, and playback queue lifecycle into `voxi-agent.service` with independent startup resilience, wire recording-start to an audio-arbiter with an active recording epoch gate, provide `voxi say -o <file>` for unmanaged offline synthesis, and decouple `voxi monitor` into a telemetry client.
 
-1. **Daemon Integration**: Migrate `tts.Manager` into `internal/agent` (`voxi agent --daemon`) so the systemd user service owns the IPC socket and playback lifecycle.
-2. **STT Stop Trigger**: When ASR recording begins in `internal/eager` or `internal/record`, send an immediate interrupt/stop signal to the TTS queue manager.
-3. **CLI Safe Output**: Add `-o, --output <file.wav>` and `--no-play` flags to `voxi say` to synthesize directly to disk without requiring the daemon or altering live playback.
-4. **Monitor Decoupling**: Update `voxi monitor` to read state and subscribe to playback events from the daemon's socket rather than hosting the queue.
+1. **Independent TTS Daemon Service**:
+   - Integrate `tts.Manager` and MPRIS into `internal/agent` (`voxi agent --daemon`) so it starts independently of eager/ASR readiness.
+   - Verify that if ASR is misconfigured or fails, the TTS socket continues to accept and play `voxi say` requests.
+2. **Audio Arbiter & Recording Epoch Gate**:
+   - Implement an audio arbiter in `internal/agent` and `internal/tts` with recording epoch tracking to guarantee no queued or in-flight chunks play during active recording.
+   - Ensure `ActionStop` executes non-blocking immediate playback termination.
+3. **CLI Direct Offline Synthesis**:
+   - Add `-o, --output <file.wav>` and `--no-play` to `voxi say`, bypassing daemon socket communication and rendering directly via `tts.Engine`.
+4. **Monitor Telemetry Client**:
+   - Update `voxi monitor` to connect to `tts.sock` as a telemetry subscriber rather than binding the server socket.
 5. **Verification**:
-   - Verify `voxi say "text"` works when `voxi monitor` is NOT running.
-   - Verify `voxi say` playback immediately stops when `Super+X` dictation starts.
-   - Verify `voxi say -o out.wav "test"` writes `out.wav` without playing live audio or needing the daemon.
-   - Run unit tests with `make test-q1` and verify with `make install`.
+   - Unit tests for recording epoch gate under concurrent enqueue/prefetch races.
+   - Daemon resilience test: TTS playback working when eager/ASR engine is halted/errored.
+   - Mutual exclusion test: STT recording start immediately silencing ongoing TTS playback.
+   - Direct offline synthesis test: `voxi say -o sample.wav "test"` creating valid WAV with no daemon and no audio output.
+   - Pass `make test-q1` and verify with `make install`.
+
 
