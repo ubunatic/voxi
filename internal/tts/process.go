@@ -373,6 +373,17 @@ func (e *Engine) Synthesize(ctx context.Context, text string) (audioFile, time.D
 		}
 		piper, lookErr := e.deps.LookPath("piper")
 		if !piperModelAvailable(e, model) || lookErr != nil {
+			if backend == "piper" {
+				_ = os.RemoveAll(dir)
+				if model == "" {
+					return audioFile{}, 0, errors.New("Piper synthesis: VOXI_PIPER_MODEL is unset")
+				}
+				if lookErr != nil {
+					return audioFile{}, 0, fmt.Errorf("Piper synthesis: piper executable not found: %w", lookErr)
+				}
+				return audioFile{}, 0, fmt.Errorf("Piper synthesis: model file %q is not accessible", model)
+			}
+			// In auto mode, fallback to Festival / espeak-ng if Piper is not ready
 			backend = "auto"
 		} else {
 			textFile, writeErr := writeTextFile(dir, text)

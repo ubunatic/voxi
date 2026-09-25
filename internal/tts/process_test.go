@@ -93,6 +93,47 @@ func TestSelectedBackendUsesAutoByDefaultAndNormalizesValue(t *testing.T) {
 	}
 }
 
+func TestSynthesizeExplicitPiperFailsWhenExecutableOrModelMissing(t *testing.T) {
+	ctx := t.Context()
+	// Case 1: Model unset
+	engine := NewEngine(deps.Dependencies{
+		Getenv: func(key string) string {
+			if key == "VOXI_TTS_BACKEND" {
+				return "piper"
+			}
+			return ""
+		},
+		LookPath: func(name string) (string, error) {
+			if name == "piper" {
+				return "/usr/bin/piper", nil
+			}
+			return "", os.ErrNotExist
+		},
+	}, "/usr/bin/voxi")
+	if _, _, err := engine.Synthesize(ctx, "hello"); err == nil || !strings.Contains(err.Error(), "VOXI_PIPER_MODEL is unset") {
+		t.Fatalf("expected unset model error, got: %v", err)
+	}
+
+	// Case 2: Piper missing
+	engine = NewEngine(deps.Dependencies{
+		Getenv: func(key string) string {
+			if key == "VOXI_TTS_BACKEND" {
+				return "piper"
+			}
+			if key == "VOXI_PIPER_MODEL" {
+				return "/tmp/nonexistent.onnx"
+			}
+			return ""
+		},
+		LookPath: func(string) (string, error) {
+			return "", os.ErrNotExist
+		},
+	}, "/usr/bin/voxi")
+	if _, _, err := engine.Synthesize(ctx, "hello"); err == nil || !strings.Contains(err.Error(), "piper executable not found") {
+		t.Fatalf("expected piper not found error, got: %v", err)
+	}
+}
+
 func TestSupervisorHelperProcess(t *testing.T) {
 	if os.Getenv("VOXI_TTS_SUPERVISOR_TEST_HELPER") != "1" {
 		return
