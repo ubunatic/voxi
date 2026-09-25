@@ -38,6 +38,61 @@ func TestEngineBackendStatusReportsPreferredFallbackAndMissing(t *testing.T) {
 	}
 }
 
+func TestEngineBackendStatusReportsConfiguredPiperAndFallback(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		available map[string]bool
+		want      string
+	}{
+		{name: "piper selected", available: map[string]bool{"piper": true, "pw-play": true}, want: "Piper; player pw-play"},
+		{name: "piper missing falls back", available: map[string]bool{"espeak-ng": true, "paplay": true}, want: "espeak-ng fallback (Piper unavailable: piper executable missing); player paplay"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			model := filepath.Join(t.TempDir(), "voice.onnx")
+			if err := os.WriteFile(model, []byte("test model placeholder"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			engine := NewEngine(deps.Dependencies{
+				Getenv: func(key string) string {
+					if key == "VOXI_TTS_BACKEND" {
+						return "piper"
+					}
+					if key == "VOXI_PIPER_MODEL" {
+						return model
+					}
+					return ""
+				},
+				LookPath: func(name string) (string, error) {
+					if tc.available[name] {
+						return "/usr/bin/" + name, nil
+					}
+					return "", os.ErrNotExist
+				},
+			}, "/usr/bin/voxi")
+			if got := engine.BackendStatus(); got != tc.want {
+				t.Fatalf("BackendStatus() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestSelectedBackendUsesAutoByDefaultAndNormalizesValue(t *testing.T) {
+	backend := "  PiPeR "
+	engine := NewEngine(deps.Dependencies{Getenv: func(key string) string {
+		if key == "VOXI_TTS_BACKEND" {
+			return backend
+		}
+		return ""
+	}}, "/usr/bin/voxi")
+	if got := engine.selectedBackend(); got != "piper" {
+		t.Fatalf("selectedBackend() = %q, want piper", got)
+	}
+	engine.deps.Getenv = func(string) string { return "" }
+	if got := engine.selectedBackend(); got != "auto" {
+		t.Fatalf("selectedBackend() = %q, want auto", got)
+	}
+}
+
 func TestSupervisorHelperProcess(t *testing.T) {
 	if os.Getenv("VOXI_TTS_SUPERVISOR_TEST_HELPER") != "1" {
 		return

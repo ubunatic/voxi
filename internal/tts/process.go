@@ -293,10 +293,35 @@ func (e *Engine) BackendStatus() string {
 		return "dependency probe unavailable"
 	}
 	engine := "missing (Festival / espeak-ng)"
-	if _, err := e.deps.LookPath("text2wave"); err == nil {
-		engine = "Festival"
-	} else if _, err := e.deps.LookPath("espeak-ng"); err == nil {
-		engine = "espeak-ng fallback"
+	preferred := e.selectedBackend()
+	model := ""
+	if e.deps.Getenv != nil {
+		model = strings.TrimSpace(e.deps.Getenv("VOXI_PIPER_MODEL"))
+	}
+	if preferred == "piper" && model == "" {
+		engine = "Piper unavailable: VOXI_PIPER_MODEL is unset"
+	} else if (preferred == "piper" || (preferred == "auto" && model != "")) && piperModelAvailable(e, model) {
+		if _, err := e.deps.LookPath("piper"); err == nil {
+			engine = "Piper"
+		} else {
+			engine = "Piper unavailable: piper executable missing"
+		}
+	} else if preferred == "piper" {
+		engine = "Piper unavailable: model file missing"
+	}
+	piperUnavailable := ""
+	if strings.HasPrefix(engine, "Piper unavailable") {
+		piperUnavailable = engine
+	}
+	if engine != "Piper" {
+		if _, err := e.deps.LookPath("text2wave"); err == nil {
+			engine = "Festival"
+		} else if _, err := e.deps.LookPath("espeak-ng"); err == nil {
+			engine = "espeak-ng fallback"
+		}
+	}
+	if piperUnavailable != "" && !strings.HasPrefix(engine, "missing (") {
+		engine += " (" + piperUnavailable + ")"
 	}
 	player := "missing (pw-play / paplay)"
 	if _, err := e.deps.LookPath("pw-play"); err == nil {
@@ -307,6 +332,32 @@ func (e *Engine) BackendStatus() string {
 	return engine + "; player " + player
 }
 
+// selectedBackend reads the runtime preference. Auto preserves the historic
+// Festival/espeak-ng chain; Piper is opt-in because it needs a separately
+// installed executable and licensed voice model.
+func (e *Engine) selectedBackend() string {
+	if e.deps.Getenv == nil {
+		return "auto"
+	}
+	backend := strings.ToLower(strings.TrimSpace(e.deps.Getenv("VOXI_TTS_BACKEND")))
+	if backend == "" {
+		return "auto"
+	}
+	return backend
+}
+
+func piperModelAvailable(e *Engine, model string) bool {
+	if model == "" {
+		return false
+	}
+	stat := e.deps.Stat
+	if stat == nil {
+		stat = os.Stat
+	}
+	info, err := stat(model)
+	return err == nil && !info.IsDir()
+}
+
 func (e *Engine) Synthesize(ctx context.Context, text string) (audioFile, time.Duration, error) {
 	dir, err := os.MkdirTemp("", "voxi-tts-")
 	if err != nil {
@@ -314,7 +365,48 @@ func (e *Engine) Synthesize(ctx context.Context, text string) (audioFile, time.D
 	}
 	wavPath := filepath.Join(dir, "chunk.wav")
 	started := time.Now()
-	if festival, lookErr := e.deps.LookPath("text2wave"); lookErr == nil {
+	backend := e.selectedBackend()
+	if backend == "piper" || (backend == "auto" && e.deps.Getenv != nil && strings.TrimSpace(e.deps.Getenv("VOXI_PIPER_MODEL")) != "") {
+		model := ""
+		if e.deps.Getenv != nil {
+			model = strings.TrimSpace(e.deps.Getenv("VOXI_PIPER_MODEL"))
+		}
+		piper, lookErr := e.deps.LookPath("piper")
+		if !piperModelAvailable(e, model) || lookErr != nil {
+			backend = "auto"
+		} else {
+			textFile, writeErr := writeTextFile(dir, text)
+			if writeErr != nil {
+				_ = os.RemoveAll(dir)
+				return audioFile{}, 0, writeErr
+			}
+			_ = textFile.Close()
+			inputFile, openErr := os.Open(textFile.Name())
+			if openErr != nil {
+				_ = os.RemoveAll(dir)
+				return audioFile{}, 0, fmt.Errorf("open Piper input: %w", openErr)
+			}
+			args := []string{"--model", model, "--output_file", wavPath}
+			if config := strings.TrimSpace(e.deps.Getenv("VOXI_PIPER_CONFIG")); config != "" {
+				args = append(args, "--config", config)
+			}
+			p, startErr := startSupervised(ctx, e.executable, inputFile, piper, args...)
+			_ = inputFile.Close()
+			if startErr == nil {
+				startErr = <-p.Done()
+			}
+			if startErr == nil {
+				return e.finishSynthesis(wavPath, dir, started)
+			}
+			_ = os.RemoveAll(dir)
+			return audioFile{}, 0, fmt.Errorf("Piper synthesis: %w", startErr)
+		}
+	}
+	if backend != "auto" && backend != "festival" && backend != "espeak-ng" && backend != "piper" {
+		_ = os.RemoveAll(dir)
+		return audioFile{}, 0, fmt.Errorf("unknown TTS backend %q (choose auto, piper, festival, or espeak-ng)", backend)
+	}
+	if festival, lookErr := e.deps.LookPath("text2wave"); lookErr == nil && backend != "espeak-ng" {
 		stdin, err := writeTextFile(dir, text)
 		if err != nil {
 			_ = os.RemoveAll(dir)
@@ -352,6 +444,10 @@ func (e *Engine) Synthesize(ctx context.Context, text string) (audioFile, time.D
 			return audioFile{}, 0, fmt.Errorf("espeak-ng synthesis: %w", err)
 		}
 	}
+	return e.finishSynthesis(wavPath, dir, started)
+}
+
+func (e *Engine) finishSynthesis(wavPath, dir string, started time.Time) (audioFile, time.Duration, error) {
 	if info, err := os.Stat(wavPath); err != nil || info.Size() == 0 {
 		_ = os.RemoveAll(dir)
 		return audioFile{}, 0, fmt.Errorf("synthesizer did not create WAV output: %v", err)

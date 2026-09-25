@@ -91,3 +91,22 @@ listening comparisons on target hardware; verify fallback, worker
 shutdown/interruption, memory bounds, and voice/model license; compare natural
 and deliberately stylized narration for factual preservation and audible
 cadence.
+
+### Initial implementation (2026-09-25)
+
+`internal/tts` now accepts `VOXI_TTS_BACKEND=piper` and uses an installed
+`piper` executable with an explicitly supplied `VOXI_PIPER_MODEL` path. An
+optional `VOXI_PIPER_CONFIG` passes the voice JSON config. With backend `auto`,
+Piper is selected when the model path is set and both the executable and model
+are available; otherwise the established Festival then espeak-ng chain remains
+active. `BackendStatus` reports the chosen provider. Neural package/model
+downloads remain manual and outside `make install`. Piper's executable and
+selected voice asset have separate license obligations; check both before use.
+
+This first integration runs the Piper CLI per chunk and therefore pays model
+startup on each chunk. It does not meet the resident-worker latency target and
+Piper synthesis itself was not available for verification on this host. Keep
+issue 147 open until warm multi-chunk latency, memory, listening quality,
+interruption, and license checks are completed on target hardware. Current
+canary script: `python3 scripts/canary_tts/benchmark.py`; supply model paths via
+the documented environment variables above to measure neural candidates.
