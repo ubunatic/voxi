@@ -205,3 +205,5 @@ nfpms:
       - src: dist/man/toolname.1
         dst: /usr/share/man/man1/toolname.1
 ```
+
+<!-- harnez:stop -->

@@ -63,3 +63,5 @@ Always prefer an OSC 8 hyperlink over a raw path. The *visible label* rule depen
 
 ### In MD Files/Evergreen `docs/`
  ` ```mermaid ` diagrams remain allowed and encouraged for formal architecture/sequence flows.
+
+<!-- harnez:stop -->

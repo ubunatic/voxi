@@ -1,69 +1,33 @@
----
-title: Issue Tracking Practices
-weight: 45
----
+<!-- harnez:variant=lite -->
+# Issue Tracking Rules (Lite)
 
-<!-- harnez:bundled -->
-# Issue Tracking Practices — Priority & Metadata Standards
+In-repo tracker in `issues/`, one file per ticket (`issues/NNN-kebab-case-title.md`). Full doc in `docs/practices/IssueTracking.md`.
 
-This document defines the canonical standards for tracking bugs, features, and technical tasks across `harnez`-managed repositories. Every project maintains an in-repository issue tracker in `issues/` with consistent priorities, metadata headers, and lifecycle rules.
+## 1. Priority Schema — Scheduling Urgency
 
----
-
-## 1. Issue Priority Schema
-
-Priorities define **scheduling urgency** — the order and immediacy with which work must be addressed.
-
-| Priority | Level | Description & Escalation Trigger | Target SLA / Lifecycle |
+| Priority | Level | Description | Target SLA |
 |---|---|---|---|
-| **P0** | **Critical** | Blocker, data loss, security vulnerability, broken build, or critical regression violating core invariants. Halts regular development ("stop the line"). | Immediate resolution; fix precedes all other tasks. |
-| **P1** | **High** | Core functionality broken, major workflow impediment, key API regression, or high-urgency milestone deliverable. No acceptable workaround exists. | Current sprint / next immediate release cycle. |
-| **P2** | **Medium** | Normal feature, standard bug fix, performance optimization, UX polish, or refactoring without active blockage. Workaround may exist. | Standard backlog; prioritized during routine planning. |
-| **P3** | **Low** | Minor cosmetic glitch, typo, nice-to-have suggestion, speculative idea, or non-urgent documentation improvement. | Opportunistic; addressed when touching related code. |
+| **P0** | Critical | Blocker, data loss, security vuln, broken build. Stop the line. | Immediate; precedes all other work |
+| **P1** | High | Core feature broken, major workflow blocker, API regression. No workaround. | Current sprint / next release |
+| **P2** | Medium | Normal feature, standard bug fix, perf, polish, non-blocking refactor. | Standard backlog |
+| **P3** | Low | Minor cosmetic glitch, typo, speculative idea, non-urgent doc fix. | Opportunistic |
 
----
+## 2. Priority ≠ Severity
 
-## 2. Priority vs. Severity
+- **Severity** = technical impact (how broken).
+- **Priority** = scheduling urgency (how fast to fix).
+- *Example:* Brand header typo = Low Severity, **P1**. Obscure dead flag crash = Critical Severity, **P3**.
 
-Do not conflate **Priority** with **Severity**:
+## 3. Standard Ticket Metadata & Operations
 
-- **Severity** measures **technical impact and damage** (how severely the system is broken).
-- **Priority** measures **scheduling urgency** (how quickly the team/agent must fix it).
+### 3.1 Allocation & Status CLI
+- `harnez find issues next [--json]` — Read-only next free number (`max(allocated)+1`). Never ad hoc shell (`ls | grep`).
+- `harnez issues new ["Title"] [--json]` — Atomically reserve number + create placeholder with `O_CREATE|O_EXCL`. Write directly to printed path.
+- `harnez issues <verb> <n> [reason]` — Update Status, regenerate index, commit in one step (`open`, `start`, `block` [reason req], `close`, `done` [alias for close], `draft`).
+- `harnez issues mv <old> [new]` — Renumber ticket, rename file, rewrite title header, resync index.
+- `harnez issues list [filter]` — List matching tickets (default `is:open`).
 
-*Examples:*
-- A spelling error in the primary brand header on the homepage is **Low Severity** (cosmetic) but **P1 / High Priority** (reputational urgency).
-- A catastrophic memory leak in an obscure, deprecated, unadvertised CLI flag that nobody uses is **Critical Severity** (crash/resource exhaustion) but **P3 / Low Priority** (low operational risk).
-
----
-
-## 3. Standard Ticket Metadata Schema
-
-Every issue file is placed under `issues/NNN-kebab-case-title.md` (e.g. `issues/042-standardized-issue-priority-schema.md`).
-
-### Allocating & Reserving Ticket Numbers
-Computing the next issue number and reserving/creating it are two separate commands, split across
-`find` (read-only query) and `issues` (write-side): never use ad hoc shell commands (`ls | grep |
-sort | tail`) for either.
-- `harnez find issues next` — reports the next free ticket number (e.g., `195`) calculated as `max(allocated) + 1` across `issues/*.md` and `issues/archive/*.md`. Read-only: it never creates or reserves anything.
-- `harnez find issues next --json` — outputs machine-readable JSON (`{"number":"195","reserved":false}`).
-- `harnez issues new "Ticket Title"` (or `harnez issues new` with no title) — atomically allocates the next number and creates a placeholder ticket file (`issues/NNN-<title-slug>.md` or `issues/NNN-reserved.md` with status `Draft`) using `O_CREATE|O_EXCL` to prevent number collisions between concurrent agents. Prints `NNN<TAB>issues/<reserved-filename>.md` — write the real ticket content directly to that printed path rather than re-deriving the slug from the title by hand; a hand-derived slug can diverge from the reserved filename and leave an orphaned placeholder behind (see issue 202). Add `--json` for the same JSON shape as above with `"reserved":true` plus `file`/`path`. `new` never commits.
-
-**Known gap — cross-clone collisions survive `O_CREATE|O_EXCL`.** The atomic reservation above
-only guards concurrent writers sharing one working tree; it cannot see a number reserved in a
-*different* clone/session that hasn't been pushed yet. A ticket filed locally can still collide
-with a ticket independently filed and pushed elsewhere in the interim — the collision only
-surfaces later, as a `git pull`/rebase conflict on the ticket file and on the generated
-`issues/README.md`. This has happened at least twice: issue 240 (duplicate 179/180, resolved by
-hand) and, concretely, this session (a locally-filed-but-unpushed 266 collided with remote
-tickets that had independently claimed 266 and 267). Manual recovery recipe until issue 269
-(`harnez issues mv`) ships: `git mv` the losing ticket file to the next free number, fix its
-in-file `# NNN — ...` header to match, resolve any `issues/README.md` conflict by taking either
-side (`git checkout --theirs`) and then regenerating authoritatively with `harnez index` rather
-than hand-merging conflict markers — `harnez index` does not always fully clear stray
-`<<<<<<<`/`=======`/`>>>>>>>` lines left in a file it's asked to regenerate over, so verify with a
-conflict-marker grep afterward.
-
-The top of each ticket MUST contain the standardized metadata block:
+### 3.2 Metadata Header (Top of Every Ticket)
 
 ```markdown
 # NNN — Title of the Issue
@@ -71,97 +35,34 @@ The top of each ticket MUST contain the standardized metadata block:
 **Status**: Open | In Progress | Blocked — <reason> | Closed — <resolution> | Draft
 **Priority**: P0 (Critical) | P1 (High) | P2 (Medium) | P3 (Low)
 **Severity**: Critical | Major | Moderate | Minor
-**Category**: Bug | Feature | Architecture | Documentation | Performance | Refactor | Agentic Ergonomics
+**Category**: Bug | Feature | Architecture | Documentation | Performance | Refactor | Agentic Ergonomics | Infrastructure
 **Related**: [Doc / Ticket / Commit references]
 
 ---
 
 ## 1. Problem & Motivation
 ...
-
 ## 2. Technical Specification / Findings
 ...
-
 ## 3. Implementation & Verification Plan
 ...
 ```
 
-### Allowed Values
-
-- **Status**:
-  - `Open`: Unresolved, ready to be worked on. May carry an optional `— <note>` suffix.
-  - `In Progress`: Actively being worked on in current session. May carry an optional `— <note>`
-    suffix (e.g. `In Progress — implementation complete; tracker closure awaits ...`, as issue 201
-    does in practice).
-  - `Blocked — <reason>`: Waiting on upstream dependency or external resolution. Reason required.
-  - `Closed — <resolution>`: Completed and verified with tests (e.g. `Closed — resolved`, `Closed — invalid`).
-
-    **Why no commit hash**: a commit's hash is content-addressed and cannot be known by the
-    commit that writes it, so a ticket cannot self-reference its own closing commit without a
-    follow-up fixup commit. Record the resolution in words and use
-    `git log --oneline -- issues/NNN-*.md` for traceability. A hash is optional only when it
-    deliberately points to an earlier commit.
-  - `Draft`: Tentative proposal or placeholder. May carry an optional `— <note>` suffix.
-- **Priority**: `P0 (Critical)`, `P1 (High)`, `P2 (Medium)`, `P3 (Low)`
-- **Severity**: `Critical`, `Major`, `Moderate`, `Minor`
-- **Category**: `Bug`, `Feature`, `Architecture`, `Documentation`, `Performance`, `Refactor`, `Agentic Ergonomics`, `Infrastructure`
-
----
+- **Status rules**: `Blocked` requires `<reason>`. `Closed` requires `<resolution>` in words (do NOT record closing commit hash; trace via `git log`). Optional `— <note>` allowed on `Open`, `In Progress`, `Draft`.
 
 ## 4. Issues Index & Archive Conventions
 
-### 4.1 Index Table (`issues/README.md`)
-
-The tracker index `issues/README.md` maintains a synchronized inventory of all tickets.
-Run `harnez index` (issue 148) to regenerate its table from `issues/*.md` +
-`issues/archive/*.md` metadata instead of hand-editing rows — it is idempotent (a
-second run against unchanged tickets makes no further change) and has a `--check`
-flag that exits 1 on drift without writing, for CI/pre-commit use — and prints a
-unified diff of exactly what would change, so running it directly in an agent
-session surfaces specific drift the agent can act on immediately, without a
-separate diff step. For `issues/README.md`, only the consecutive Markdown
-table lines beginning at the exact `| # | File | Title | Status |` header are
-managed: prose before or after that table is preserved verbatim. A customized
-table header (for example, one with an added Priority or Target column) is
-refused without writing the file, because harnez cannot regenerate values for
-project-specific columns; reconcile that schema manually before adopting the
-generated table. `harnez index`
-also regenerates the project's studies index when that convention exists; otherwise
-the issues index is updated independently. Manual edits to
-rows within either managed table will be overwritten by the next `harnez index`
-run — prefer fixing the source ticket/study file instead.
-
-```markdown
-# Issues
-
-| # | File | Title | Status |
-|---|------|-------|--------|
-| 001 | [archive/001-diff-clean-wrong-path.md](archive/001-diff-clean-wrong-path.md) | diff and clean operate on wrong file | Closed — resolved |
-| 042 | [042-standardized-issue-priority-schema.md](042-standardized-issue-priority-schema.md) | Standardized issue priority schema | Closed |
-```
-
-`harnez status` includes an issue tracker linter that verifies:
-1. Every ticket on disk is indexed in `issues/README.md`.
-2. Every table link points to a valid file (accounting for `issues/` and `issues/archive/`).
-3. Ticket status declared in the file matches the status in the index table.
-4. No duplicate ticket numbers exist.
-
-### 4.2 Archiving Closed Issues
-
-When an issue is closed and verified, move it to `issues/archive/NNN-kebab-case.md` to keep the active `issues/` directory clean and focused. Update the markdown link in `issues/README.md` accordingly.
-
----
+- `issues/README.md` is managed by `harnez index` (idempotent, supports `--check` for CI diff/drift verification). Never hand-edit rows.
+- `harnez status` lints index completeness, link validity, status parity, and duplicate numbers.
+- **Archiving**: Move closed tickets to `issues/archive/NNN-kebab-case.md` and update index link.
 
 ## 5. Lifecycle Invariants
 
-1. **Test Verification Before Closure**: Never mark a ticket `Closed` without executing the test suite (`go test ./...`, `make check`) and confirming assertion rigor.
-2. **Atomic Index Synchronization**: Whenever ticket status changes in the file, immediately update `issues/README.md`.
-3. **Immediate Tracker Commit**: After creating or updating issue-tracker files, commit the ticket file and synchronized index immediately in their own small commit. Do not batch tracker metadata with unrelated code or defer it to a later feature-work checkpoint.
-4. **Traceability**: Link relevant study notes, retrospectives, ADRs, and commits in the `**Related**:` header, using the project's existing durable documentation location.
-5. **Closing Is Part Of Done**: Progress-noting a ticket to `In Progress` is disciplined for
-   free — closing it is not, because nothing forces the last step. The `smarthome` project
-   shipped 112 commits in three days with excellent open/progress hygiene, yet four tickets
-   still read `In Progress` for work that was demonstrably shipped and live-verified. A session that ends on a
-   green build and a commit is not done until every ticket it touched has its `Status` flipped
-   and `harnez index` has been run. Treat "did I close what I finished?" as an explicit
-   end-of-session check, not an assumption that closing happens naturally alongside the code.
+1. **Test Verification Before Closure** — Never mark `Closed` without running test suite and verifying assertions.
+2. **Atomic Index Sync** — Status changes in files must immediately reflect in `issues/README.md` (`harnez index` or `harnez issues <verb>`).
+3. **Immediate Tracker Commit** — Commit ticket updates and synced index immediately in their own small commit; do not batch behind code changes.
+4. **Traceability** — Link study notes, ADRs, tickets, commits in `**Related**:`.
+5. **Closing Is Part Of Done** — A task/session is NOT done until every touched ticket has `Status` closed and `issues/README.md` indexed.
+6. **Goal-Centric & As-Needed Milestones** — For new tickets only, define a `/goal` or a clear Goal statement and acceptance criteria; no backlog migration is required. Only decompose into numbered milestones (M1, M2...) when multi-step staged execution is truly needed; otherwise keep issues lean and brief. Agents picking up an issue must check live code status before beginning work.
+
+<!-- harnez:stop -->

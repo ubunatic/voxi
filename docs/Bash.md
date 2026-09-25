@@ -1,238 +1,160 @@
----
-title: Bash Conventions
-weight: 61
----
+<!-- harnez:variant=lite -->
+# Bash Rules (Lite)
 
-<!-- harnez:bundled -->
-# Bash Conventions
+## 1. Header
 
-> **Who this is for** — anyone writing a canary, a build script, or any glue in these repositories. Reference material: grep it, don't read it.
->
-> **Read this if** — you are about to write conditionals, sourcing statements, or multi-line shell scripts.
->
-> **Takeaways**
-> 1. `set -euo pipefail`, always, on line two.
-> 2. `if test …` — never `[ … ]`, never `[[ … ]]`, no `;`, 3-line `if-then-fi` (`then <cmd>` on same line).
-> 3. Always use `source`, never `.` for scripts and dotfiles (`~/.bashrc`, `~/.zshrc`).
-> 4. Quote every expansion; declare `local` separately for command substitutions; assume default `awk` is mawk.
-
----
-
-## 1. Header & Strict Mode
 ```bash
 #!/usr/bin/env bash
-set -euo pipefail
-```
-- `-e`: Exit immediately if any command returns a non-zero status.
-- `-u`: Exit if an uninitialized variable is referenced.
-- `-o pipefail`: Ensure pipeline return codes reflect the last non-zero command in the chain.
-
-## 2. Sourcing Scripts & Dotfiles — Always `source`, Never `.`
-
-Always use the explicit `source` keyword instead of the single dot (`.`) syntax:
-
-```bash
-# ✅ DO: explicit, searchable, unambiguous
-source ~/.bashrc
-source ~/.zshrc
-source "$script_dir/lib.sh"
-
-# ❌ DON'T: ambiguous dot easily lost in whitespace or confused with path prefixes
-. ~/.bashrc
-. ~/.zshrc
-. "$script_dir/lib.sh"
+set -euo pipefail   # -e exit on non-zero; -u exit on unset var; -o pipefail last non-zero wins
 ```
 
-- **Readability**: `source` makes the intent obvious at a glance to human reviewers and AI agents.
-- **Searchability**: Grepping for `source ` reliably locates script inclusions; grepping for `.` produces vast noise.
-- **Disambiguation**: Distinguishes file sourcing from relative directory execution (such as `./script.sh`).
+## 2. Sourcing
 
-## 3. Conditionals — Always `if test`, Never `[[ ]]` or `[ ]`
-
-**This is the most important rule!**
-**NEVER** use `[ ... ]` or `[[ ... ]]` for conditionals. Forget all legacy usages!
-Use the clean, standard `test` **command** with 3-line `if-then-fi` and 4-line `if-then-else-fi` vertical alignment:
+DO `source f` — readable, greppable (`grep 'source '`), distinct from `./script.sh`.
+DON'T `. f` — dot is lost in whitespace, confusable with paths, ungreppable.
 
 ```bash
-# ✅ 3-line if-then-fi (then <1st cmd> on the same line, no semicolons)
-if test -f "$file"
+source ~/.bashrc   # ✅
+. ~/.bashrc        # ❌
+```
+
+## 3. Conditionals — TOP RULE: `if test`, never brackets
+
+```bash
+if test -f "$file"                    # ✅ 3-line if-then-fi
 then printf 'Found %s\n' "$file"
 fi
 
-# ✅ 4-line if-then-else-fi
-if test "$a" = "$b"
+if test "$a" = "$b"                   # ✅ 4-line if-then-else-fi
 then printf 'Equal\n'
 else printf 'Not equal\n'
 fi
 
-# ✅ Multi-command then block (1st cmd on same line; subsequent cmds aligned)
-if test -d "$dir"
+if test -d "$dir"                     # ✅ multi-cmd: 1st cmd on `then` line, rest aligned under it
 then printf 'Entering %s\n' "$dir"
      process_dir "$dir"
 fi
 
-# ✅ while loop (do <1st cmd> on same line)
-while test "$x" != "$y"
+while test "$x" != "$y"               # ✅ 1st cmd on `do` line
 do process "$x"
 done
 ```
 
-### Visual Do / Don't Anti-Patterns
+DON'T (all forbidden, no exceptions, forget legacy usage):
 
-| Style | Pattern | Status | Rationale |
-|---|---|---|---|
-| **Harnez Standard (3-line)** | `if test "$x" = "$y"`<br>`then do_work`<br>`fi` | ✅ **DO** | Clean 3-line block, explicit command, no semicolon clutter. |
-| **Harnez Standard (4-line)** | `if test "$x" = "$y"`<br>`then do_work`<br>`else do_other`<br>`fi` | ✅ **DO** | Clean 4-line branch, first commands placed directly after `then`/`else`. |
-| **Harnez Sourcing** | `source ~/.bashrc`<br>`source "$lib"` | ✅ **DO** | Explicit `source` keyword for scripts and dotfiles. |
-| **Legacy Bracket** | `if [ "$x" = "$y" ]; then`<br>`  do_work`<br>`fi` | ❌ **DON'T** | Single brackets `[ ... ]` are forbidden. |
-| **Bash Extension** | `if [[ "$x" == "$y" ]]; then`<br>`  do_work`<br>`fi` | ❌ **DON'T** | Double brackets `[[ ... ]]` are forbidden. |
-| **Semicolon Suffix** | `if test "$x" = "$y"; then`<br>`  do_work`<br>`fi` | ❌ **DON'T** | Semicolons before `then`/`do` are forbidden; break lines instead. |
-| **Dangling Then (POSIX)** | `if test "$x" = "$y"`<br>`then`<br>`  do_work`<br>`fi` | ❌ **DON'T** | Avoid empty `then` line; place 1st command directly after `then`. |
-| **Ambiguous Dot Sourcing** | `. ~/.bashrc`<br>`. "$lib"` | ❌ **DON'T** | Standalone `.` for sourcing is forbidden; use `source`. |
+- `[ x = y ]` single brackets
+- `[[ x == y ]]` double brackets
+- `; then` / `; do` — break the line instead
+- `then` alone on its line (dangling) — 1st cmd goes on the `then` line
+- `test x = y && do_a || do_b` logic ops as control flow – use 4-line `if-then-else-fi`
 
-## 4. Variables & Local Scope
-- Always double-quote variable expansions: `"$var"`, `"${var}"`.
-- Handle required arguments with default error patterns:
-  `pattern="${1:?Usage: script.sh PATTERN}"`
-- **Local variables in functions**:
-  - Assign literal values directly: `local name="$1"`
-  - **Command substitutions MUST declare first, then assign**, to prevent `local` from masking execution exit codes:
-    ```bash
-    local result
-    result=$(command args)
-    ```
-
-## 5. Output Discipline
-- Prefer `printf` over `echo` for printing variables: `printf '%s\n' "$var"`.
-- Log errors to stderr: `printf 'ERROR: %s\n' "$msg" >&2`.
-- Status helpers used across repository scripts:
-  ```bash
-  pass() {
-     printf '  ✓ %s\n' "$*"
-  }
-
-  fail() {
-     printf 'ERROR: %s\n' "$*" >&2
-     exit 1
-  }
-  ```
-
-## 6. Line Breaks, Continuation & Indentation
-Avoid arbitrary fixed indentation for command blocks. Prefer **alignment continuation**:
-
-### Continuation Rules
-- **Long pipelines**: break after `|`; line up under the start of the chain:
-  ```bash
-  result=$(some_command |
-           grep "pattern" |
-           awk '{print $2}')
-  ```
-- **Long conditions**: break after `&&`/`||`; line up conditions under the first test:
-  ```bash
-  if test -f "$a" &&
-     test -d "$b"
-  then stmt1
-       stmt2
-  else fail "not found"
-  fi
-  ```
-- **Then/Else & Loop blocks**: 1st command directly after `then`/`else`/`do`; subsequent commands aligned:
-  ```bash
-  for item in "${array[@]}"
-  do process_item "$item" || fail "err"
-     log_item "$item"
-  done
-  ```
-- **Function bodies**: base indent level 3 inside `{ ... }`. Alignment continuation takes precedence over fixed indents for conditionals.
-
-## 7. Commands & Traps
-- Prefer `command -v` over `which`.
-- Capture output cleanly: `out=$(cmd 2>&1)`.
-- Redirects: `> file` to write, `>> file` to append, `2>/dev/null` to suppress errors.
-- Temp files: `mktemp`; clean up with `trap 'rm -f "$tmp"' EXIT`.
-- **Prefix uncertain-duration commands with `timeout`**: when invoking something
-  without a client-side timeout of its own — a network probe, a lock wait, an
-  external service call — wrap it rather than risk an indefinite hang:
-  ```bash
-  timeout 30 curl -sf https://example.com/health
-  ```
-  Size the seconds argument to the command's expected duration, not one fixed
-  global value. `timeout` exits `124` when it kills the command — check for
-  that distinctly from the wrapped command's own failure exit codes if
-  downstream logic branches on `$?`. This is about individual command
-  invocations; for waiting on a long-running background job instead, see
-  `docs/practices/AgenticLoop.md`'s "Blocking sleep Waits" and "Buffered
-  Long-Running Output" anti-patterns.
-
-## 8. Functions
-- Define functions before first invocation.
-- Return status with `return 0` / `return 1` (exit codes, never printed booleans).
-
-## 9. Directory Scoping — Prefer `-C` Over `cd`
-
-**Rule**: if the command has a directory flag, use it — never `cd` purely for scoping.
-
-The shell tool's cwd persists across tool calls within a session. A `cd` in one call
-silently changes where the *next* unrelated call runs, producing wrong-repo results
-with no error (e.g. `git status` reporting on the wrong repo after a stray `cd`).
-
-### Flag table (verified against each tool's help)
-
-| Command | Directory flag | Example |
-|---------|---------------|---------|
-| `git`   | `-C <dir>`    | `git -C ~/projects/foo status` |
-| `make`  | `-C <dir>`    | `make -C ~/projects/foo test` |
-| `go`    | `-C <dir>` (Go 1.20+) | `go -C ~/projects/foo build ./...` |
-| `npm`   | `--prefix <dir>` | `npm --prefix ~/projects/foo install` |
-| `cargo` | `--manifest-path <path>` | `cargo build --manifest-path ~/projects/foo/Cargo.toml` |
-
-### Fallback — when no flag exists
-
-If the tool has no directory flag, keep the `cd` and the command in **one** call and
-prefer the subshell form so cwd is restored automatically even within that call:
+## 4. Variables
 
 ```bash
-# ✅ Subshell: cwd is restored when the subshell exits
-(cd /some/dir && some-tool --flag)
-
-# ⚠️  Inline: cwd leaks into the rest of this call, but at least doesn't persist
-#    into the next tool call (do not split across calls)
-cd /some/dir && some-tool --flag
+"$var" "${var}"                            # quote EVERY expansion
+pattern="${1:?Usage: script.sh PATTERN}"   # required arg
+f() {
+   local name="$1"        # literal -> assign inline
+   local result           # cmd substitution -> declare FIRST,
+   result=$(cmd args)     # then assign; else `local` masks cmd exit code
+}
 ```
 
-Never issue a bare `cd` with the intent of letting its effect carry into a *later*
-separate tool call — that is the failure mode.
+## 5. Output
 
-### Restore-cwd convention for shared shell environments
+```bash
+printf '%s\n' "$var"              # printf > echo for variables
+printf 'ERROR: %s\n' "$msg" >&2   # errors -> stderr
 
-In environments where the shell tool's session is **shared with the user's interactive
-terminal** (not an isolated subprocess per call), a `cd` the agent issues outlives the
-tool call and silently changes the *human's* prompt too.
+pass() {
+   printf '  ✓ %s\n' "$*"
+}
 
-**Advisory mitigation** (this cannot be mechanically enforced — see issue 095):
+fail() {
+   printf 'ERROR: %s\n' "$*" >&2
+   exit 1
+}
+```
 
-- Prefer `git -C`/`make -C`, absolute paths, or the subshell form `(cd dir && cmd)`
-  as the first choice; they restore cwd automatically.
-- If a bare `cd` is unavoidable (tool only accepts relative paths), `cd` back to the
-  starting directory before the tool call ends. Capture the start first:
+## 6. Continuation — align, never fixed indent
 
-  ```bash
-  orig=$(pwd)
-  cd /some/dir
-  some-tool --relative-only-flag
-  cd "$orig"
-  ```
+```bash
+result=$(some_command |        # pipeline: break after `|`, align under chain start
+         grep "pattern" |
+         awk '{print $2}')
 
-- This is an **advisory mitigation, not enforcement** — the shell tool can navigate
-  anywhere the OS user can reach regardless of project scope; this convention just makes
-  a well-behaved agent less likely to leave the shared shell in a surprising place.
+if test -f "$a" &&             # condition: break after `&&`/`||`, align under 1st test
+   test -d "$b"
+then stmt1
+     stmt2
+else fail "not found"
+fi
 
-See also: issue 095 (cwd-leaking incident, trust-boundary analysis) and issue 222
-(multi-repo wrong-repo failure from stray `cd`).
+for item in "${array[@]}"      # then/else/do: 1st cmd on keyword line, rest aligned
+do process_item "$item" || fail "err"
+   log_item "$item"
+done
+```
 
-## Appendix — Awk Portability
-The default `awk` on Debian, Ubuntu, and Raspberry Pi OS is **mawk**, not gawk.
-Avoid gawk extensions:
-- ❌ Do not use 3-argument `match(str, /re/, arr)` — use `split()` or `sub()`/`gsub()` instead.
-- ❌ Do not use `strtonum("0xff")` — write a manual `h2d()` converter.
-- ❌ Do not use `gensub()` — use `sub()`/`gsub()` with a temporary variable.
+Function body: base indent 3 inside `{ }`. Alignment continuation > fixed indent for conditionals.
+
+## 7. Commands & traps
+
+```bash
+command -v tool   # not `which`
+out=$(cmd 2>&1)   # capture
+cmd > f           # write
+cmd >> f          # append
+cmd 2>/dev/null   # drop errors
+tmp=$(mktemp); trap 'rm -f "$tmp"' EXIT   # always trap-clean temps
+
+timeout 30 curl -sf https://example.com/health
+# wrap any uncertain-duration cmd lacking its own client-side timeout (net probe,
+# lock wait, external call). Size seconds per command, not one global value.
+# timeout exits 124 on kill -> branch on it separately from the cmd's own codes.
+# Per-invocation only; background jobs -> AgenticLoop.md "Blocking sleep Waits" /
+# "Buffered Long-Running Output".
+```
+
+## 8. Functions
+
+Define before first use. Status via `return 0`/`return 1` — never printed booleans.
+
+## 9. Directory scoping — `-C` over `cd`
+
+Rule: command has a directory flag -> use it; never `cd` just for scoping. cwd persists
+across tool calls, so a stray `cd` silently retargets the *next* unrelated call (e.g.
+`git status` on the wrong repo) with no error.
+
+```bash
+git -C DIR status                  # git    -C DIR
+make -C DIR test                   # make   -C DIR
+go -C DIR build ./...              # go     -C DIR (1.20+)
+npm --prefix DIR install           # npm    --prefix DIR
+cargo build --manifest-path DIR/Cargo.toml   # cargo --manifest-path FILE
+
+(cd DIR && some-tool --flag)   # ✅ no flag exists -> subshell, cwd auto-restored
+cd DIR && some-tool --flag     # ⚠️ leaks cwd through rest of THIS call only; keep in ONE call
+                               # ❌ bare `cd` meant to carry into a LATER call
+```
+
+Shared-shell caveat: where the shell is shared with the user's interactive terminal, an
+agent's `cd` outlives the call and moves the human's prompt too. Advisory, not enforceable
+(issue 095) — the shell reaches anywhere the OS user can. Prefer `-C`/absolute paths/subshell;
+if a bare `cd` is unavoidable (tool takes relative paths only), capture and restore:
+
+```bash
+orig=$(pwd)
+cd DIR
+some-tool --relative-only-flag
+cd "$orig"
+```
+
+See issue 095 (cwd leak, trust boundary), issue 222 (multi-repo wrong-repo failure).
+
+## 10. Awk Portability (rarely needed)
+
+Default is mawk, not gawk — no 3-arg `match(str, /re/, arr)` (use `split()`/`sub()`/`gsub()`),
+no `strtonum()` (write a manual `h2d()`), no `gensub()` (use `sub()`/`gsub()` + a temp var).
+
+<!-- harnez:stop -->

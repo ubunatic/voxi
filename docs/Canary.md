@@ -6,8 +6,8 @@ weight: 20
 <!-- harnez:bundled -->
 # Canary-First Development
 
-For the broader feature-prototyping framing and its limits, see
-`@docs/PrototypingFeatures.md`.
+For broader feature-prototyping framing and its limits, consult the optional
+`PrototypingFeatures.md` practice when it is installed in the project.
 
 A **canary** is a minimal, standalone test that validates one external
 mechanism before any feature code is built on top of it. It is not a
@@ -187,3 +187,5 @@ on the one mechanism you are validating.
 **Confusing canaries with integration test suites.** Expecting a canary script
 to continuously import production abstractions or mirror end-to-end feature logic
 defeats its purpose as an isolated, stable probe of an environment mechanism.
+
+<!-- harnez:stop -->

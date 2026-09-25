@@ -41,3 +41,5 @@ commonly stored in an `AGENTS.md` file at the repository root.
 Only if explicitly asked:
 - push to the mirror to keep it in sync
 - pull from mirror contributor branches to integrate contributions
+
+<!-- harnez:stop -->

@@ -45,6 +45,11 @@ Every YAML file references its schema at the top:
 # yaml-language-server: $schema=schemas/actions.schema.json
 ```
 
+`spec/telemetry.yaml` is a Harnez-specific non-UI example: it owns embedded SQL
+statements and DDL, while its JSON Schema validates the YAML structure rather
+than SQL syntax. In another project, substitute an existing spec file or omit
+this example when absent.
+
 ---
 
 ## 3. Architecture & Data Flow
@@ -161,3 +166,5 @@ When modifying spec-driven features:
 - [ ] Validated schema: `make validate-spec` (or language test equivalent).
 - [ ] Verified integrity tests pass: `go test ./...` / `cargo test` / `pytest`.
 - [ ] Cleaned up obsolete definitions, orphaned actions, and schema enums.
+
+<!-- harnez:stop -->

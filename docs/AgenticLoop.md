@@ -1,267 +1,70 @@
+<!-- harnez:variant=lite -->
 ---
-title: Agentic Loop Practices
+title: Agentic Loop Practices (Lite)
 weight: 40
 ---
 
-<!-- harnez:bundled -->
-# Agentic Loop Practices — Multi-Agent Sprint Workflow
+# Agentic Loop Practices — Lite
 
-This document establishes the canonical practice for orchestrating multi-agent development loops. It defines the lifecycle, synchronization invariants, role archetypes, and quality gates required to conduct rapid, collision-free agentic sprints.
+Tagline-only variant. Same rules as the full doc, no prose/case-studies. See
+`AgenticLoop.md` (`harnez docs variant <name> full`) for rationale and examples.
 
-Capability names vary by agent harness. In the examples below, repository search
-means tools such as `grep_search`, bounded reads mean line-range reads,
-background-task inspection means commands such as `manage_task list`, and
-subagent lifecycle control means commands such as `manage_subagents kill`.
+## 1. Core Invariants
+1. **Parallel Read, Sequential Write** — many may read/grep at once; one writer per workspace at a time. **Sequential dispatch is the default for every task type, not just file-overlapping code edits.** Includes read-then-write races on shared sequential resources (e.g. ticket numbers).
+2. **Canary & Test-Driven Verification** — verify with real test runs before declaring done; never assume an edit works.
+3. **Zero Zombie Guarantee** — track and terminate every background process, timer, and subagent before ending a session.
+4. **Responsive Host Orchestrator** — stay available to the user; delegating ≠ blocking on the child unless asked or truly required.
+5. **In-Repository Single Source of Truth** — tickets/decisions/retros live in git (`issues/`, `docs/feedback/`, `docs/studies/`), not just chat.
+6. **Context Discipline & Range-Bounded Ingestion** — never whole-file-read `AGENTS.md`/active system rules; avoid native tool slices on >100 line files; use `harnez read -L`/`-n` via CLI (`harnez read -I` is paused until issue 543, a memory blow-up, is fixed).
+7. **Media & Demo Verification Gate** — **always ask the user for explicit confirmation** of recorded output before publishing/embedding.
+8. **Deployment Transparency — 3-State Grounding (when applicable)** — **Local State**, **Deployed Artifact State**, and **Active Daemon State** are independent; local build/test proves nothing about the other two (remote-deploying projects only).
+9. **One-Level Delegation** — `harnez agent --role orchestrator|developer|reviewer|advisor`: only an orchestrator starts helpers (one writer at a time); developers, reviewers and advisors are leaf workers that never run `harnez agent`, native subagents or delegating skills. harnez enforces it. Live checks that need an agent session are run by the orchestrator.
 
----
+## 2. The 5-Phase Sprint Loop
+Each phase's **Mechanics** and **Constraints** are summarized inline below; see the full doc for step-by-step detail.
+- **### Phase 1: Parallel Advisory Discovery (Read-Only)** — concurrent read-only advisors find exact line ranges, return plans; never write or spawn side effects. **Kickoff & Commit Policy**: agree upfront whether subagents commit directly or return diffs.
+- **### Phase 2: Sequential Development & Test Verification (Single-Threaded)** — one ticket at a time, TDD, workspace stays green every step. **Repro-before-fix for defect-shaped tickets**: bug/race tickets need a numeric baseline before the fix, not just passing gates. **Commit stale/failed work before discarding it**: commit/branch an abandoned attempt before reverting, except trivial one-liners. **Model selection:** escalate tier on ambiguity/architecture/security/scope growth, never trade away verification for speed.
+- **### Phase 3: Pre-Commit Review Gate (Independent Reviewer)** — reviewer checks Test Assertion Rigor, **Docs & Ticket Sync**, **Backward Compatibility & Invariants**, **Token Efficiency & Code Clarity**, **Live/Real-Environment Verification for hooks & env-resolution features** (unit tests alone don't prove it live), **Root Cause vs. Symptom** for defensive fixes. Exit condition: commit or explicit user authorization — not "reviewed and left uncommitted."
+- **### Phase 4: Process & Subagent Hygiene (Teardown & Drain)** — inspect and kill/drain lingering tasks, timers, subagents.
+- **### Phase 5: Agentic Flow Quality Retrospective (Learning Capture)** — record friction in a durable doc/ticket; sync tracker (`issues/README.md`, `harnez status`/`index`); **Single Status field per ticket** kept in sync everywhere; **Closing gate**: close shipped+verified tickets before ending; `git status` before the retro.
 
-## 1. Core Philosophy & Invariants
+## 3. Lean Fresh-Handoff Pattern (`/lean-sprint`)
+For a single focused ticket: **Clean Goal Handoff** (one objective; **Trust the Base Framework** — don't restate base rules already in the system prompt; stay responsive) → **Autonomous Execution & Self-Verification** → **Confidence-Gated Inline Review** (skip a formal reviewer when tests pass and confidence is high; escalate on cross-subsystem risk) → **Fast Hygiene** / **Fast Hygiene & Status Sync** (kill children immediately). ### Workflow Selection Matrix: **Overhead** and **Host Responsiveness** both favor the full 5-phase loop for multi-ticket/major/broad work; lean fresh-handoff for one ticket/bug fix.
 
-Agentic software engineering scales effectively when concurrency is structured and single-threaded write locks are strictly preserved.
+## 4. Calibrated Friction Reporting
+**Substantive Sessions Only** (real hurdles, not routine) · **Zero Repetitive Noise** (no boilerplate on known quirks) · **Actionable Root Causes** (blocker, failure mode, workaround tried, recommended fix).
 
-1. **Parallel Read, Sequential Write**:
-   - Multiple subagents may concurrently explore, read, grep, and analyze the codebase.
-   - Only **one** agent may modify files, write code, or execute build mutations in a shared workspace at any given time.
-   - Concurrent writes produce race conditions, broken intermediate states, git conflicts, and corrupt dependencies.
-   - **Sequential dispatch is the default for every task type, not just file-overlapping code edits.** Two subagents each doing "read-only" investigation or ticket-filing work can still race on a shared, sequentially-allocated resource they both read and then write independently — e.g. two agents can independently select the same next ticket number from stale snapshots. File-level non-overlap is not sufficient evidence that parallel dispatch is safe. Dispatch one subagent at a time unless the user explicitly requests parallel execution for a specific task — and even then, verify the run actually was concurrent and check for this class of race afterward.
+**Name items in reports**: give each milestone/ticket a short name at least once ("M3 (single-write removal)", "498 (Claude resume)"), not a bare "M3" or "498".
 
-2. **Canary & Test-Driven Verification**:
-   - Every task must be verified with real test executions (`go test ./...`, `make smoke`, canary probes) before declaring completion.
-   - Never assume an edit succeeds without observing passing assertions.
-
-3. **Zero Zombie Guarantee**:
-   - Every spawned background process, schedule timer, or subagent must be tracked, accounted for, and explicitly terminated before concluding a session.
-   - Orphaned processes, lingering watch commands, and abandoned poll loops degrade system resources and corrupt future test runs.
-
-4. **Responsive Host Orchestrator**:
-   - The host remains the user's always-available coordination surface while child agents work.
-   - A user request to "hand this to a subagent" means delegate and keep the main chat responsive; it does not imply permission to block on `wait_agent`, `manage_subagents wait`, or equivalent.
-   - Wait for a child only when the user explicitly asks to wait, or when the next user-visible integration step truly cannot proceed without that result.
-   - After dispatch, report the handoff and continue with non-overlapping local work or return control to the user instead of occupying the host turn with an idle wait.
-
-5. **In-Repository Single Source of Truth**:
-   - Tickets, architectural decisions, retrospectives, and specifications live in the git tree. Use project conventions such as `issues/`, `docs/feedback/`, or `docs/studies/` when present; otherwise record the result in an existing durable project doc or ticket.
-   - Session context, learnings, and friction logs must be committed to the repository rather than abandoned in ephemeral agent chat contexts.
-
-6. **Context Discipline & Range-Bounded Ingestion**:
-   - Never execute whole-file reads on files already present in the active system prompt (`AGENTS.md`, `CLAUDE.md`, system rules).
-   - Prefer index consultation, `grep_search`, and range-bounded reads (`StartLine`/`EndLine`) over bulk document ingestion. In-file warning banners are ineffective once returned into message history.
-
-7. **Media & Demo Verification Gate**:
-   - When creating, updating, or adding media assets (e.g. reels, WebM demos, terminal recordings, screenshots) intended for documentation or websites, **always ask the user for explicit confirmation** that the recorded visual output matches their exact expectations before publishing or embedding it.
-   - Never automatically publish or embed unverified recordings (guarding against invisible typing, missing UI frames, or unexpected rendering artifacts).
-
-8. **Deployment Transparency — 3-State Grounding (when applicable)**:
-   - Remote deployment status has three independent states that must never be conflated:
-     **Local State** (checkout, configs, unit tests), **Deployed Artifact State** (remote
-     filesystem binaries, permissions, config overlays), and **Active Daemon State** (remote
-     process table, systemd units, active crontab entries).
-   - This invariant applies only when the project actually deploys to remote hosts or manages
-     daemons. Such projects should explicitly install the `deployment-transparency` doc for its
-     full probes and anti-patterns. Projects that prohibit remote deployment should ignore this
-     capability-specific rule. A clean local build or passing local test is evidence about Local
-     State only, never evidence of a remote state.
-
----
-
-## 2. The 5-Phase Agentic Sprint Loop
-
-```
-       Phase 1: Parallel Advisory Discovery
-       [Advisor A]   [Advisor B]   [Advisor C]
-            \             |             /
-             v            v            v
-       Phase 2: Sequential Development & TDD
-          (Task 1 -> Task 2 -> Task 3)
-                          |
-                          v
-       Phase 3: Pre-Commit Review Gate
-             [Independent Reviewer]
-                          |
-                          v
-       Phase 4: Process & Subagent Hygiene
-         (inspect, drain, and terminate tasks)
-                          |
-                          v
-       Phase 5: Flow Quality Retrospective
-       (durable project doc or ticket)
-```
-
-### Phase 1: Parallel Advisory Discovery (Read-Only)
-- **Goal**: Rapidly audit requirements, discover existing implementations, identify affected files, and evaluate technical feasibility without code collisions.
-- **Mechanics**:
-  - The Host Orchestrator spawns concurrent read-only advisor subagents (e.g. one per ticket or feature area).
-  - Advisors perform focused repository searches and bounded reads, evaluate whether requirements are already partially or fully met, and identify exact line ranges for changes.
-  - Advisors return concise findings and structured implementation plans to the Host.
-- **Kickoff & Commit Policy**:
-  - Establish commit authority upfront. If operating under an ask-first harness, ask the user during kickoff for permission to commit local verified checkpoints proactively so the user can walk away without returning to uncommitted progress.
-  - Clarify whether subagents will commit directly or return diffs for the orchestrator to commit on their behalf.
-- **Constraints**: Advisors must never write files, run mutating commands, or spawn untracked side effects.
-
-### Phase 2: Sequential Development & Test Verification (Single-Threaded)
-- **Goal**: Implement planned changes cleanly, incrementally, and with continuous test verification.
-- **Mechanics**:
-  - The Host Orchestrator (or a dedicated dev subagent executing sequentially) addresses tasks one ticket at a time.
-  - Test-Driven Verification: Write or adapt unit tests alongside or prior to code changes.
-  - Validate intermediate milestones with fast test suites (`go test ./...`).
-  - Keep the workspace in a compilable, passing state at every step.
-  - **Repro-before-fix for defect-shaped tickets**: For bug/timing/deadlock/race tickets, construct (or reuse) a reproduction that asserts a concrete numeric baseline *before* writing the fix. Verify the implementation against that number, not just `go test` exiting 0 — a fix can pass every pre-existing gate and still not address the defect if the existing gates weren't built to catch it.
-  - **Commit stale/failed work before discarding it**: When an implementation attempt is abandoned — because it regressed a gate, because a cleaner strategy was found, or because it was simply wrong — do not `git checkout --`/`git reset --hard`/`git stash drop` it away as the first move. Commit it first, on the current branch or a throwaway one (e.g. `git commit -m "wip: attempt N, reverted — see issue NNN" --no-verify` only if hooks block a WIP commit, otherwise a normal commit), *then* revert the working tree with `git revert` or by checking out the prior commit. This keeps the failed attempt in `git log`/`git reflog` as a real, diffable artifact instead of only as prose in a ticket. A short-lived local branch (`git branch attempt-2-endpoint-cone`) pointing at the WIP commit is even better when more than one attempt is worth preserving side-by-side. Only skip this for genuinely trivial, single-line experiments where the narrative description *is* the diff (e.g. "tried threshold=50, tried threshold=25, both failed" needs no commit) — the bar is "would a future reader want to `git diff` this," not "is this attempt tidy."
-
-**Model selection:** Use a fast capable model for clear, bounded, testable subagent tasks. Use a more capable model for ambiguity, architecture, security, deep debugging, broad changes, or final review. Escalate on uncertainty, failed checks, or scope growth; never trade away verification for speed.
-
-### Phase 3: Pre-Commit Review Gate (Independent Reviewer)
-- **Goal**: Enforce quality standards and catch regressions before changes are committed.
-- **Mechanics**:
-  - The Host spawns an independent Reviewer subagent (or executes a dedicated review pass).
-  - The Reviewer audits the working tree diff (`git diff`) against requirements.
-  - Review Checklist:
-    - **Test Assertion Rigor**: Are tests asserting specific outcomes or merely executing code without assertions?
-    - **Docs & Ticket Sync**: Are all issue status tags, README indices, and docs updated in sync with code?
-    - **Backward Compatibility & Invariants**: Does the change uphold project invariants and CLI design boundaries?
-    - **Token Efficiency & Code Clarity**: Is the code concise, readable, and free of redundant abstractions?
-    - **Live/Real-Environment Verification for hooks & env-resolution features**: for any change that installs a live
-      agent hook, writes global config (`apply`), or resolves state from the ambient environment (branch name,
-      session env vars, cwd), passing `go test ./...` is not sufficient evidence it works — test fixtures routinely
-      supply explicit args or isolated temp dirs that mask exactly the resolution failures real usage hits (e.g. a
-      branch-name heuristic that assumes per-ticket branches when the user never creates them; two independently
-      unit-tested hooks that only collide once both are installed together). Require one real, live end-to-end
-      check after a genuine restart/re-apply against the actual environment before the ticket is done; record
-      a project-local case study or ticket for any concrete failure this catches.
-    - **Root Cause vs. Symptom**: For a defensive or robustness fix (parsing subprocess/tool output, retry/tolerance logic, error swallowing), ask whether the *source* of the unexpected input can be fixed instead — a flag, a config setting, a different invocation. Verify any proposed upstream fix against the real tool/source before treating it as the fix; a plausible-sounding mechanism is not a verified one. If multiple review rounds each find a new edge case in the same defensive code, that is a signal to step back to Phase 2 and fix the root cause rather than harden the symptom further.
-  - **Exit condition**: Phase 3 is not complete until reviewed, verified work is either committed or the user has been explicitly asked to authorize the commit. If standing commit authority was granted at kickoff, commit now. If not, asking *is* the exit action — do not carry a clean, reviewed diff into Phase 4.
-
-### Phase 4: Process & Subagent Hygiene (Teardown & Drain)
-- **Goal**: Prevent zombie accumulation, orphan processes, and stuck background tasks.
-- **Mechanics**:
-  - Inspect running background tasks with the harness's task-management capability.
-  - Explicitly kill or drain completed, idle, or lingering background jobs, schedule timers, and watch subprocesses.
-  - Terminate child subagents with the harness's subagent lifecycle controls after they finish.
-  - Record an `--ok` heartbeat (`harnez rate --ok "<note>" [<ticket_id>]`) to register clean sprint completion and successful tool execution in telemetry.
-  - Ensure the host and system state is pristine.
-
-### Phase 5: Agentic Flow Quality Retrospective (Learning Capture)
-- **Goal**: Continually refine agent workflows, document tooling friction, and persist session insights.
-- **Mechanics**:
-  - Record session friction, harness observations, and process recommendations in the project's durable feedback/study location when one exists, or in a related project doc or ticket otherwise.
-  - Update issue tracker status (`issues/README.md`) and run `harnez status` to ensure zero drift between issues and indices; run `harnez index` (issue 148) to regenerate `issues/README.md` and `docs/README.md`'s studies table from their source files instead of hand-editing rows.
-  - **Single Status field per ticket**: When updating a ticket's status, check the *entire* file for more than one status-bearing field (a top-of-file summary line and a separate `## Status` section are both common). Update all occurrences together, or standardize on exactly one per file in the local template.
-  - **Closing gate**: for every ticket touched this session whose work is now shipped and
-    verified, flip its `Status` header to `Closed` before ending the session — do not let a
-    green build and a commit stand in for closing the ticket. See
-    [IssueTracking.md](IssueTracking.md) §5 ("Closing Is Part Of Done").
-  - Run `git status` before writing the retro or session story — uncommitted reviewed work is itself a retro finding, not a background condition.
-  - Prepare clean, conventional commit messages.
-
----
-
-## 3. The Lean Fresh-Handoff Pattern (`/lean-sprint`)
-
-```
-   Host Orchestrator
-          |
-   (1) Clean Goal Handoff (problem, tickets, verification targets)
-          |
-          v
-     [Fresh Dev Subagent]
-          |
-   (2) Autonomous Dev & Self-Verification (TDD, go test, make check)
-          |
-          v
-   (3) Confidence-Gated Inline Review
-       ├── High Confidence / Passing Tests ──> Return directly to Host (Inline Diff Check)
-       └── High Ambiguity / Regressions    ──> Escalate to Independent Reviewer Subagent
-          |
-          v
-   (4) Fast Hygiene & Teardown (kill child agents, zero zombies, harnez rate --ok)
-```
-
-For focused, day-to-day tickets, running the full 5-phase ceremony with separate advisor and reviewer subagents introduces unnecessary latency and token overhead. The **Lean Fresh-Handoff** pattern provides a lightweight, fast-path alternative:
-
-1. **Clean Goal Handoff**:
-   - The Orchestrator dispatches a fresh subagent with a single, clear objective: problem statement, target tickets/specs, and explicit verification criteria.
-   - **Trust the Base Framework**: Avoid micromanaging standard workspace rules, tool descriptions, or language conventions already provided by the base system prompt.
-   - **Stay Responsive**: After dispatch, the Orchestrator returns control to the main chat or continues only with non-overlapping local work. Do not block on the dev subagent by default.
-2. **Autonomous Execution & Self-Verification**:
-   - The dev subagent implements changes and validates them using repo-native verification commands (`go test ./...`, `make check`, canary probes).
-3. **Confidence-Gated Inline Review**:
-   - If automated tests pass cleanly and confidence is high, skip dispatching an independent reviewer subagent.
-   - The primary orchestrator performs a rapid inline diff review before finalizing.
-   - Escalate to a formal reviewer agent only if there is cross-subsystem blast radius, missing automated test coverage, or unexpected complexity.
-4. **Fast Hygiene & Status Sync**:
-   - Immediately terminate child subagents (`manage_subagents kill`) and clear background tasks.
-   - Record an `--ok` heartbeat (`harnez rate --ok "<note>" [<ticket_id>]`) to confirm clean sprint completion in telemetry.
-
-### Workflow Selection Matrix
-
-| Dimension | Formal 5-Phase Loop (`/sprint`) | Lean Fresh-Handoff (`/lean-sprint`) |
-|---|---|---|
-| **Scope** | Multi-ticket sprints, major features, broad refactors | Single focused ticket, bug fix, localized feature |
-| **Discovery** | Parallel read-only advisor subagents | Targeted orchestrator/dev grep & range-bounded reads |
-| **Review Gate** | Independent reviewer subagent mandatory | Confidence-gated inline review (escalate on risk) |
-| **Overhead** | Higher compute/tokens, maximum verification depth | Minimal compute/latency, rapid turnaround |
-| **Host Responsiveness** | Host may coordinate multiple workers but remains user-responsive | Host dispatches and returns control; no default blocking wait |
-
----
-
-## 4. Calibrated Friction Reporting Standard
-
-Agentic retrospectives and tooling feedback are vital for evolving harnesses, but must remain calibrated to avoid feedback fatigue:
-
-1. **Substantive Sessions Only**: Capture authentic tool, environment, or sandbox friction **only** after non-trivial sessions where real hurdles occurred.
-2. **Zero Repetitive Noise**: Do not emit repetitive boilerplate or complain about known, trivial environment quirks on routine, fast iterations.
-3. **Actionable Root Causes**: When reporting friction in a durable project doc or ticket, state the concrete blocker, failure mode, attempted workaround, and a recommended harness or tooling fix.
-
----
-
-## 5. Role Taxonomy & Constraints
-
-| Role | Permitted Tools & Capabilities | Primary Responsibilities | Lifecycle |
+## 5. Role Taxonomy
+| Role | Tools | Job | Lifecycle |
 |---|---|---|---|
-| **Host Orchestrator** | Full Toolset (Subagents, Read, Write, Exec, Tasks) | Coordinates overall plan, sequences dev work, manages subagents, interacts with user | Persistent (lives throughout session) |
-| **Ephemeral Advisor** | Read-only repository search and retrieval | Audits tickets, performs feasibility research, identifies code paths | Ephemeral (terminated after Phase 1) |
-| **Dev Worker** | Write Tools, Compiler, Test Runner | Implements concrete changes, writes unit tests, ensures compilation | Single-threaded per workspace |
-| **Independent Reviewer** | Read-Only Tools, Diff Inspection | Audits git diff against acceptance criteria, verifies test rigor | Ephemeral (spawned in Phase 3) |
+| Host Orchestrator | Full | Coordinates, manages subagents, talks to user | Persistent |
+| Ephemeral Advisor | Read-only | Audits tickets, researches feasibility | Killed after Phase 1 |
+| Dev Worker | Write + tests | Implements, writes tests | Single-threaded per workspace |
+| Independent Reviewer | Read-only + diff | Audits diff vs. acceptance criteria | Spawned in Phase 3 |
 
----
+## 6. Anti-Patterns to Avoid
+- **Parallel Writing** — multiple write-permitted subagents on one workspace at once.
+- **Blocking Handoff Waits** — treating a handoff as license to block the main chat.
+- **Silent Verification** — assuming a fix works without running tests/canaries.
+- **Unit-Test-Only Confidence for Hook/Environment Features** — green `go test` ≠ proof a hook/env-resolution feature works live; require one real end-to-end check after a genuine restart/re-apply.
+- **Deployment State Conflation** — calling something "deployed"/"scheduled" from local build/test success alone, without probing the live host.
+- **Blind Revert of Failed Work** — `checkout --`/`reset --hard`/`stash drop` on a failed attempt without committing it first.
+- **Reviewed-But-Uncommitted Carryover** — finishing review and moving on with verified work still uncommitted.
+- **Narrow String-Substitution Edits Over Structured Patches** — prefer `apply_patch`/whole-block replacement; measured **11.1%** failure rate for `Edit` vs. **4.2%** for `apply_patch` (2.6×) in the same repo.
+- **Baking Real Credentials In For A Fast Dev Loop** — no real hostnames/MACs/credentials "temporarily"; use RFC-1918/example values + a secret scanner from commit one.
+- **Orphaned Background Tasks** — leftover `tail -f`/watch loops/timers after work is done.
+- **Lost Context / Ephemeral-Only Retrospectives** — friction/bugs discussed in chat but never written to a durable doc/ticket.
+- **Rubber-Stamp Reviews** — a review that doesn't actually inspect assertions or diffs.
+- **Unbounded Doc Ingestion** — whole-file-reading `AGENTS.md`/bundled docs already in the active prompt.
+- **Unverified Media Publishing** — publishing recordings/screenshots without explicit user confirmation.
+- **Prompt Micromanagement** — restating base rules/tool docs the harness already provides in a subagent prompt.
+- **Friction Noise Over-Reporting** — repetitive, low-signal friction reports on routine tasks.
+- **Blocking `sleep` Waits** — long/chained `sleep` to wait out CI/deploy/queue; use harness notifications or a scheduled-wakeup loop instead.
+- **Chat-Visible Empty Polling** — re-checking a long job on a fixed short interval with no new output; prefer a real completion signal or a detached job + log file.
+- **Buffered Long-Running Output** — piping a long command through `tail`/`grep`/`sort`/`wc`/`head`, which shows nothing until it exits; run plain or `tee` to a log.
+- **`cd`-scoped commands** — bare `cd` leaking into later unrelated calls in a shared shell; use `-C`/`--prefix`/`--manifest-path` or a subshell `(cd dir && cmd)`.
+- **Chatty Watch Wrappers** — wrapping a poll-and-redraw CLI (`gh run watch`, `docker logs -f`) in a routine agent-called target without quieting it; poll the tool's own status query on a matched interval and print one summary line on completion instead.
 
-## 6. Practical Recipes & Anti-Patterns
-
-### Anti-Patterns to Avoid
-- ❌ **Parallel Writing**: Spawning multiple subagents with write permissions on the same workspace simultaneously.
-- ❌ **Blocking Handoff Waits**: Treating "hand this to a subagent" as permission to block the main chat while waiting for the child. The host is always the responsive orchestrator.
-- ❌ **Silent Verification**: Assuming a fix works without running test commands or canary scripts.
-- ❌ **Unit-Test-Only Confidence for Hook/Environment Features**: Treating a green `go test ./...` as proof a
-  hook-installing or environment-resolution-dependent feature actually works in production. Eight tickets shipped
-  with passing, well-written unit tests on 2026-08-31 (`harnez-tool-observability`) while automatic capture was
-  completely non-functional in real usage. Manual code review (not tests) caught two cross-ticket integration bugs
-  (two independently-tested `PreToolUse` hooks racing once both were installed; a rewrite that broke on shell
-  metacharacters an outer shell re-interpreted). But a branch-name-shaped-ticket heuristic that could never match
-  this user's actual workflow, and a schema-version guard that trusted a pre-existing file, both passed every unit
-  test *and* code review — they were only found by restarting a real session, adding debug logging, and checking
-  real output against the real DB.
-- ❌ **Deployment State Conflation**: In a project with remote deployment, declaring a remote binary "deployed" or a job "scheduled" based on local build/test success or a clean transfer exit code, without probing the live host.
-- ❌ **Blind Revert of Failed Work**: Running `git checkout --`, `git reset --hard`, or `git stash drop` on a failed implementation attempt without first committing it somewhere recoverable. A prose summary of what was tried is not a substitute for the actual diff — it cannot be `git diff`ed, re-applied, or independently re-verified against the gate it was tested against.
-- ❌ **Reviewed-But-Uncommitted Carryover**: Finishing a review gate and moving on (retro, story, `/compact`, next ticket) with verified work still in the working tree, waiting for the user to notice. Phase 3 is not complete until the commit is made or the user has been explicitly asked to authorize it. Recurred twice in one `weg` session — issues 044 and 046.
-- ❌ **Narrow String-Substitution Edits Over Structured Patches**: The existing "prefer
-  `apply_patch`/whole-block replacement over narrow string substitution" rule was written from
-  intuition; `smarthome`'s `harnez stats` now backs it with numbers — `Edit` failed at **11.1%**
-  across 108 calls vs. `apply_patch` at **4.2%** across 24 calls in the same repo (2.6× the rate),
-  Prefer `apply_patch` when both are available.
-- ❌ **Baking Real Credentials In For A Fast Dev Loop**: Hardcoding real device hostnames, MACs,
-  subnets, or credentials "temporarily" to speed up local iteration, intending to scrub before
-  publication. `smarthome` did this for two days and had to run a full history-sanitization pass
-  (new commits, rewritten tickets) before its public release could ship — a public-release gate
-  that is often caught only by a human release decision, not tooling. Start with RFC-1918/example values and a credential-source seam from the first commit;
-  wire a secret scanner into the project's `check`/`test` target immediately, not retroactively.
-- ❌ **Orphaned Background Tasks**: Leaving background `tail -f`, watch loops, or timers running after work is completed.
-- ❌ **Lost Context / Ephemeral-Only Retrospectives**: Discussing important harness friction or bugs in chat without writing them down to a durable project doc or ticket.
-- ❌ **Rubber-Stamp Reviews**: Running a review pass that does not inspect actual test assertions or file diffs.
-- ❌ **Unbounded Doc Ingestion**: Executing whole-file read tools on `AGENTS.md` or bundled reference docs whose summaries are already in the active system prompt.
-- ❌ **Unverified Media Publishing**: Publishing or embedding demo reels, WebM files, or UI screenshots on websites or documentation without explicit user confirmation of the visual output.
-- ❌ **Prompt Micromanagement**: Overburdening subagent dispatches with redundant base rules, tool definitions, or style guides already present in the harness system prompt.
-- ❌ **Friction Noise Over-Reporting**: Emitting repetitive, low-signal friction reports on fast, routine tasks.
-- ❌ **Blocking `sleep` Waits**: Using a long `sleep N` — or a loop of short sleeps — to wait out a CI run, deploy, remote queue, or background process. A blocking sleep burns the agent's own turn and context budget for its full duration with no record of what was being waited for if the session is interrupted mid-wait, and a sleep-loop wastes cycles on empty polls instead of yielding control until state actually changes. Prefer letting harness-tracked background work notify on completion; when polling genuinely-external state is unavoidable, use the harness's scheduled-wakeup or interval-loop mechanism (e.g. `/loop`, `manage_task` notifications) so the agent yields between checks, and match the interval to how fast the watched state actually changes rather than a fixed short interval "just in case." Never chain long leading sleeps to route around a harness restriction on blocking sleep — that defeats the restriction's purpose.
-- ❌ **Chat-Visible Empty Polling** — staying attached to a long-running job (benchmark run, canary, CI, deploy, remote agent) and re-checking it on a fixed short interval while it produces no new output. Distinct from the `Blocking sleep Waits` anti-pattern above: the agent *is* yielding between checks, but each check spends context and user attention to report "still running." Prefer a real completion signal: a harness-tracked background task, a notification, or a scheduled wakeup. If no completion callback exists, launch the work in a detached/durable form that writes a log or result file, then hand the user the job id, log path, and expected budget and return control. When polling is genuinely unavoidable, size the interval to the job's expected duration (a 40-minute job does not get 30-second polls) and surface only *events* — started, first output, status file changed, exited, artifact written, timeout, cleanup — not heartbeats. Before finishing, check for lingering background processes per Invariant 3 (Zero Zombie Guarantee).
-- ❌ **Buffered Long-Running Output**: Piping a long-running build/test/canary command through `tail`, `grep`, `sort`, `wc`, `head`, or any other filter that buffers stdout — the filter emits nothing until the whole pipeline exits, so a multi-minute command looks silent/stuck with zero progress visibility. Run it plain (letting the harness's background-task mechanism handle it past its timeout) or use `cmd 2>&1 | tee /tmp/x.log` if a trimmed final summary is also wanted. See also: `Blocking sleep Waits` (same symptom, different cause).
-- ❌ **`cd`-scoped commands**: prefer `git -C <dir> status` over `cd <dir> && git status` — the shell tool's cwd persists into later, unrelated calls and silently targets the wrong repo. Use the tool's directory flag (`git -C`, `make -C`, `go -C`, `npm --prefix`, `cargo --manifest-path`); when no flag exists, use a subshell `(cd <dir> && cmd)` so cwd is restored automatically. See `docs/lang/Bash.md §8` for the full flag table and restore-cwd convention.
+<!-- harnez:stop -->
