@@ -36,3 +36,58 @@ Treat Cezanne and Phoenix as CPU-first targets. The [AMD ROCm APU compatibility 
 ## 3. Implementation & Verification Plan
 
 **/goal**: Produce a concise, evidence-backed comparison and recommendation for a locally runnable TTS option that provides natural voices on the target hardware, and determine whether playful/Yoda-like delivery is feasible through supported voices or a separate technique. Define the target hardware and a representative short-text latency/quality evaluation, then verify the leading candidate on available hardware or document a reproducible canary plan if that hardware is unavailable.
+
+### Local CPU canary (2026-09-25)
+
+Host: AMD Ryzen 5 PRO 5650U (12 logical CPUs), 23.3 GiB RAM. No GPU provider
+was used. Piper ran without `--cuda`; Kokoro explicitly used
+`CPUExecutionProvider` with four ONNX intra-op threads and one inter-op thread.
+The fixed utterance was “Hello. This is a short local speech synthesis
+benchmark.” Results are cold process runs, including interpreter/model load;
+RTF is wall latency divided by generated WAV duration. These are local
+latency/smoke results, not a voice-quality evaluation.
+
+| Engine | Install / assets | Latency | WAV duration | RTF | CPU time | Peak RSS |
+|---|---|---:|---:|---:|---:|---:|
+| Festival (`text2wave`) | System package already installed | 2.403 s | 3.91 s | 0.615 | 2.38 s | 374.0 MiB |
+| espeak-ng | System package already installed | 0.013 s | 3.59 s | 0.004 | <0.01 s | 8.3 MiB |
+| Piper 1.8.0, `en_US-lessac-medium` | Python venv install; 60.3 MiB ONNX + config | 1.877 s | 3.30 s | 0.569 | 8.36 s | 189.6 MiB |
+| Kokoro ONNX (`kokoro-onnx` 0.4.7) | Python venv install; 310.4 MiB model + 26.9 MiB voices | 3.928 s | 3.24 s | 1.211 | 10.41 s | 578.0 MiB |
+
+Measurements varied slightly between runs. The Kokoro run required a local
+canary compatibility shim: the installed package emits int32 `speed` for the
+`input_ids` graph, while the downloaded graph expects float32. With that cast,
+it generated a valid WAV. Treat this as an upstream package/artifact
+compatibility finding to resolve or pin before integration. Neural cold-start
+latency trails espeak-ng substantially here; test a resident process and warm
+requests before deciding whether Kokoro is responsive enough for streaming.
+
+The persistent canary is `scripts/canary_tts/benchmark.py` with its small
+Kokoro adapter. It reports latency, duration, RTF, CPU, and peak RSS; set
+`VOXI_TTS_PYTHON`, `VOXI_PIPER_MODEL`, `VOXI_KOKORO_MODEL`, and
+`VOXI_KOKORO_VOICES` to supply optional candidates. It does not fetch assets.
+Candidate license details are separate from package license: the Kokoro-82M
+model card declares Apache-2.0; Piper says to check each voice's model card,
+and `en_US-lessac-medium` has MIT license metadata.
+
+### Integration architecture
+
+`internal/tts` already has an `EngineBackend` queue boundary, but production
+`Engine.Synthesize` selects Festival/espeak-ng directly and starts a new
+supervised command for each chunk. Extend this seam with named synthesizer
+providers selected by `spec/tts.yaml` (retain Festival then espeak-ng as the
+default fallback chain). Give each provider a prepare/synthesize contract and
+an explicit model/voice path; neural providers should own one bounded,
+supervised resident worker so model load is paid once, while WAV playback,
+silence trimming, queueing, and interruption remain shared. Startup status
+must explain unavailable provider/model and fallback. Keep downloads and Python
+package installation out of `make install`; document opt-in setup and each
+model/voice license. Add a style/preset field only after deciding whether it
+changes narration text, synthesis prosody, or both. Yoda-like cadence is not
+established by this benchmark.
+
+Acceptance work for this issue: choose Piper or Kokoro after warm latency and
+listening comparisons on target hardware; verify fallback, worker
+shutdown/interruption, memory bounds, and voice/model license; compare natural
+and deliberately stylized narration for factual preservation and audible
+cadence.
