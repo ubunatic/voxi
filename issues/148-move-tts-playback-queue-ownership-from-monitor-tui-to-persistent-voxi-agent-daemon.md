@@ -1,6 +1,6 @@
 # 148 — Move TTS playback queue ownership from monitor TUI to persistent voxi-agent daemon
 
-**Status**: Open
+**Status**: Closed — Implemented persistent daemon TTS queue ownership, audio arbiter recording epoch mute gate, and offline CLI synthesis
 **Priority**: P1 (High)
 **Severity**: Moderate
 **Category**: Architecture
