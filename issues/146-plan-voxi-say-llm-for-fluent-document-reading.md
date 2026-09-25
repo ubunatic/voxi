@@ -1,6 +1,6 @@
 # 146 — Plan `voxi say --llm` for fluent document reading
 
-**Status**: Open
+**Status**: Closed — resolved
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Feature
@@ -17,17 +17,18 @@ waiting for the entire rewrite before playback would delay the first audio.
 
 ## 2. Goal
 
-Add a planned `voxi say --llm` mode that uses `lmcoder` and its configured
-backend host (localhost by default) to produce fluent speech-ready text while
-starting playback promptly. Done when the command can begin with the first
-paragraph, continue processing the complete document as playback proceeds, and
-queue later spoken chunks as they become available without losing document
-context.
+Add `voxi say` LLM narration using `lmcoder` and its configured backend host.
+Narration is enabled by default, starts playback after rewriting the first
+paragraph, then sends the remaining document in the same isolated session while
+playback proceeds. Later narration is queued as soon as the continuation is
+ready.
 
 ## 3. Desired behavior
 
-- Use `lmcoder` and the configured host; default to the local host when no host
-  is configured.
+- Use `lmcoder` and the configured host. Resolve the host from `--llm <host>`,
+  then `tts_llm_host` in `~/.config/voxi/config.yaml`, then the embedded spec
+  default `localhost`. This developer host is configured as `x600`.
+- Enable LLM narration by default. `--no-llm` reads the original text directly.
 - Send the first paragraph with instructions to prepare narration and signal
   that the rest of the document will follow. Queue its resulting chunk or
   chunks as soon as they are ready.
@@ -37,16 +38,20 @@ context.
 - Support speech-oriented transformations such as rendering a Markdown table
   as clear spoken comparisons. Decide whether summarization or translation is
   in scope, and how the user selects those behaviors.
-- Define behavior for a failed or unavailable LLM, session continuity, and
-  whether the original text is read as a fallback.
+- Use a unique session for each `say` request and reuse it for the continuation
+  so context cannot leak between documents.
+- If the LLM is unavailable or the first request fails, queue the original
+  document. If the continuation fails after the first paragraph is queued,
+  append the remaining original text so playback still covers the document.
+- Keep summarization and translation out of scope. Narration preserves facts and
+  detail while rendering Markdown structure for listening.
 
-## 4. Open questions
+## 4. Implementation notes
 
-- How to reconcile low first-audio latency with transformations that need the
-  complete document for context.
-- Whether to use a reusable named `lmcoder` session for each reading request,
-  and how to avoid context leaking between documents.
-- Which output contract prevents omissions or invented content when the LLM
-  converts structured text into narration.
-- How the configured host is selected and reported, especially when using a
-  remote host.
+- The first paragraph is rewritten and queued before the remaining text is
+  submitted. The continuation uses the same fresh per-request lmcoder session,
+  allowing playback and complete remaining-document processing to overlap.
+- lmcoder canary checks confirmed `--host`, `--session`, stdin input, and plain
+  output work for this flow.
+- Tests cover default-on behavior, host selection, session continuity, and
+  fallback when continuation fails.

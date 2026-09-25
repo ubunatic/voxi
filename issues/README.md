@@ -127,4 +127,4 @@
 | 143 | [143-read-the-primary-selection-aloud-via-hotkey-shift-hotkey-reads-the-clipboard.md](143-read-the-primary-selection-aloud-via-hotkey-shift-hotkey-reads-the-clipboard.md) | Read the primary selection aloud via hotkey, Shift+hotkey reads the clipboard | Open |
 | 144 | [144-handoff-resume-143-super-y-reader-wip-and-142-layout-follow-ups.md](144-handoff-resume-143-super-y-reader-wip-and-142-layout-follow-ups.md) | Handoff: resume 143 (Super+Y reader WIP) and 142 layout follow-ups | Open |
 | 145 | [145-improve-markdown-text-normalization-for-tts-reading.md](145-improve-markdown-text-normalization-for-tts-reading.md) | Improve Markdown text normalization for TTS reading | Open |
-| 146 | [146-plan-voxi-say-llm-for-fluent-document-reading.md](146-plan-voxi-say-llm-for-fluent-document-reading.md) | Plan `voxi say --llm` for fluent document reading | Open |
+| 146 | [146-plan-voxi-say-llm-for-fluent-document-reading.md](146-plan-voxi-say-llm-for-fluent-document-reading.md) | Plan `voxi say --llm` for fluent document reading | Closed — resolved |
