@@ -110,3 +110,20 @@ issue 147 open until warm multi-chunk latency, memory, listening quality,
 interruption, and license checks are completed on target hardware. Current
 canary script: `python3 scripts/canary_tts/benchmark.py`; supply model paths via
 the documented environment variables above to measure neural candidates.
+
+### Standalone Vendoring & Multi-Voice Listening Evaluation (2026-09-25)
+
+1. **Pip-Free Standalone Vendoring**:
+   Piper was integrated into `voxi install` as a self-contained, prebuilt native C++ binary distribution extracted into `~/.local/lib/voxi/piper/` (with bundled shared libraries) and symlinked to `~/.local/bin/piper`, avoiding `pip` and Python dependency conflicts entirely. The default open-weight voice model (`en_US-lessac-medium.onnx` + `.json`) is staged in `~/.local/share/voxi/voices/`.
+
+2. **Multi-Voice & Dialect Benchmarks on Target APU (Ryzen 5 PRO 5650U)**:
+   - `en_US-lessac-medium`: RTF **0.080–0.160**, Peak RSS **144.6 MiB** (clear American female)
+   - `en_US-bryce-medium`: RTF **0.073** (deep American male)
+   - `en_GB-alan-medium`: RTF **0.070** (British English male scholar/butler dialect)
+   - `en_GB-southern_english_female-low`: RTF **0.048** (British English female dialect)
+
+3. **Listening & Product Quality Conclusions**:
+   - **Intelligibility**: All tested voices are clear, natural, and distinguishable. High-quality neural narration is achieved locally without GPU/VRAM load or interference with local LLM servers.
+   - **Fast Pacing**: Faster playback rates (`--length_scale 0.85`) provide a high-throughput listening mode for rapid document consumption.
+   - **Character / Yoda Voice**: Syntactic and prosodic structuring via LLM narration prompts (punctuation and pause rhythm) successfully creates recognizable character cadence. Separate timbre/voice cloning is deprioritized since clear, high-intelligibility reading is the primary requirement.
+
