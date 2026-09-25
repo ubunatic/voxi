@@ -90,7 +90,7 @@ func NewSayCommand(d deps.Dependencies) *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&interrupt, "interrupt", false, "stop current TTS and replace it with this text")
 	cmd.Flags().StringVar(&from, "from", "", "read from Wayland primary selection or clipboard")
-	cmd.Flags().StringVar(&llmHost, "llm", "", "select an lmcoder host; narration is enabled by default (config default, then spec localhost)")
+	cmd.Flags().StringVar(&llmHost, "llm", "", "override the lmcoder host; narration is enabled by default")
 	cmd.Flags().BoolVar(&disableLLM, "no-llm", false, "read the original text without LLM rewriting")
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
