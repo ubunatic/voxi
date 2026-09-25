@@ -129,3 +129,4 @@
 | 145 | [145-improve-markdown-text-normalization-for-tts-reading.md](145-improve-markdown-text-normalization-for-tts-reading.md) | Improve Markdown text normalization for TTS reading | Open |
 | 146 | [146-plan-voxi-say-llm-for-fluent-document-reading.md](146-plan-voxi-say-llm-for-fluent-document-reading.md) | Plan `voxi say --llm` for fluent document reading | Closed — resolved |
 | 147 | [147-research-oss-tts-engines-and-open-weight-models-for-modest-amd-hardware.md](147-research-oss-tts-engines-and-open-weight-models-for-modest-amd-hardware.md) | Research OSS TTS Engines and Open-Weight Models for Modest AMD Hardware | Open |
+| 148 | [148-move-tts-playback-queue-ownership-from-monitor-tui-to-persistent-voxi-agent-daemon.md](148-move-tts-playback-queue-ownership-from-monitor-tui-to-persistent-voxi-agent-daemon.md) | Move TTS playback queue ownership from monitor TUI to persistent voxi-agent daemon | Open |
