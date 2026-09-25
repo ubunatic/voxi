@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"ubunatic.com/voxi/internal/config"
 	"ubunatic.com/voxi/internal/deps"
 	"ubunatic.com/voxi/spec"
 )
@@ -271,6 +272,9 @@ type Engine struct {
 	executable               string
 	trailingSilenceTrim      time.Duration
 	trailingSilenceThreshold float64
+	backend                  string
+	piperModel               string
+	piperConfig              string
 }
 
 // NewEngine creates a Festival-first engine with espeak-ng fallback.
@@ -279,11 +283,34 @@ func NewEngine(d deps.Dependencies, executable string) *Engine {
 	if err != nil {
 		panic(fmt.Errorf("load embedded TTS specification: %w", err))
 	}
+	home := ""
+	if d.Getenv != nil {
+		home = d.Getenv("HOME")
+	}
+	settings, err := config.LoadUserSettings(home)
+	if err != nil {
+		settings = config.DefaultUserSettings()
+	}
+	backend := settings.TTSBackend
+	if backend == "" {
+		backend = ttsSpec.Backend.DefaultBackend
+	}
+	model := settings.TTSPiperModel
+	if model == "" {
+		model = ttsSpec.Piper.Model
+	}
+	piperConfig := settings.TTSPiperConfig
+	if piperConfig == "" {
+		piperConfig = ttsSpec.Piper.Config
+	}
 	return &Engine{
 		deps:                     d,
 		executable:               executable,
 		trailingSilenceTrim:      ttsSpec.TrailingSilenceTrim(),
 		trailingSilenceThreshold: ttsSpec.Playback.TrailingSilenceThresholdDB,
+		backend:                  backend,
+		piperModel:               model,
+		piperConfig:              piperConfig,
 	}
 }
 
@@ -294,10 +321,7 @@ func (e *Engine) BackendStatus() string {
 	}
 	engine := "missing (Festival / espeak-ng)"
 	preferred := e.selectedBackend()
-	model := ""
-	if e.deps.Getenv != nil {
-		model = strings.TrimSpace(e.deps.Getenv("VOXI_PIPER_MODEL"))
-	}
+	model := e.piperModelPath()
 	if preferred == "piper" && model == "" {
 		engine = "Piper unavailable: VOXI_PIPER_MODEL is unset"
 	} else if (preferred == "piper" || (preferred == "auto" && model != "")) && piperModelAvailable(e, model) {
@@ -336,14 +360,29 @@ func (e *Engine) BackendStatus() string {
 // Festival/espeak-ng chain; Piper is opt-in because it needs a separately
 // installed executable and licensed voice model.
 func (e *Engine) selectedBackend() string {
-	if e.deps.Getenv == nil {
-		return "auto"
+	backend := e.backend
+	if e.deps.Getenv != nil && strings.TrimSpace(e.deps.Getenv("VOXI_TTS_BACKEND")) != "" {
+		backend = e.deps.Getenv("VOXI_TTS_BACKEND")
 	}
-	backend := strings.ToLower(strings.TrimSpace(e.deps.Getenv("VOXI_TTS_BACKEND")))
+	backend = strings.ToLower(strings.TrimSpace(backend))
 	if backend == "" {
 		return "auto"
 	}
 	return backend
+}
+
+func (e *Engine) piperModelPath() string {
+	if e.deps.Getenv != nil && strings.TrimSpace(e.deps.Getenv("VOXI_PIPER_MODEL")) != "" {
+		return strings.TrimSpace(e.deps.Getenv("VOXI_PIPER_MODEL"))
+	}
+	return strings.TrimSpace(e.piperModel)
+}
+
+func (e *Engine) piperConfigPath() string {
+	if e.deps.Getenv != nil && strings.TrimSpace(e.deps.Getenv("VOXI_PIPER_CONFIG")) != "" {
+		return strings.TrimSpace(e.deps.Getenv("VOXI_PIPER_CONFIG"))
+	}
+	return strings.TrimSpace(e.piperConfig)
 }
 
 func piperModelAvailable(e *Engine, model string) bool {
@@ -366,11 +405,8 @@ func (e *Engine) Synthesize(ctx context.Context, text string) (audioFile, time.D
 	wavPath := filepath.Join(dir, "chunk.wav")
 	started := time.Now()
 	backend := e.selectedBackend()
-	if backend == "piper" || (backend == "auto" && e.deps.Getenv != nil && strings.TrimSpace(e.deps.Getenv("VOXI_PIPER_MODEL")) != "") {
-		model := ""
-		if e.deps.Getenv != nil {
-			model = strings.TrimSpace(e.deps.Getenv("VOXI_PIPER_MODEL"))
-		}
+	model := e.piperModelPath()
+	if backend == "piper" || (backend == "auto" && model != "") {
 		piper, lookErr := e.deps.LookPath("piper")
 		if !piperModelAvailable(e, model) || lookErr != nil {
 			if backend == "piper" {
@@ -398,7 +434,7 @@ func (e *Engine) Synthesize(ctx context.Context, text string) (audioFile, time.D
 				return audioFile{}, 0, fmt.Errorf("open Piper input: %w", openErr)
 			}
 			args := []string{"--model", model, "--output_file", wavPath}
-			if config := strings.TrimSpace(e.deps.Getenv("VOXI_PIPER_CONFIG")); config != "" {
+			if config := e.piperConfigPath(); config != "" {
 				args = append(args, "--config", config)
 			}
 			p, startErr := startSupervised(ctx, e.executable, inputFile, piper, args...)

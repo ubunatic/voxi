@@ -32,6 +32,9 @@ type UserSettings struct {
 	ModifierGating   bool   `json:"modifier_gating" yaml:"modifier_gating"`
 	TTSEnabled       bool   `json:"tts_enabled" yaml:"tts_enabled"`
 	TTSLLMHost       string `json:"tts_llm_host,omitempty" yaml:"tts_llm_host,omitempty"`
+	TTSBackend       string `json:"tts_backend,omitempty" yaml:"tts_backend,omitempty"`
+	TTSPiperModel    string `json:"tts_piper_model,omitempty" yaml:"tts_piper_model,omitempty"`
+	TTSPiperConfig   string `json:"tts_piper_config,omitempty" yaml:"tts_piper_config,omitempty"`
 }
 
 // DefaultUserSettings returns standard user settings.
@@ -175,6 +178,15 @@ func LoadUserSettings(home string) (*UserSettings, error) {
 		if v, ok := envMap["VOXI_MODIFIER_GATING"]; ok {
 			s.ModifierGating = parseBool(v, s.ModifierGating)
 		}
+		if v, ok := envMap["VOXI_TTS_BACKEND"]; ok && v != "" {
+			s.TTSBackend = v
+		}
+		if v, ok := envMap["VOXI_PIPER_MODEL"]; ok && v != "" {
+			s.TTSPiperModel = v
+		}
+		if v, ok := envMap["VOXI_PIPER_CONFIG"]; ok && v != "" {
+			s.TTSPiperConfig = v
+		}
 	} else if !os.IsNotExist(err) {
 		return nil, fmt.Errorf("read %s: %w", envPath, err)
 	}
@@ -249,6 +261,9 @@ func FormatEnv(s *UserSettings, existing map[string]string) []byte {
 	merged["LLAMA_SERVER_PATH"] = s.LlamaServerPath
 	merged["VOXI_HISTORY"] = strconv.FormatBool(s.DictationHistory)
 	merged["VOXI_MODIFIER_GATING"] = strconv.FormatBool(s.ModifierGating)
+	merged["VOXI_TTS_BACKEND"] = s.TTSBackend
+	merged["VOXI_PIPER_MODEL"] = s.TTSPiperModel
+	merged["VOXI_PIPER_CONFIG"] = s.TTSPiperConfig
 
 	managedOrder := []string{
 		"VOXI_LLM_CLEANER",
@@ -260,6 +275,9 @@ func FormatEnv(s *UserSettings, existing map[string]string) []byte {
 		"LLAMA_SERVER_PATH",
 		"VOXI_HISTORY",
 		"VOXI_MODIFIER_GATING",
+		"VOXI_TTS_BACKEND",
+		"VOXI_PIPER_MODEL",
+		"VOXI_PIPER_CONFIG",
 	}
 
 	var buf bytes.Buffer

@@ -77,6 +77,7 @@ func TestEngineBackendStatusReportsConfiguredPiperAndFallback(t *testing.T) {
 }
 
 func TestSelectedBackendUsesAutoByDefaultAndNormalizesValue(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	backend := "  PiPeR "
 	engine := NewEngine(deps.Dependencies{Getenv: func(key string) string {
 		if key == "VOXI_TTS_BACKEND" {
@@ -90,6 +91,51 @@ func TestSelectedBackendUsesAutoByDefaultAndNormalizesValue(t *testing.T) {
 	engine.deps.Getenv = func(string) string { return "" }
 	if got := engine.selectedBackend(); got != "auto" {
 		t.Fatalf("selectedBackend() = %q, want auto", got)
+	}
+}
+
+func TestEngineLoadsTTSSettingsAndEnvironmentOverrides(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	configDir := filepath.Join(home, ".config", "voxi")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte("tts_backend: festival\ntts_piper_model: yaml.onnx\ntts_piper_config: yaml.json\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	engine := NewEngine(deps.Dependencies{}, "/usr/bin/voxi")
+	if engine.selectedBackend() != "festival" || engine.piperModelPath() != "yaml.onnx" || engine.piperConfigPath() != "yaml.json" {
+		t.Fatalf("loaded settings = backend:%q model:%q config:%q", engine.selectedBackend(), engine.piperModelPath(), engine.piperConfigPath())
+	}
+	engine.deps.Getenv = func(key string) string {
+		return map[string]string{"VOXI_TTS_BACKEND": "piper", "VOXI_PIPER_MODEL": "override.onnx", "VOXI_PIPER_CONFIG": "override.json"}[key]
+	}
+	if engine.selectedBackend() != "piper" || engine.piperModelPath() != "override.onnx" || engine.piperConfigPath() != "override.json" {
+		t.Fatalf("overrides = backend:%q model:%q config:%q", engine.selectedBackend(), engine.piperModelPath(), engine.piperConfigPath())
+	}
+}
+
+func TestNewEngineWithCustomHomeAndMalformedConfig(t *testing.T) {
+	tempHome := t.TempDir()
+	configDir := filepath.Join(tempHome, ".config", "voxi")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Write malformed YAML
+	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte("invalid: [yaml: broken"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	engine := NewEngine(deps.Dependencies{
+		Getenv: func(key string) string {
+			if key == "HOME" {
+				return tempHome
+			}
+			return ""
+		},
+	}, "/usr/bin/voxi")
+	if engine.backend != "auto" {
+		t.Fatalf("expected fallback backend 'auto' on malformed config, got %q", engine.backend)
 	}
 }
 

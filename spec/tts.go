@@ -20,8 +20,21 @@ type TTSPlaybackSpec struct {
 
 // TTSSpec is the parsed contents of spec/tts.yaml.
 type TTSSpec struct {
+	Backend  TTSBackendSpec  `yaml:"backend"`
+	Piper    TTSPiperSpec    `yaml:"piper"`
 	Playback TTSPlaybackSpec `yaml:"playback"`
 	LLM      TTSLLMSpec      `yaml:"llm"`
+}
+
+// TTSBackendSpec defines the default synthesis backend.
+type TTSBackendSpec struct {
+	DefaultBackend string `yaml:"default_backend"`
+}
+
+// TTSPiperSpec defines the default Piper model and configuration paths.
+type TTSPiperSpec struct {
+	Model  string `yaml:"model"`
+	Config string `yaml:"config"`
 }
 
 // TTSLLMSpec defines defaults for speech-ready LLM narration.
@@ -35,6 +48,9 @@ func LoadTTS() (*TTSSpec, error) {
 	var s TTSSpec
 	if err := yaml.Unmarshal(ttsYAML, &s); err != nil {
 		return nil, fmt.Errorf("spec: parse tts.yaml: %w", err)
+	}
+	if s.Backend.DefaultBackend != "auto" && s.Backend.DefaultBackend != "piper" && s.Backend.DefaultBackend != "festival" && s.Backend.DefaultBackend != "espeak-ng" {
+		return nil, fmt.Errorf("spec: backend.default_backend is invalid")
 	}
 	if s.Playback.TrailingSilenceTrimMs < 0 || s.Playback.TrailingSilenceTrimMs > 1000 {
 		return nil, fmt.Errorf("spec: playback.trailing_silence_trim_ms must be between 0 and 1000")

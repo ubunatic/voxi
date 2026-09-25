@@ -264,3 +264,31 @@ func TestFormatEnvPreservesExtraKeys(t *testing.T) {
 		t.Errorf("VOXI_LLM_CLEANER = %s", parsed["VOXI_LLM_CLEANER"])
 	}
 }
+
+func TestLoadTTSSettingsPrecedence(t *testing.T) {
+	home := t.TempDir()
+	if err := os.MkdirAll(VoxiConfigDir(home), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(VoxiConfigYAMLPath(home), []byte("tts_backend: festival\ntts_piper_model: yaml.onnx\ntts_piper_config: yaml.json\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(VoxiEnvPath(home), []byte("VOXI_TTS_BACKEND=piper\nVOXI_PIPER_MODEL=env.onnx\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := LoadUserSettings(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.TTSBackend != "piper" || s.TTSPiperModel != "env.onnx" || s.TTSPiperConfig != "yaml.json" {
+		t.Errorf("TTS settings = backend:%q model:%q config:%q", s.TTSBackend, s.TTSPiperModel, s.TTSPiperConfig)
+	}
+}
+
+func TestFormatEnvIncludesTTSSettings(t *testing.T) {
+	s := &UserSettings{TTSBackend: "piper", TTSPiperModel: "/voice.onnx", TTSPiperConfig: "/voice.json"}
+	got := ParseEnv(FormatEnv(s, nil))
+	if got["VOXI_TTS_BACKEND"] != "piper" || got["VOXI_PIPER_MODEL"] != "/voice.onnx" || got["VOXI_PIPER_CONFIG"] != "/voice.json" {
+		t.Errorf("formatted TTS env = %#v", got)
+	}
+}

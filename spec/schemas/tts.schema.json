@@ -3,8 +3,25 @@
   "title": "Voxi TTS Playback Tuning",
   "description": "Playback tuning for monitor-gated text to speech.",
   "type": "object",
-  "required": ["playback", "llm"],
+  "required": ["backend", "piper", "playback", "llm"],
   "properties": {
+    "backend": {
+      "type": "object",
+      "required": ["default_backend"],
+      "properties": {
+        "default_backend": { "type": "string", "enum": ["auto", "piper", "festival", "espeak-ng"] }
+      },
+      "additionalProperties": false
+    },
+    "piper": {
+      "type": "object",
+      "required": ["model", "config"],
+      "properties": {
+        "model": { "type": "string" },
+        "config": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
     "playback": {
       "type": "object",
       "required": ["trailing_silence_trim_ms", "trailing_silence_threshold_db"],
