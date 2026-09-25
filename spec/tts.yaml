@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=schemas/tts.schema.json
+#
+# Playback tuning for monitor-gated `voxi say`. These settings are embedded
+# in the Voxi binary; edit the spec and rebuild to change them.
+playback:
+  # Trim at most this much quiet audio from the end of each synthesized chunk.
+  # This shortens pauses between chunks without cutting audible speech. Set to
+  # zero to disable trimming.
+  trailing_silence_trim_ms: 250
+  # A sample is considered quiet below this full-scale amplitude level.
+  trailing_silence_threshold_db: -42
+
+# Speech-ready narration through lmcoder.
+llm:
+  # Used when ~/.config/voxi/config.yaml and --llm do not select a host.
+  default_host: localhost
+  max_tokens: 4096

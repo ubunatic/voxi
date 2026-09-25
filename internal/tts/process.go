@@ -18,6 +18,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"ubunatic.com/voxi/internal/deps"
+	"ubunatic.com/voxi/spec"
 )
 
 const (
@@ -266,13 +267,24 @@ func (a audioFile) Close() error { return os.RemoveAll(a.dir) }
 
 // Engine uses packaged command-line synthesis and the existing local WAV players.
 type Engine struct {
-	deps       deps.Dependencies
-	executable string
+	deps                     deps.Dependencies
+	executable               string
+	trailingSilenceTrim      time.Duration
+	trailingSilenceThreshold float64
 }
 
 // NewEngine creates a Festival-first engine with espeak-ng fallback.
 func NewEngine(d deps.Dependencies, executable string) *Engine {
-	return &Engine{deps: d, executable: executable}
+	ttsSpec, err := spec.LoadTTS()
+	if err != nil {
+		panic(fmt.Errorf("load embedded TTS specification: %w", err))
+	}
+	return &Engine{
+		deps:                     d,
+		executable:               executable,
+		trailingSilenceTrim:      ttsSpec.TrailingSilenceTrim(),
+		trailingSilenceThreshold: ttsSpec.Playback.TrailingSilenceThresholdDB,
+	}
 }
 
 // BackendStatus describes the packaged engine and local player available on this host.
@@ -343,6 +355,10 @@ func (e *Engine) Synthesize(ctx context.Context, text string) (audioFile, time.D
 	if info, err := os.Stat(wavPath); err != nil || info.Size() == 0 {
 		_ = os.RemoveAll(dir)
 		return audioFile{}, 0, fmt.Errorf("synthesizer did not create WAV output: %v", err)
+	}
+	if err := trimTrailingSilence(wavPath, e.trailingSilenceTrim, e.trailingSilenceThreshold); err != nil {
+		_ = os.RemoveAll(dir)
+		return audioFile{}, 0, fmt.Errorf("trim trailing TTS silence: %w", err)
 	}
 	return audioFile{path: wavPath, dir: dir}, time.Since(started), nil
 }

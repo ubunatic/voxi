@@ -31,6 +31,7 @@ type UserSettings struct {
 	DictationHistory bool   `json:"dictation_history" yaml:"dictation_history"`
 	ModifierGating   bool   `json:"modifier_gating" yaml:"modifier_gating"`
 	TTSEnabled       bool   `json:"tts_enabled" yaml:"tts_enabled"`
+	TTSLLMHost       string `json:"tts_llm_host,omitempty" yaml:"tts_llm_host,omitempty"`
 }
 
 // DefaultUserSettings returns standard user settings.

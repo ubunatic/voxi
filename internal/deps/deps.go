@@ -14,15 +14,16 @@ import (
 
 // Dependencies isolates host reads and subprocesses for tests.
 type Dependencies struct {
-	GOOS      string
-	GOARCH    string
-	Getenv    func(string) string
-	ReadFile  func(string) ([]byte, error)
-	Stat      func(string) (os.FileInfo, error)
-	LookPath  func(string) (string, error)
-	Run       func(context.Context, string, ...string) error
-	RunOutput func(ctx context.Context, name string, args ...string) (string, error)
-	RunStdin  func(ctx context.Context, stdin string, name string, args ...string) error
+	GOOS           string
+	GOARCH         string
+	Getenv         func(string) string
+	ReadFile       func(string) ([]byte, error)
+	Stat           func(string) (os.FileInfo, error)
+	LookPath       func(string) (string, error)
+	Run            func(context.Context, string, ...string) error
+	RunOutput      func(ctx context.Context, name string, args ...string) (string, error)
+	RunStdin       func(ctx context.Context, stdin string, name string, args ...string) error
+	RunStdinOutput func(ctx context.Context, stdin string, name string, args ...string) (string, error)
 	// RunStdinProcess is the lifecycle-aware stdin boundary used by desktop
 	// injection. It returns the child PID after the process has exited. A nil
 	// value falls back to RunStdin for lightweight callers and tests.
@@ -89,6 +90,12 @@ func DefaultDependencies(in io.Reader, out io.Writer) Dependencies {
 			cmd := exec.CommandContext(ctx, resolveCommand(name), args...)
 			cmd.Stdin = strings.NewReader(stdin)
 			return cmd.Run()
+		},
+		RunStdinOutput: func(ctx context.Context, stdin string, name string, args ...string) (string, error) {
+			cmd := exec.CommandContext(ctx, resolveCommand(name), args...)
+			cmd.Stdin = strings.NewReader(stdin)
+			out, err := cmd.Output()
+			return string(out), err
 		},
 		RunStdinProcess: func(ctx context.Context, stdin string, name string, args ...string) (int, error) {
 			cmd := exec.CommandContext(ctx, resolveCommand(name), args...)

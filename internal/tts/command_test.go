@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -33,7 +36,7 @@ func TestSayCommandArgumentsAndStdin(t *testing.T) {
 		Stdout: &bytes.Buffer{},
 	}
 	cmd := NewSayCommand(d)
-	cmd.SetArgs([]string{"Voxi", "reads", "this."})
+	cmd.SetArgs([]string{"--no-llm", "Voxi", "reads", "this."})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("say with arguments: %v", err)
 	}
@@ -46,6 +49,7 @@ func TestSayCommandArgumentsAndStdin(t *testing.T) {
 
 	d.Stdout = &bytes.Buffer{}
 	cmd = NewSayCommand(d)
+	cmd.SetArgs([]string{"--no-llm"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("say from stdin: %v", err)
 	}
@@ -63,7 +67,9 @@ func TestSayCommandReportsNoMonitor(t *testing.T) {
 		Stdin:  strings.NewReader("hello"),
 		Stdout: &bytes.Buffer{},
 	}
-	err := NewSayCommand(d).Execute()
+	cmd := NewSayCommand(d)
+	cmd.SetArgs([]string{"--no-llm"})
+	err := cmd.Execute()
 	if err == nil || !strings.Contains(err.Error(), "no monitor") {
 		t.Fatalf("say without monitor error = %v, want clear no-monitor error", err)
 	}
@@ -95,12 +101,159 @@ func TestSayCommandInterruptFromPrimaryRunsWlPasteAndReplaces(t *testing.T) {
 		Stdin: strings.NewReader(""), Stdout: &bytes.Buffer{},
 	}
 	cmd := NewSayCommand(d)
-	cmd.SetArgs([]string{"--interrupt", "--from", "primary"})
+	cmd.SetArgs([]string{"--no-llm", "--interrupt", "--from", "primary"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
 	if controller.got != "selection text" {
 		t.Fatalf("replace text = %q", controller.got)
+	}
+}
+
+func TestSayCommandUsesLLMByDefaultAndContinuesSession(t *testing.T) {
+	runtimeDir := t.TempDir()
+	home := t.TempDir()
+	controller := &recordingController{}
+	ctx, cancel := context.WithCancel(context.Background())
+	server, err := StartServer(ctx, SocketPath(runtimeDir, 0), controller)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { cancel(); _ = server.Close() })
+	var session string
+	calls := 0
+	d := deps.Dependencies{
+		Getenv: func(key string) string {
+			if key == "XDG_RUNTIME_DIR" {
+				return runtimeDir
+			}
+			if key == "HOME" {
+				return home
+			}
+			return ""
+		},
+		RunStdinOutput: func(_ context.Context, input, name string, args ...string) (string, error) {
+			calls++
+			if name != "lmcoder" {
+				t.Fatalf("command = %q, want lmcoder", name)
+			}
+			joined := strings.Join(args, " ")
+			if !strings.Contains(joined, "--host localhost") {
+				t.Fatalf("lmcoder args = %q, want spec fallback host", joined)
+			}
+			var gotSession string
+			for i := 0; i+1 < len(args); i++ {
+				if args[i] == "--session" {
+					gotSession = args[i+1]
+				}
+			}
+			if gotSession == "" || (session != "" && session != gotSession) {
+				t.Fatalf("session = %q, prior = %q", gotSession, session)
+			}
+			session = gotSession
+			if calls == 1 && !strings.Contains(input, "first paragraph") {
+				t.Fatalf("first prompt = %q", input)
+			}
+			if calls == 2 && !strings.Contains(input, "second paragraph") {
+				t.Fatalf("continuation prompt = %q", input)
+			}
+			return fmt.Sprintf("spoken %d", calls), nil
+		},
+		Stdin: strings.NewReader("first paragraph\n\nsecond paragraph"), Stdout: &bytes.Buffer{},
+	}
+	cmd := NewSayCommand(d)
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 2 {
+		t.Fatalf("lmcoder calls = %d, want 2", calls)
+	}
+	if got := controller.text(); got != "spoken 2" {
+		t.Fatalf("last queued narration = %q", got)
+	}
+}
+
+func TestSayCommandLLMHostFlagOverridesConfig(t *testing.T) {
+	configHome := t.TempDir()
+	runtimeDir := t.TempDir()
+	controller := &recordingController{}
+	ctx, cancel := context.WithCancel(context.Background())
+	server, err := StartServer(ctx, SocketPath(runtimeDir, 0), controller)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { cancel(); _ = server.Close() })
+	if err := os.MkdirAll(filepath.Join(configHome, ".config", "voxi"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configHome, ".config", "voxi", "config.yaml"), []byte("tts_llm_host: configured-host\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	d := deps.Dependencies{
+		Getenv: func(key string) string {
+			if key == "HOME" {
+				return configHome
+			}
+			if key == "XDG_RUNTIME_DIR" {
+				return runtimeDir
+			}
+			return ""
+		},
+		Stdin: strings.NewReader("Read me."), Stdout: &bytes.Buffer{},
+		RunStdinOutput: func(_ context.Context, _ string, _ string, args ...string) (string, error) {
+			if !strings.Contains(strings.Join(args, " "), "--host x600") {
+				t.Fatalf("args = %v, want x600 override", args)
+			}
+			return "Narration.", nil
+		},
+	}
+	cmd := NewSayCommand(d)
+	cmd.SetArgs([]string{"--llm", "x600", "Read", "me."})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if got := controller.text(); got != "Narration." {
+		t.Fatalf("queued narration = %q", got)
+	}
+}
+
+func TestSayCommandFallsBackForRemainingTextWhenContinuationFails(t *testing.T) {
+	runtimeDir := t.TempDir()
+	controller := &recordingController{}
+	ctx, cancel := context.WithCancel(context.Background())
+	server, err := StartServer(ctx, SocketPath(runtimeDir, 0), controller)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { cancel(); _ = server.Close() })
+	calls := 0
+	d := deps.Dependencies{
+		Getenv: func(key string) string {
+			if key == "XDG_RUNTIME_DIR" {
+				return runtimeDir
+			}
+			if key == "HOME" {
+				return t.TempDir()
+			}
+			return ""
+		},
+		RunStdinOutput: func(context.Context, string, string, ...string) (string, error) {
+			calls++
+			if calls == 1 {
+				return "First spoken paragraph.", nil
+			}
+			return "", errors.New("continuation failed")
+		},
+		Stdin: strings.NewReader("First original paragraph.\n\nSecond original paragraph."), Stdout: &bytes.Buffer{},
+	}
+	if err := NewSayCommand(d).Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 2 {
+		t.Fatalf("lmcoder calls = %d, want 2", calls)
+	}
+	if got := controller.text(); got != "Second original paragraph." {
+		t.Fatalf("fallback remaining text = %q", got)
 	}
 }
 

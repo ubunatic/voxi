@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Voxi TTS Playback Tuning",
+  "description": "Playback tuning for monitor-gated text to speech.",
+  "type": "object",
+  "required": ["playback", "llm"],
+  "properties": {
+    "playback": {
+      "type": "object",
+      "required": ["trailing_silence_trim_ms", "trailing_silence_threshold_db"],
+      "properties": {
+        "trailing_silence_trim_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000,
+          "description": "Maximum trailing quiet audio to remove from each synthesized chunk, in milliseconds."
+        },
+        "trailing_silence_threshold_db": {
+          "type": "number",
+          "minimum": -80,
+          "maximum": -10,
+          "description": "PCM amplitude threshold in dBFS; samples below this level count as trailing silence."
+        }
+      },
+      "additionalProperties": false
+    },
+    "llm": {
+    "type": "object",
+    "required": ["default_host", "max_tokens"],
+    "properties": {
+      "default_host": { "type": "string", "minLength": 1 },
+      "max_tokens": { "type": "integer", "minimum": 1, "maximum": 32768 }
+    },
+    "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
