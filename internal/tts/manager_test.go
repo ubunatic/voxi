@@ -109,6 +109,30 @@ func TestManagerRejectsOversizedText(t *testing.T) {
 	}
 }
 
+func TestManagerReplaceStopsCurrentAndUsesOnlyNewQueue(t *testing.T) {
+	backend := &fakeBackend{started: make(chan string, 8), players: make(chan *fakePlayback, 8)}
+	manager := NewManager(context.Background(), backend)
+	defer manager.Close()
+	if _, err := manager.Enqueue("Old current. Old queued."); err != nil {
+		t.Fatal(err)
+	}
+	player := waitForPlayer(t, backend)
+	waitFor(t, func() bool { return len(manager.Snapshot().Queue) == 1 })
+	count, err := manager.Replace("New current. New next.")
+	if err != nil || count != 2 {
+		t.Fatalf("Replace() = %d, %v", count, err)
+	}
+	if !player.stopped() {
+		t.Fatal("replacement did not stop current playback")
+	}
+	newPlayer := waitForPlayer(t, backend)
+	waitFor(t, func() bool { return manager.Snapshot().Current == "New current." && len(manager.Snapshot().Queue) == 1 })
+	if got := manager.Snapshot().Queue[0]; got != "New next." {
+		t.Fatalf("replacement queue = %q", got)
+	}
+	newPlayer.finish(nil)
+}
+
 func TestDisabledManagerReportsConfigOptOutAndRejectsSpeech(t *testing.T) {
 	manager := NewManagerWithEnabled(context.Background(), &fakeBackend{}, false)
 	defer manager.Close()

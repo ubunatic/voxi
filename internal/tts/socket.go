@@ -71,6 +71,12 @@ func (c Client) Enqueue(ctx context.Context, text string) (int, error) {
 	return res.Accepted, err
 }
 
+// Replace submits text after stopping current playback and clearing queued text.
+func (c Client) Replace(ctx context.Context, text string) (int, error) {
+	res, err := c.request(ctx, request{Command: "replace", Text: text})
+	return res.Accepted, err
+}
+
 // Control sends a monitor queue control action.
 func (c Client) Control(ctx context.Context, action Action) error {
 	_, err := c.request(ctx, request{Command: action})
@@ -205,6 +211,16 @@ func (s *Server) handle(conn net.Conn) {
 		if strings.TrimSpace(req.Text) == "" {
 			res.Error = "text is empty"
 		} else if count, err := s.controller.Enqueue(req.Text); err != nil {
+			res.Error = err.Error()
+		} else {
+			res.Accepted = count
+		}
+	case "replace":
+		if strings.TrimSpace(req.Text) == "" {
+			res.Error = "text is empty"
+		} else if replacer, ok := s.controller.(interface{ Replace(string) (int, error) }); !ok {
+			res.Error = "TTS replacement is unavailable"
+		} else if count, err := replacer.Replace(req.Text); err != nil {
 			res.Error = err.Error()
 		} else {
 			res.Accepted = count

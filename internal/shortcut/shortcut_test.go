@@ -74,8 +74,12 @@ func TestSetupConstructsOwnedShortcut(t *testing.T) {
 	want := []string{
 		"set " + customSchema + ":" + ownedPath + " name " + ownedName,
 		"set " + customSchema + ":" + ownedPath + " command /opt/voxi/bin/voxi record toggle",
-		"set " + customSchema + ":" + ownedPath + " binding " + accelerator,
-		"set " + mediaSchema + " custom-keybindings ['" + ownedPath + "']",
+		"set " + customSchema + ":" + ownedPath + " binding <Super>x",
+		"set " + customSchema + ":" + primaryPath + " command /opt/voxi/bin/voxi say --interrupt --from primary",
+		"set " + customSchema + ":" + primaryPath + " binding <Super>y",
+		"set " + customSchema + ":" + clipboardPath + " command /opt/voxi/bin/voxi say --interrupt --from clipboard",
+		"set " + customSchema + ":" + clipboardPath + " binding <Shift><Super>y",
+		"set " + mediaSchema + " custom-keybindings ['" + clipboardPath + "', '" + primaryPath + "', '" + ownedPath + "']",
 	}
 	for _, call := range want {
 		if !contains(f.calls, call) {
@@ -85,7 +89,11 @@ func TestSetupConstructsOwnedShortcut(t *testing.T) {
 }
 
 func TestSetupIdempotent(t *testing.T) {
-	f := &fakeSettings{paths: []string{ownedPath}, entries: map[string]entry{ownedPath: {Name: ownedName, Command: "/opt/voxi/bin/voxi record toggle", Binding: accelerator}}}
+	f := &fakeSettings{paths: []string{ownedPath, primaryPath, clipboardPath}, entries: map[string]entry{
+		ownedPath:     {Name: ownedName, Command: "/opt/voxi/bin/voxi record toggle", Binding: "<Super>x"},
+		primaryPath:   {Name: "Voxi Read Primary Selection", Command: "/opt/voxi/bin/voxi say --interrupt --from primary", Binding: "<Super>y"},
+		clipboardPath: {Name: "Voxi Read Clipboard", Command: "/opt/voxi/bin/voxi say --interrupt --from clipboard", Binding: "<Shift><Super>y"},
+	}}
 	var out bytes.Buffer
 	if err := Setup(context.Background(), f.deps(&out), false); err != nil {
 		t.Fatal(err)
@@ -100,9 +108,9 @@ func TestSetupDetectsConflictsWithoutWrites(t *testing.T) {
 		name string
 		f    *fakeSettings
 	}{
-		{"custom accelerator", &fakeSettings{paths: []string{"/custom/one/"}, entries: map[string]entry{"/custom/one/": {Name: "Other", Command: "/bin/other", Binding: "<Super>x"}}}},
+		{"custom accelerator", &fakeSettings{paths: []string{"/custom/one/"}, entries: map[string]entry{"/custom/one/": {Name: "Other", Command: "/bin/other", Binding: "<Super>y"}}}},
 		{"existing voxi", &fakeSettings{paths: []string{"/custom/one/"}, entries: map[string]entry{"/custom/one/": {Name: "Old Voxi", Command: "/old/voxi record toggle", Binding: "<Alt>x"}}}},
-		{"built in accelerator", &fakeSettings{entries: map[string]entry{}, builtins: "org.example key ['<Super>x']"}},
+		{"built in accelerator", &fakeSettings{entries: map[string]entry{}, builtins: "org.example key ['<Shift><Super>y']"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -131,7 +139,7 @@ func TestRemovePreservesUnrelatedShortcuts(t *testing.T) {
 }
 
 func TestRemoveRefusesModifiedOwnedPath(t *testing.T) {
-	f := &fakeSettings{paths: []string{ownedPath}, entries: map[string]entry{ownedPath: {Name: "Other", Command: "/bin/other", Binding: accelerator}}}
+	f := &fakeSettings{paths: []string{ownedPath}, entries: map[string]entry{ownedPath: {Name: "Other", Command: "/bin/other", Binding: "<Super>x"}}}
 	var out bytes.Buffer
 	if err := Remove(context.Background(), f.deps(&out)); err == nil {
 		t.Fatal("expected refusal")
@@ -163,13 +171,13 @@ func TestSetupDoesNotTreatLongerAcceleratorAsSuperX(t *testing.T) {
 func TestSetupForcePermitsAcceleratorConflicts(t *testing.T) {
 	f := &fakeSettings{
 		paths:    []string{"/custom/one/"},
-		entries:  map[string]entry{"/custom/one/": {Name: "Other", Command: "/bin/other", Binding: accelerator}},
+		entries:  map[string]entry{"/custom/one/": {Name: "Other", Command: "/bin/other", Binding: "<Super>x"}},
 		builtins: "org.example key ['<Super>x']",
 	}
 	if err := Setup(context.Background(), f.deps(&bytes.Buffer{}), true); err != nil {
 		t.Fatal(err)
 	}
-	if !contains(f.calls, "set "+mediaSchema+" custom-keybindings ['/custom/one/', '"+ownedPath+"']") {
+	if !contains(f.calls, "set "+mediaSchema+" custom-keybindings ['/custom/one/', '"+clipboardPath+"', '"+primaryPath+"', '"+ownedPath+"']") {
 		t.Fatalf("forced setup did not preserve conflicting custom shortcut: %#v", f.calls)
 	}
 }

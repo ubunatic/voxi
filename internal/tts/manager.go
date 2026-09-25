@@ -127,6 +127,21 @@ func (m *Manager) Enqueue(text string) (int, error) {
 	return res.count, err
 }
 
+// Replace stops current playback, clears pending text, and queues the new text atomically.
+func (m *Manager) Replace(text string) (int, error) {
+	if !m.enabled {
+		return 0, ErrTTSDisabled
+	}
+	if len(text) > maxTextBytes {
+		return 0, fmt.Errorf("text exceeds %d byte limit", maxTextBytes)
+	}
+	if len(SplitText(text)) == 0 {
+		return 0, errors.New("text is empty")
+	}
+	res, err := m.request(command{action: "replace", text: text})
+	return res.count, err
+}
+
 // Control applies a monitor playback control.
 func (m *Manager) Control(action Action) error {
 	if !m.enabled {
@@ -468,6 +483,30 @@ func (m *Manager) applyCommand(
 			*firstAudio = 0
 		}
 		*items = append(*items, newChunks...)
+		*lastErr = ""
+		return commandResult{count: len(newChunks)}
+	case "replace":
+		newChunks := SplitText(c.text)
+		if len(newChunks) == 0 {
+			return commandResult{err: errors.New("text is empty")}
+		}
+		if len(newChunks) > maxQueuedChunks {
+			return commandResult{err: fmt.Errorf("queue exceeds %d chunks", maxQueuedChunks)}
+		}
+		cleanupCurrent()
+		cleanupPrefetch()
+		*currentAudio = audioFile{}
+		*player = nil
+		*currentJob = nil
+		*prefetchJob = nil
+		*prefetched = nil
+		*items = newChunks
+		*cursor = 0
+		*current = ""
+		*status = statusIdle
+		*paused = false
+		*firstQueuedAt = time.Now()
+		*firstAudio = 0
 		*lastErr = ""
 		return commandResult{count: len(newChunks)}
 	case ActionPlayPause:

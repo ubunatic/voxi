@@ -378,6 +378,7 @@ func main() {
 	addDebugCommands(root, d)
 
 	if err := root.Execute(); err != nil {
+		tts.ReportCommandError(d, err)
 		os.Exit(1)
 	}
 }
