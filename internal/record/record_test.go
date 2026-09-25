@@ -21,8 +21,7 @@ import (
 func TestControlRecordingVoxtype(t *testing.T) {
 	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
 
-	var invokedCmd string
-	var invokedArgs []string
+	var commands []string
 
 	d := deps.Dependencies{
 		LookPath: func(name string) (string, error) {
@@ -32,9 +31,11 @@ func TestControlRecordingVoxtype(t *testing.T) {
 			return "", errors.New("not found")
 		},
 		Run: func(ctx context.Context, name string, args ...string) error {
-			invokedCmd = name
-			invokedArgs = args
+			commands = append(commands, strings.Join(append([]string{name}, args...), " "))
 			return nil
+		},
+		RunOutput: func(ctx context.Context, name string, args ...string) (string, error) {
+			return "recording\n", nil
 		},
 	}
 
@@ -42,8 +43,15 @@ func TestControlRecordingVoxtype(t *testing.T) {
 		t.Fatalf("ControlRecording toggle failed: %v", err)
 	}
 
-	if invokedCmd != "voxtype" || len(invokedArgs) != 2 || invokedArgs[0] != "record" || invokedArgs[1] != "toggle" {
-		t.Fatalf("unexpected call: %s %v", invokedCmd, invokedArgs)
+	found := false
+	for _, cmd := range commands {
+		if cmd == "voxtype record toggle" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected voxtype record toggle invocation, got commands: %v", commands)
 	}
 }
 
@@ -90,10 +98,63 @@ type recordingTTSController struct{ events chan<- string }
 
 func (c *recordingTTSController) Enqueue(string) (int, error) { return 0, nil }
 func (c *recordingTTSController) Control(action tts.Action) error {
-	if action == tts.ActionRecordingStart {
+	switch action {
+	case tts.ActionRecordingStart:
 		c.events <- "recording-start"
+	case tts.ActionRecordingEnd:
+		c.events <- "recording-end"
 	}
 	return nil
+}
+
+func TestControlRecordingToggleTransitionsEpochOnIdle(t *testing.T) {
+	runtimeDir := t.TempDir()
+	t.Setenv("XDG_RUNTIME_DIR", runtimeDir)
+	events := make(chan string, 2)
+	controller := &recordingTTSController{events: events}
+	server, err := tts.StartServer(context.Background(), tts.SocketPath(runtimeDir, os.Getuid()), controller)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+
+	d := deps.Dependencies{
+		Getenv: os.Getenv,
+		LookPath: func(name string) (string, error) {
+			if name == "voxtype" {
+				return "/usr/bin/voxtype", nil
+			}
+			return "", errors.New("not found")
+		},
+		Run: func(ctx context.Context, name string, args ...string) error {
+			return nil
+		},
+		RunOutput: func(ctx context.Context, name string, args ...string) (string, error) {
+			return "idle\n", nil
+		},
+	}
+
+	if err := ControlRecording(context.Background(), d, RecordActionToggle); err != nil {
+		t.Fatalf("ControlRecording toggle failed: %v", err)
+	}
+
+	select {
+	case ev1 := <-events:
+		if ev1 != "recording-start" {
+			t.Fatalf("ev1 = %q, want recording-start", ev1)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("never received recording-start")
+	}
+
+	select {
+	case ev2 := <-events:
+		if ev2 != "recording-end" {
+			t.Fatalf("ev2 = %q, want recording-end", ev2)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("never received recording-end on idle transition")
+	}
 }
 
 type delayedTTSController struct{ delay time.Duration }

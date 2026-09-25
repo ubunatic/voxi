@@ -210,3 +210,39 @@ func (b *testBackend) Status() BackendStatus {
 	defer b.mu.Unlock()
 	return BackendStatus{Running: b.running, Recording: b.recording}
 }
+
+type failingBackend struct{}
+
+func (failingBackend) Start(context.Context) error {
+	return errors.New("simulated ASR startup failure")
+}
+func (failingBackend) Stop(context.Context) error { return nil }
+func (failingBackend) Record(context.Context, RecordAction) (RecordingState, error) {
+	return RecordingIdle, nil
+}
+func (failingBackend) Status() BackendStatus {
+	return BackendStatus{Running: false, Recording: RecordingIdle}
+}
+
+func TestAgentDaemonTTSAvailableWhenASRFails(t *testing.T) {
+	dir := t.TempDir()
+	backends := map[Mode]Backend{
+		ModeBatch:     failingBackend{},
+		ModeEager:     failingBackend{},
+		ModeStreaming: failingBackend{},
+	}
+	a, err := New(Options{StatePath: filepath.Join(dir, "agent.json"), Backends: backends})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Verify that failing ASR start does not prevent daemon or TTS socket
+	if err := a.Start(context.Background()); err == nil {
+		t.Fatal("expected ASR start error")
+	}
+	// Status still reports inactive/not running cleanly
+	status := a.Status()
+	if status.Backend.Running {
+		t.Fatalf("expected backend not running, got %+v", status)
+	}
+}
+

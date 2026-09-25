@@ -83,6 +83,9 @@ func ControlRecording(ctx context.Context, d deps.Dependencies, action RecordAct
 		if err := d.Run(ctx, "voxtype", "record", "toggle"); err != nil {
 			return fmt.Errorf("voxtype record toggle: %w", err)
 		}
+		if status, statusErr := GetRecordingStatus(ctx, d); statusErr == nil && status == "idle" {
+			endTTSRecordingEpoch(ctx, d)
+		}
 	case RecordActionStart:
 		if err := d.Run(ctx, "voxtype", "record", "start"); err != nil {
 			return fmt.Errorf("voxtype record start: %w", err)
