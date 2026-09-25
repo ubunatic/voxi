@@ -10,11 +10,12 @@ Markdown normalization remains tracked separately in [Issue 145](../issues/145-i
 
 `voxi say` accepts text arguments, standard input, or a Wayland selection. LLM
 narration is enabled by default. `--no-llm` sends the original text; `--llm
-<host>` overrides the LLM host. Narrated text is sent to the queue owned by an
-active `voxi monitor -w` process. Without that monitor socket, the command
-reports an error. If lmcoder is unavailable or the first request fails, Voxi
-queues the original input. If continuation fails after the first paragraph has
-been queued, Voxi appends the remaining original text.
+<host>` overrides the LLM host. Narrated text is sent to the queue owned by the
+persistent `voxi-agent.service` daemon (via `/run/user/<uid>/voxi/tts.sock`). If the
+daemon is not running, `voxi say` reports an error unless invoked offline with
+`-o, --output <file>` or `--no-play`. If lmcoder is unavailable or the first
+request fails, Voxi queues the original input. If continuation fails after the
+first paragraph has been queued, Voxi appends the remaining original text.
 
 `SplitText` turns paragraphs and sentence runs into separately synthesized
 chunks. The queue manager synthesizes the current chunk and prefetches the next
@@ -26,9 +27,15 @@ The standard Super+Y shortcut reads the primary selection with
 `--interrupt`. That stops current TTS and replaces the pending queue with the
 new selection. Shift+Super+Y reads the clipboard. The repository's shortcut
 setup leaves host selection to the user config; this machine's GNOME binding
-adds `--llm x600` explicitly. Super+X toggles dictation; it does not control
-TTS. The monitor Stop action stops current playback and clears the queue.
-Clear removes pending chunks while allowing the current chunk to finish.
+adds `--llm x600` explicitly.
+
+**Audio Arbiter & Recording Mute Gate (Super+X)**:
+When the user begins voice dictation via Super+X, the STT recording engine increments
+an active recording epoch. The daemon's TTS playback queue mutes/halts in-flight
+audio playback immediately to prevent the microphone from capturing its own synthetic
+output, discarding queued spoken audio until the recording session concludes.
+The monitor Stop action stops current playback and clears the queue. Clear removes
+pending chunks while allowing the current chunk to finish.
 
 ## LLM host and session behavior
 
@@ -121,9 +128,10 @@ quiet audio recorded at the end of a WAV; it is not a separate inter-sentence
 sleep and does not remove player startup overhead between chunks.
 
 The TTS spec is embedded in the binary. Rebuild and install after changing it.
-The monitor owns the synthesis engine and keeps its loaded binary in memory, so
-close and reopen `voxi monitor -w` to activate engine or spec changes.
-`make install` does not hot-reload the running monitor. If gaps remain after a
-fresh monitor starts, inspect the WAV tail and player transition separately;
-increasing the trim limit cannot remove startup delay.
+The persistent `voxi-agent.service` owns the synthesis engine and playback queue.
+Run `make restart-service` (or `systemctl --user restart voxi-agent.service`) to
+activate engine or spec changes in the running daemon. `make install` alone does
+not hot-reload the running background service. If gaps remain after a fresh
+daemon starts, inspect the WAV tail and player transition separately; increasing
+the trim limit cannot remove startup delay.
 
