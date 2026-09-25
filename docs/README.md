@@ -16,6 +16,7 @@ In-depth references for architecture, decisions, and operations of the Voxi Linu
 | [LiveMicMeter.md](LiveMicMeter.md) | `audiolevel` package: capture, two-sided ballistics easing, decoupled paint/collect/capture cadences, truecolor gradient rendering, GNOME mic-indicator suppression, the `stty`-subprocess perf pitfall, the rolling sparkline export and its `examples/miclevel` loom TUI demo, and `loom` API pitfalls found along the way |
 | [EagerDeliverySafety.md](EagerDeliverySafety.md) | Eager chunk identities, at-most-once delivery ledger, stop/queue semantics, visible failures, and conservative transcript safety limits |
 | [LLMTranscriptCleanup.md](LLMTranscriptCleanup.md) | Local LLM cleanup request contract, chunk context, fallback behavior, and real-model validation limits |
+| [TTSReading.md](TTSReading.md) | `voxi say` narration, lmcoder hosts and sessions, chunk queue behavior, pause trimming, and observed model latency |
 
 ---
 
@@ -46,3 +47,4 @@ In-depth references for architecture, decisions, and operations of the Voxi Linu
 | [studies/2026-09-13-llm-cleanup-evaluation.md](studies/2026-09-13-llm-cleanup-evaluation.md) | LLM cleanup transcript fidelity evaluation |
 | [studies/2026-09-15-agy-cleanup-latency-and-session-strategies.md](studies/2026-09-15-agy-cleanup-latency-and-session-strategies.md) | agy (Antigravity) subprocess latency for LLM transcript cleanup: cold-spawn vs -c vs persistent stream-JSON, the ~13k-token fixed tool-schema tax, and the local-model near-miss timeout finding that came from live dictation during the same investigation |
 
+<!-- End of studies index. -->

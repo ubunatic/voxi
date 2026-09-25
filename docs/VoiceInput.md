@@ -91,9 +91,11 @@ they report the missing tools for a later interactive install.
 
 While `voxi monitor -w` is open, its TTS panel reports the preferred engine or
 espeak-ng fallback, the available local player, or which dependencies are
-missing. With TTS enabled, `voxi say` sends text to its monitor-owned queue;
-media keys control playback. Starting dictation stops TTS before capture, while
-a failed TTS stop only emits a warning and cannot block recording.
+missing. With TTS enabled, `voxi say` sends narrated text to its monitor-owned
+queue by default; use `--no-llm` to read the original input. See
+[TTSReading.md](TTSReading.md) for narration, host, and pause behavior. Media
+keys control playback. Starting dictation stops TTS before capture, while a
+failed TTS stop only emits a warning and cannot block recording.
 
 ## Commands
 

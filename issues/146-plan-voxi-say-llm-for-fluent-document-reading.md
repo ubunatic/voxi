@@ -55,3 +55,12 @@ ready.
   output work for this flow.
 - Tests cover default-on behavior, host selection, session continuity, and
   fallback when continuation fails.
+- A fresh-session latency canary on 2026-09-25 measured two paired table
+  narration calls at 36.42/37.44 seconds on T14 localhost
+  (`qwen3-4b-instruct-2507-q4`) and 33.26/29.70 seconds on x600
+  (`qwen3.8-27b-instruct-q5`). These are end-to-end command times with the
+  production first-paragraph prompt, not normalized tokens per second. The
+  calls used `--raw`, so the command received the complete response before
+  queueing it; the first playback delay for a table-shaped first paragraph can
+  therefore approach the full request time. See [TTSReading.md](../docs/TTSReading.md)
+  for the method and limitations.
