@@ -61,9 +61,13 @@ def main():
     run("espeak-ng", ["espeak-ng", "-w", "{wav}", "--stdin"])
     if model := os.getenv("VOXI_PIPER_MODEL"):
         config = os.getenv("VOXI_PIPER_CONFIG", model + ".json")
-        python = os.getenv("VOXI_TTS_PYTHON", "python3")
-        run("Piper", [python, "-m", "piper", "--model", model, "--config", config,
-                      "--input_file", "{textfile}", "--output_file", "{wav}"])
+        piper_bin = shutil.which("piper")
+        if piper_bin:
+            run("Piper", [piper_bin, "--model", model, "--config", config, "--output_file", "{wav}"])
+        else:
+            python = os.getenv("VOXI_TTS_PYTHON", "python3")
+            run("Piper", [python, "-m", "piper", "--model", model, "--config", config,
+                          "--input_file", "{textfile}", "--output_file", "{wav}"])
     else:
         print("Piper: skipped (set VOXI_PIPER_MODEL to a downloaded voice ONNX file)")
     if os.getenv("VOXI_KOKORO_MODEL") and os.getenv("VOXI_KOKORO_VOICES"):

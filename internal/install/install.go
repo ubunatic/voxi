@@ -485,7 +485,7 @@ func installPiper(ctx context.Context, e Effects, userBin string) error {
 	}
 	asset := "piper_linux_x86_64.tar.gz"
 	if e.GOARCH == "arm64" {
-		asset = "piper_linux_arm64.tar.gz"
+		asset = "piper_linux_aarch64.tar.gz"
 	}
 	piperDir := filepath.Join(e.Home, ".local", "lib", "voxi", "piper")
 	if err := e.MkdirAll(piperDir, 0755); err != nil {
@@ -496,8 +496,8 @@ func installPiper(ctx context.Context, e Effects, userBin string) error {
 		return fmt.Errorf("create download directory: %w", err)
 	}
 	url := "https://github.com/rhasspy/piper/releases/latest/download/" + asset
-	if err := downloadCrispASR(ctx, e, archive, url); err != nil {
-		return fmt.Errorf("download Piper failed: %w", err)
+	if err := downloadPiper(ctx, e, archive, url); err != nil {
+		return err
 	}
 	if err := e.Run(ctx, "tar", "-xzf", archive, "-C", piperDir, "--strip-components=1"); err != nil {
 		return fmt.Errorf("extract Piper: %w", err)
@@ -524,8 +524,45 @@ func installPiper(ctx context.Context, e Effects, userBin string) error {
 	return nil
 }
 
+func downloadPiper(ctx context.Context, e Effects, archive, url string) error {
+	if _, err := os.Stat(archive); err == nil {
+		if err := e.Run(ctx, "tar", "-tzf", archive); err == nil {
+			return nil
+		}
+	}
+
+	curlErr := e.Run(ctx, "curl", "-fL", "-o", archive, url)
+	if curlErr == nil {
+		return nil
+	}
+
+	dlErr := e.DownloadHTTP(ctx, url, archive)
+	if dlErr == nil {
+		return nil
+	}
+
+	var hints []string
+	if curlErr != nil {
+		hints = append(hints, fmt.Sprintf("curl error: %v", curlErr))
+	}
+	if dlErr != nil {
+		hints = append(hints, fmt.Sprintf("HTTP fallback error: %v", dlErr))
+	}
+	hintMsg := ""
+	if len(hints) > 0 {
+		hintMsg = "\n\nDiagnostic details:\n  - " + strings.Join(hints, "\n  - ")
+	}
+
+	return fmt.Errorf("download Piper failed%s\n\n"+
+		"To resolve manually:\n"+
+		"  1. Download: %s\n"+
+		"  2. Place at: %s\n"+
+		"  3. Re-run: 'voxi install'",
+		hintMsg, url, archive)
+}
+
 func downloadPiperVoice(ctx context.Context, e Effects, target, url string) error {
-	if _, err := os.Stat(target); err == nil {
+	if info, err := os.Stat(target); err == nil && info.Size() > 0 {
 		return nil
 	}
 	if err := e.Run(ctx, "curl", "-fL", "-o", target, url); err == nil {

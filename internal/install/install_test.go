@@ -568,6 +568,21 @@ func TestInstallPiperUsesVendoredBinaryAndDefaultVoice(t *testing.T) {
 	}
 }
 
+func TestInstallPiperArm64Asset(t *testing.T) {
+	e, commands := testEffects(t)
+	e.GOARCH = "arm64"
+	e.Symlink = func(oldname, newname string) error {
+		return nil
+	}
+	if err := installPiper(context.Background(), *e, filepath.Join(e.Home, ".local", "bin")); err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(*commands, "\n")
+	if !strings.Contains(joined, "piper_linux_aarch64.tar.gz") {
+		t.Fatalf("expected arm64 Piper download to use piper_linux_aarch64.tar.gz, got: %s", joined)
+	}
+}
+
 func TestInstallDownloadFallsBackToResilientHTTPOnCurlFailure(t *testing.T) {
 	e, commands := testEffects(t)
 	fallbackCalled := false
