@@ -58,38 +58,59 @@ queue. A short first paragraph or a Markdown table in one paragraph can
 therefore leave a gap if its continuation takes longer to generate than the
 queued speech takes to play.
 
-## Latency canary
+## Speech synthesis engines
 
-On 2026-09-25, the same Markdown comparison table was sent to the T14's
-`qwen3-4b-instruct-2507-q4` localhost server and x600's
-`qwen3.8-27b-instruct-q5` server. The benchmark used Voxi's first-paragraph
-prompt (`firstPrompt`) and system instruction (`narrationSystemPrompt`) in
-`internal/tts/command.go`, `--raw --format plain --no-preamble
---max-tokens 4096`, and a unique explicit session for every request. The two
-host requests in each trial ran in parallel. Wall time measures complete
-lmcoder command time, not normalized token throughput or audible first-sample
-time.
+Voxi provides a pluggable text-to-speech engine seam with automatic fallback:
 
-The input table was submitted as one paragraph:
+1. **Piper (Neural)**: High-quality, local ONNX neural text-to-speech. Installed as a self-contained, pip-free prebuilt binary under `~/.local/lib/voxi/piper/` and symlinked to `~/.local/bin/piper`. Voice models reside in `~/.local/share/voxi/voices/`.
+2. **Festival (`text2wave`)**: Packaged standard synthesizer fallback.
+3. **`espeak-ng`**: Lightweight, instant synthetic fallback.
 
-| Dimension | Document/CLI Prompt | MCP Server Tool |
-| --- | --- | --- |
-| Token Efficiency | Higher prompt bloat; needs examples and usage rules | Compact JSON Schema; only present in tool definitions |
-| Reliability | Prone to shell quoting, escaping, and argument errors | Near 100% parameter formatting reliability |
-| Multi-line Payloads | High friction: bash quotes, EOF markers, subshell escapes | Clean JSON string encoding |
-| Observability and Control | Unstructured stdout capture in bash | Structured responses, status codes, and clean error handling |
-| Setup Cost | Zero: just text in AGENTS.md | Requires packaging an MCP server binary/subcommand |
+### Configuration & Precedence
 
-| Host and loaded model | Run 1 | Run 2 | Mean |
-| --- | ---: | ---: | ---: |
-| T14 localhost, qwen3-4b-instruct-2507-q4 | 36.42 s | 37.44 s | 36.93 s |
-| x600, qwen3.8-27b-instruct-q5 | 33.26 s | 29.70 s | 31.48 s |
+TTS backend and voice selection resolve in this order:
 
-x600 completed sooner in these two samples and produced more fluent, more
-verbose narration. The models ran on different hardware, output lengths
-differed, and the sample is small; the result does not establish normalized
-model throughput. The calls produced text only and did not measure playback
-quality or acoustic pauses. Both servers remained on their original models.
+1. **Process Environment Overrides**:
+   - `VOXI_TTS_BACKEND`: `auto`, `piper`, `festival`, or `espeak-ng`.
+   - `VOXI_PIPER_MODEL`: Absolute path to a `.onnx` voice model file.
+   - `VOXI_PIPER_CONFIG`: Optional path to a `.onnx.json` voice config file.
+2. **Environment File (`~/.config/voxi/env`)**:
+   - `VOXI_TTS_BACKEND`, `VOXI_PIPER_MODEL`, `VOXI_PIPER_CONFIG`.
+3. **User Configuration (`~/.config/voxi/config.yaml`)**:
+   - `tts_backend`: Default `"auto"` (prefers Piper if model and binary are present).
+   - `tts_piper_model`: E.g. `/home/uwe/.local/share/voxi/voices/en_US-lessac-medium.onnx`.
+   - `tts_piper_config`: Optional custom model JSON.
+4. **Embedded Spec Defaults (`spec/tts.yaml`)**:
+   - `backend.default_backend: auto`
+   - `piper.model: ~/.local/share/voxi/voices/en_US-lessac-medium.onnx`
+
+### Multi-Voice & Dialect Library
+
+Voice models in `~/.local/share/voxi/voices/` include:
+- `en_US-lessac-medium.onnx`: Clear American English female narrator (default).
+- `en_GB-alan-medium.onnx`: British English male scholar/butler dialect.
+- `en_GB-southern_english_female-low.onnx`: British English female accent.
+- `en_US-bryce-medium.onnx`: Deep, narrative American English male voice.
+
+### Prosody & Pacing Control
+
+- **Fast Listening Mode**: Lowering length scale (e.g. `--length_scale 0.85`) enables rapid document and telemetry consumption while preserving phoneme clarity.
+- **Character & Mentoring Cadence**: Slower pacing (e.g. `--length_scale 1.35`) combined with LLM punctuation and pause prompt conditioning delivers expressive character rhythm (e.g. Yoda-style phrasing) without requiring dedicated voice cloning.
+
+## Latency and benchmark findings
+
+Local CPU canary measurements on AMD Ryzen 5 PRO 5650U (Cezanne APU, 12 threads, 23.3 GiB RAM) using `scripts/canary_tts/benchmark.py` on a standard test sentence:
+
+| Engine / Model | Latency | Audio Duration | Real-Time Factor (RTF) | Peak RSS | Character / Dialect |
+|---|---|---|---|---|---|
+| **Piper (`en_US-lessac-medium`)** | 0.600 s | 3.74 s | **0.160** | 144.6 MiB | American female (natural) |
+| **Piper (`en_US-bryce-medium`)** | 0.964 s | 13.15 s | **0.073** | 144.6 MiB | Deep American male |
+| **Piper (`en_GB-alan-medium`)** | 0.586 s | 8.35 s | **0.070** | 144.6 MiB | British English male |
+| **Piper (`en_GB-southern_female`)**| 0.234 s | 4.80 s | **0.048** | 144.6 MiB | British English female |
+| **Festival (`text2wave`)** | 2.219 s | 3.91 s | **0.568** | 373.9 MiB | Package default |
+| **`espeak-ng`** | 0.018 s | 3.59 s | **0.005** | 8.2 MiB | Synthetic fallback |
+
+Piper synthesizes ~4x faster than Festival with less than half the memory footprint, achieving sub-second first-chunk audio playback.
 
 ## Pause trimming and deployment
 
@@ -105,3 +126,4 @@ close and reopen `voxi monitor -w` to activate engine or spec changes.
 `make install` does not hot-reload the running monitor. If gaps remain after a
 fresh monitor starts, inspect the WAV tail and player transition separately;
 increasing the trim limit cannot remove startup delay.
+

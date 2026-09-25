@@ -17,12 +17,15 @@ voxi install --modifierd # optional system-scoped modifier gating
 ```
 
 `voxi install` converges the non-privileged parts of the installation: the Voxi
-binary, user service units, CrispASR, dotool/dotoold, and the enabled and active
+binary, user service units, CrispASR, Piper neural TTS engine and default voice models, dotool/dotoold, and the enabled and active
 `voxi-agent.service`. It also installs and manages `voxi-eager.service`,
 `dotoold.service`, and `voxi-r2t2.service`; R2T2 is enabled only when the
 selected model's endpoint matches its loopback address and port. The R2T2
 unit's port comes from the model spec, and installation requires both weight
-files before enabling it. The `tts_enabled` setting defaults to true. If TTS
+files before enabling it. The `tts_enabled` setting defaults to true. Piper is
+installed as a self-contained C++ release archive into `~/.local/lib/voxi/piper/`
+(symlinked to `~/.local/bin/piper`) with voice models staged in `~/.local/share/voxi/voices/`,
+requiring zero `pip` or global Python dependencies. If fallback TTS
 tools are missing, installation asks before invoking `sudo` and the system
 package manager to install Festival, espeak-ng, and a PipeWire playback tool.
 Package managers retain their normal transaction confirmation; Voxi never
