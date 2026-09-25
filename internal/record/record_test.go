@@ -47,7 +47,7 @@ func TestControlRecordingVoxtype(t *testing.T) {
 	}
 }
 
-func TestStopTTSForRecordingSendsStopToMonitor(t *testing.T) {
+func TestBeginTTSRecordingEpochSendsMuteToDaemon(t *testing.T) {
 	runtimeDir := t.TempDir()
 	t.Setenv("XDG_RUNTIME_DIR", runtimeDir)
 	events := make(chan string, 1)
@@ -59,15 +59,13 @@ func TestStopTTSForRecordingSendsStopToMonitor(t *testing.T) {
 	defer server.Close()
 
 	d := deps.Dependencies{Getenv: os.Getenv}
-	if err := stopTTSForRecording(context.Background(), d); err != nil {
-		t.Fatal(err)
-	}
-	if got := <-events; got != "tts-stop" {
-		t.Fatalf("event = %q, want TTS stop", got)
+	beginTTSRecordingEpoch(context.Background(), d)
+	if got := <-events; got != "recording-start" {
+		t.Fatalf("event = %q, want recording start", got)
 	}
 }
 
-func TestStopTTSForRecordingWarnsAndContinuesAfterShortTimeout(t *testing.T) {
+func TestBeginTTSRecordingEpochWarnsAndContinuesAfterShortTimeout(t *testing.T) {
 	runtimeDir := t.TempDir()
 	t.Setenv("XDG_RUNTIME_DIR", runtimeDir)
 	server, err := tts.StartServer(context.Background(), tts.SocketPath(runtimeDir, os.Getuid()), &delayedTTSController{delay: 600 * time.Millisecond})
@@ -79,9 +77,7 @@ func TestStopTTSForRecordingWarnsAndContinuesAfterShortTimeout(t *testing.T) {
 	var warning bytes.Buffer
 	started := time.Now()
 	d := deps.Dependencies{Getenv: os.Getenv, Stderr: &warning}
-	if err := stopTTSForRecording(context.Background(), d); err != nil {
-		t.Fatalf("TTS stop failure blocked recording: %v", err)
-	}
+	beginTTSRecordingEpoch(context.Background(), d)
 	if elapsed := time.Since(started); elapsed >= 500*time.Millisecond {
 		t.Fatalf("TTS stop delayed recording for %s; want < 500ms", elapsed)
 	}
@@ -94,8 +90,8 @@ type recordingTTSController struct{ events chan<- string }
 
 func (c *recordingTTSController) Enqueue(string) (int, error) { return 0, nil }
 func (c *recordingTTSController) Control(action tts.Action) error {
-	if action == tts.ActionStop {
-		c.events <- "tts-stop"
+	if action == tts.ActionRecordingStart {
+		c.events <- "recording-start"
 	}
 	return nil
 }

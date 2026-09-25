@@ -109,6 +109,34 @@ func TestManagerRejectsOversizedText(t *testing.T) {
 	}
 }
 
+func TestRecordingEpochHoldsQueuedPlaybackUntilEnd(t *testing.T) {
+	backend := &fakeBackend{started: make(chan string, 4), players: make(chan *fakePlayback, 4)}
+	manager := NewManager(context.Background(), backend)
+	defer manager.Close()
+	if err := manager.Control(ActionRecordingStart); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Enqueue("muted while recording"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case got := <-backend.started:
+		t.Fatalf("synthesized during recording epoch: %q", got)
+	case <-time.After(80 * time.Millisecond):
+	}
+	if err := manager.Control(ActionRecordingEnd); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case got := <-backend.started:
+		if got != "muted while recording" {
+			t.Fatalf("synthesized %q", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("queued speech did not resume after recording ended")
+	}
+}
+
 func TestManagerReplaceStopsCurrentAndUsesOnlyNewQueue(t *testing.T) {
 	backend := &fakeBackend{started: make(chan string, 8), players: make(chan *fakePlayback, 8)}
 	manager := NewManager(context.Background(), backend)

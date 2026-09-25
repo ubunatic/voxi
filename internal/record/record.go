@@ -49,11 +49,12 @@ func defaultEngineNeedsVoxtype() bool {
 // ControlRecording sends a recording control action to the active speech engine.
 func ControlRecording(ctx context.Context, d deps.Dependencies, action RecordAction) error {
 	if action == RecordActionStart || action == RecordActionToggle {
-		if err := stopTTSForRecording(ctx, d); err != nil {
-			return err
-		}
+		beginTTSRecordingEpoch(ctx, d)
 	}
 	if status, err := agent.DefaultClient().Record(ctx, agent.RecordAction(action)); err == nil {
+		if action == RecordActionStop || (action == RecordActionToggle && status.Recording == agent.RecordingIdle) {
+			endTTSRecordingEpoch(ctx, d)
+		}
 		if d.Stdout != nil {
 			fmt.Fprintln(d.Stdout, agent.RecordingMessage(status.Recording))
 		}
@@ -64,7 +65,13 @@ func ControlRecording(ctx context.Context, d deps.Dependencies, action RecordAct
 
 	m := mode.CurrentVoiceInputMode(ctx, d)
 	if m == mode.ModeEager || (m == mode.ModeNeither && !defaultEngineNeedsVoxtype()) {
-		return eager.ControlEagerDaemon(ctx, d, string(action))
+		if err := eager.ControlEagerDaemon(ctx, d, string(action)); err != nil {
+			return err
+		}
+		if action == RecordActionStop {
+			endTTSRecordingEpoch(ctx, d)
+		}
+		return nil
 	}
 
 	if _, err := d.LookPath("voxtype"); err != nil {
@@ -84,20 +91,21 @@ func ControlRecording(ctx context.Context, d deps.Dependencies, action RecordAct
 		if err := d.Run(ctx, "voxtype", "record", "stop"); err != nil {
 			return fmt.Errorf("voxtype record stop: %w", err)
 		}
+		endTTSRecordingEpoch(ctx, d)
 	default:
 		return fmt.Errorf("unknown record action %q (want toggle, start, or stop)", action)
 	}
 	return nil
 }
 
-func stopTTSForRecording(ctx context.Context, d deps.Dependencies) error {
+func beginTTSRecordingEpoch(ctx context.Context, d deps.Dependencies) {
 	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
 	if d.Getenv != nil {
 		runtimeDir = d.Getenv("XDG_RUNTIME_DIR")
 	}
 	stopCtx, cancel := context.WithTimeout(ctx, ttsStopBeforeRecordTimeout)
 	defer cancel()
-	err := (tts.Client{SocketPath: tts.SocketPath(runtimeDir, os.Getuid())}).Control(stopCtx, tts.ActionStop)
+	err := (tts.Client{SocketPath: tts.SocketPath(runtimeDir, os.Getuid())}).Control(stopCtx, tts.ActionRecordingStart)
 	if err != nil && !errors.Is(err, tts.ErrNoMonitor) && !errors.Is(err, tts.ErrTTSDisabled) {
 		warning := d.Stderr
 		if warning == nil {
@@ -105,7 +113,16 @@ func stopTTSForRecording(ctx context.Context, d deps.Dependencies) error {
 		}
 		fmt.Fprintf(warning, "warning: could not stop TTS before recording: %v; continuing with recording\n", err)
 	}
-	return nil
+}
+
+func endTTSRecordingEpoch(ctx context.Context, d deps.Dependencies) {
+	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
+	if d.Getenv != nil {
+		runtimeDir = d.Getenv("XDG_RUNTIME_DIR")
+	}
+	stopCtx, cancel := context.WithTimeout(ctx, ttsStopBeforeRecordTimeout)
+	defer cancel()
+	_ = (tts.Client{SocketPath: tts.SocketPath(runtimeDir, os.Getuid())}).Control(stopCtx, tts.ActionRecordingEnd)
 }
 
 // GetRecordingStatus queries the current recording/idle status of the speech engine.

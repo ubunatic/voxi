@@ -5,7 +5,10 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"os"
+	"ubunatic.com/voxi/internal/config"
 	"ubunatic.com/voxi/internal/deps"
+	"ubunatic.com/voxi/internal/tts"
 )
 
 // NewCommand returns the `voxi agent` command tree.
@@ -26,8 +29,35 @@ func NewCommand(d deps.Dependencies) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := a.Start(cmd.Context()); err != nil {
+			executable, err := os.Executable()
+			if err != nil {
 				return err
+			}
+			home := os.Getenv("HOME")
+			if d.Getenv != nil {
+				home = d.Getenv("HOME")
+			}
+			settings, err := config.LoadUserSettings(home)
+			if err != nil {
+				return fmt.Errorf("load TTS settings: %w", err)
+			}
+			manager := tts.NewManagerWithEnabled(cmd.Context(), tts.NewEngine(d, executable), settings.TTSEnabled)
+			defer manager.Close()
+			server, err := tts.StartServer(cmd.Context(), "", manager)
+			if err != nil {
+				return err
+			}
+			defer server.Close()
+			if settings.TTSEnabled {
+				mpris, mprisErr := tts.StartMPRIS(cmd.Context(), manager)
+				if mprisErr != nil {
+					fmt.Fprintf(d.Stderr, "warning: MPRIS unavailable: %v\n", mprisErr)
+				} else {
+					defer mpris.Close()
+				}
+			}
+			if err := a.Start(cmd.Context()); err != nil {
+				fmt.Fprintf(d.Stderr, "warning: ASR backend failed to start; TTS remains available: %v\n", err)
 			}
 			defer a.Stop(context.Background())
 			return Serve(cmd.Context(), socketPath, a)

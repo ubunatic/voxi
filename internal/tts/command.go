@@ -24,6 +24,8 @@ func NewSayCommand(d deps.Dependencies) *cobra.Command {
 	from := ""
 	llmHost := ""
 	disableLLM := false
+	output := ""
+	noPlay := false
 	cmd := &cobra.Command{
 		Use:   "say [text...]",
 		Short: "Rewrite text for speech with an LLM, then read it aloud",
@@ -72,6 +74,38 @@ func NewSayCommand(d deps.Dependencies) *cobra.Command {
 				}
 				text = string(data)
 			}
+			if output != "" || noPlay {
+				if output == "" {
+					return fmt.Errorf("--no-play requires --output <file.wav>")
+				}
+				executable, err := os.Executable()
+				if err != nil {
+					return err
+				}
+				audio, _, err := NewEngine(d, executable).Synthesize(cmd.Context(), text)
+				if err != nil {
+					return fmt.Errorf("synthesize WAV: %w", err)
+				}
+				defer audio.Close()
+				input, err := os.Open(audio.path)
+				if err != nil {
+					return fmt.Errorf("open synthesized WAV: %w", err)
+				}
+				defer input.Close()
+				file, err := os.Create(output)
+				if err != nil {
+					return fmt.Errorf("create WAV output %s: %w", output, err)
+				}
+				if _, err := io.Copy(file, input); err != nil {
+					_ = file.Close()
+					return fmt.Errorf("write WAV output %s: %w", output, err)
+				}
+				if err := file.Close(); err != nil {
+					return fmt.Errorf("close WAV output %s: %w", output, err)
+				}
+				fmt.Fprintf(d.Stdout, "wrote %s\n", output)
+				return nil
+			}
 			runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
 			if d.Getenv != nil {
 				runtimeDir = d.Getenv("XDG_RUNTIME_DIR")
@@ -92,6 +126,8 @@ func NewSayCommand(d deps.Dependencies) *cobra.Command {
 	cmd.Flags().StringVar(&from, "from", "", "read from Wayland primary selection or clipboard")
 	cmd.Flags().StringVar(&llmHost, "llm", "", "override the lmcoder host; narration is enabled by default")
 	cmd.Flags().BoolVar(&disableLLM, "no-llm", false, "read the original text without LLM rewriting")
+	cmd.Flags().StringVarP(&output, "output", "o", "", "synthesize WAV directly to this file without playback")
+	cmd.Flags().BoolVar(&noPlay, "no-play", false, "synthesize without playback (requires --output)")
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
 	return cmd

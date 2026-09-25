@@ -262,6 +262,7 @@ func (m *Manager) run() {
 	var currentJob *synthJob
 	var prefetchJob *synthJob
 	var prefetched *synthResult
+	recording := false
 
 	cleanupCurrent := func() {
 		if player != nil {
@@ -347,7 +348,7 @@ func (m *Manager) run() {
 			m.publish(statusIdle, "", nil, 0, firstAudio, lastErr)
 			return
 		}
-		if player == nil && currentJob == nil && cursor < len(items) {
+		if !recording && player == nil && currentJob == nil && cursor < len(items) {
 			current = items[cursor]
 			if prefetched != nil && prefetched.index == cursor {
 				ready := *prefetched
@@ -383,6 +384,21 @@ func (m *Manager) run() {
 		case <-m.ctx.Done():
 			continue
 		case c := <-m.commands:
+			if c.action == ActionRecordingStart {
+				recording = true
+				m.finishFeed("stopped")
+				cleanupCurrent()
+				cleanupPrefetch()
+				currentAudio = audioFile{}
+				player = nil
+				currentJob = nil
+				prefetchJob = nil
+				prefetched = nil
+				current = ""
+				status = statusIdle
+			} else if c.action == ActionRecordingEnd {
+				recording = false
+			}
 			if c.action == ActionNext || (c.action == ActionPrevious && cursor > 0) {
 				m.finishFeed("skipped")
 			}
@@ -409,6 +425,12 @@ func (m *Manager) run() {
 					cursor++
 					pruneQueueHistory(&items, &cursor)
 				}
+				current = ""
+				status = statusIdle
+				continue
+			}
+			if recording {
+				_ = result.audio.Close()
 				current = ""
 				status = statusIdle
 				continue
@@ -469,6 +491,8 @@ func (m *Manager) applyCommand(
 	cleanupPrefetch func(),
 ) commandResult {
 	switch c.action {
+	case ActionRecordingStart, ActionRecordingEnd:
+		return commandResult{}
 	case "say":
 		newChunks := SplitText(c.text)
 		if len(newChunks) == 0 {

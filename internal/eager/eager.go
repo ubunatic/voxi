@@ -32,6 +32,7 @@ import (
 	"ubunatic.com/voxi/internal/modifiers"
 	"ubunatic.com/voxi/internal/speechcontext"
 	"ubunatic.com/voxi/internal/telemetry"
+	"ubunatic.com/voxi/internal/tts"
 	"ubunatic.com/voxi/internal/typing"
 	spec "ubunatic.com/voxi/spec"
 )
@@ -877,7 +878,9 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 	}
 	recCmd.Stderr = io.Discard
 
+	beginPlaybackMute(ctx, d)
 	if err := recCmd.Start(); err != nil {
+		endPlaybackMute(ctx, d)
 		return fmt.Errorf("start audio capture: %w", err)
 	}
 	_ = recorder.Record(telemetry.Event{Event: telemetry.CaptureStarted, Timestamp: time.Now(), SessionID: sessionID})
@@ -991,6 +994,7 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 		_ = recCmd.Process.Kill()
 		_ = recCmd.Wait()
 	}
+	endPlaybackMute(ctx, d)
 	_ = recorder.Record(telemetry.Event{Event: telemetry.CaptureStopped, Timestamp: time.Now(), SessionID: sessionID})
 	// The worker is intentionally not waited on before the callback: the
 	// manager can start the next generation while this session drains.
@@ -1083,6 +1087,24 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 	}
 
 	return nil
+}
+
+func beginPlaybackMute(ctx context.Context, d deps.Dependencies) {
+	controlPlaybackEpoch(ctx, d, tts.ActionRecordingStart)
+}
+
+func endPlaybackMute(ctx context.Context, d deps.Dependencies) {
+	controlPlaybackEpoch(ctx, d, tts.ActionRecordingEnd)
+}
+
+func controlPlaybackEpoch(ctx context.Context, d deps.Dependencies, action tts.Action) {
+	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
+	if d.Getenv != nil {
+		runtimeDir = d.Getenv("XDG_RUNTIME_DIR")
+	}
+	controlCtx, cancel := context.WithTimeout(ctx, 150*time.Millisecond)
+	defer cancel()
+	_ = (tts.Client{SocketPath: tts.SocketPath(runtimeDir, os.Getuid())}).Control(controlCtx, action)
 }
 
 // queuedJobContext is retained for package-level compatibility with older

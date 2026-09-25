@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"ubunatic.com/voxi/internal/deps"
+	"ubunatic.com/voxi/internal/tts"
 )
 
 func TestParseSections(t *testing.T) {
@@ -21,6 +22,32 @@ func TestParseSections(t *testing.T) {
 	s2 := ParseSections("s,t")
 	if !s2.Speed || !s2.Transcript || s2.Hardware || s2.Daemons {
 		t.Fatalf("expected only speed and transcript true, got %+v", s2)
+	}
+}
+
+type telemetryTTSController struct{}
+
+func (telemetryTTSController) Enqueue(string) (int, error) { return 1, nil }
+func (telemetryTTSController) Control(tts.Action) error    { return nil }
+func (telemetryTTSController) Snapshot() tts.Snapshot {
+	return tts.Snapshot{Status: "playing", Current: "daemon speech", History: []tts.ChunkRecord{{ID: 1, Text: "daemon speech"}}}
+}
+
+func TestMonitorReadsTTSStateAsSocketClient(t *testing.T) {
+	runtimeDir := t.TempDir()
+	path := tts.SocketPath(runtimeDir, os.Getuid())
+	ctx, cancel := context.WithCancel(context.Background())
+	server, err := tts.StartServer(ctx, path, telemetryTTSController{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { cancel(); _ = server.Close() }()
+	snapshot, err := (tts.Client{SocketPath: path}).Snapshot(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Status != "playing" || snapshot.Current != "daemon speech" || len(snapshot.History) != 1 {
+		t.Fatalf("monitor telemetry snapshot = %+v", snapshot)
 	}
 }
 

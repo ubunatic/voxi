@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"ubunatic.com/voxi/audiolevel"
-	"ubunatic.com/voxi/internal/config"
 	"ubunatic.com/voxi/internal/deps"
 	"ubunatic.com/voxi/internal/tts"
 	"ubunatic.com/voxi/spec"
@@ -122,32 +121,36 @@ func RunWatchResources(ctx context.Context, d deps.Dependencies, interval time.D
 	sigCtx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	home := os.Getenv("HOME")
+	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
 	if d.Getenv != nil {
-		home = d.Getenv("HOME")
+		runtimeDir = d.Getenv("XDG_RUNTIME_DIR")
 	}
-	userSettings, err := config.LoadUserSettings(home)
-	if err != nil {
-		return fmt.Errorf("load monitor TTS setting: %w", err)
-	}
-	executable, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("resolve voxi executable for TTS supervision: %w", err)
-	}
-	ttsManager := tts.NewManagerWithEnabled(sigCtx, tts.NewEngine(d, executable), userSettings.TTSEnabled)
-	defer ttsManager.Close()
-	ttsServer, err := tts.StartServer(sigCtx, "", ttsManager)
-	if err != nil {
-		return fmt.Errorf("start monitor TTS socket: %w", err)
-	}
-	defer ttsServer.Close()
-	if userSettings.TTSEnabled {
-		mpris, err := tts.StartMPRIS(sigCtx, ttsManager)
-		if err != nil {
-			return fmt.Errorf("start monitor MPRIS player: %w", err)
+	ttsClient := tts.Client{SocketPath: tts.SocketPath(runtimeDir, os.Getuid())}
+	var ttsLock sync.RWMutex
+	ttsSnapshot := tts.Snapshot{Status: "unavailable", BackendStatus: "agent TTS unavailable"}
+	refreshTTS := func() {
+		ctx, cancel := context.WithTimeout(sigCtx, 400*time.Millisecond)
+		defer cancel()
+		snapshot, err := ttsClient.Snapshot(ctx)
+		if err == nil {
+			ttsLock.Lock()
+			ttsSnapshot = snapshot
+			ttsLock.Unlock()
 		}
-		defer mpris.Close()
 	}
+	refreshTTS()
+	go func() {
+		ticker := time.NewTicker(250 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-sigCtx.Done():
+				return
+			case <-ticker.C:
+				refreshTTS()
+			}
+		}
+	}()
 
 	oldState, err := exec.Command("stty", "-F", "/dev/tty", "-g").Output()
 	if err == nil {
@@ -216,19 +219,19 @@ func RunWatchResources(ctx context.Context, d deps.Dependencies, interval time.D
 			sec.Daemons = !sec.Daemons
 			requestRedraw()
 		case "tts-play-pause":
-			_ = ttsManager.Control(tts.ActionPlayPause)
+			_ = ttsClient.Control(sigCtx, tts.ActionPlayPause)
 			requestRedraw()
 		case "tts-previous":
-			_ = ttsManager.Control(tts.ActionPrevious)
+			_ = ttsClient.Control(sigCtx, tts.ActionPrevious)
 			requestRedraw()
 		case "tts-next":
-			_ = ttsManager.Control(tts.ActionNext)
+			_ = ttsClient.Control(sigCtx, tts.ActionNext)
 			requestRedraw()
 		case "tts-stop":
-			_ = ttsManager.Control(tts.ActionStop)
+			_ = ttsClient.Control(sigCtx, tts.ActionStop)
 			requestRedraw()
 		case "tts-clear":
-			_ = ttsManager.Control(tts.ActionClear)
+			_ = ttsClient.Control(sigCtx, tts.ActionClear)
 			requestRedraw()
 		case "all":
 			sec = ResourceSections{Speed: true, Hardware: true, Transcript: true, Daemons: true, TTS: true}
@@ -351,13 +354,15 @@ func RunWatchResources(ctx context.Context, d deps.Dependencies, interval time.D
 
 		var buf bytes.Buffer
 		buf.WriteString("\033[H")
-		ttsSnapshot := ttsManager.Snapshot()
+		ttsLock.RLock()
+		currentTTSSnapshot := ttsSnapshot
+		ttsLock.RUnlock()
 		PrintVoiceResourceReport(&buf, report, activeSec)
 		if activeSec.Transcript {
-			PrintUnifiedFeed(&buf, CombineFeed(report.EagerMetrics, ttsSnapshot.History), 0)
+			PrintUnifiedFeed(&buf, CombineFeed(report.EagerMetrics, currentTTSSnapshot.History), 0)
 		}
 		if activeSec.TTS {
-			PrintTTSBox(&buf, ttsSnapshot)
+			PrintTTSBox(&buf, currentTTSSnapshot)
 		}
 		buf.WriteString("\033[J")
 		_, _ = d.Stdout.Write(buf.Bytes())

@@ -75,6 +75,30 @@ func TestSayCommandReportsNoMonitor(t *testing.T) {
 	}
 }
 
+func TestSayOfflineOutputDoesNotDialDaemon(t *testing.T) {
+	home := t.TempDir()
+	outPath := filepath.Join(t.TempDir(), "speech.wav")
+	d := deps.Dependencies{
+		Getenv: func(key string) string {
+			if key == "HOME" {
+				return home
+			}
+			return t.TempDir()
+		},
+		LookPath: func(string) (string, error) { return "", os.ErrNotExist },
+		Stdin:    strings.NewReader(""), Stdout: &bytes.Buffer{},
+	}
+	cmd := NewSayCommand(d)
+	cmd.SetArgs([]string{"--no-play", "-o", outPath, "offline synthesis"})
+	err := cmd.Execute()
+	if err == nil || strings.Contains(err.Error(), "no monitor") {
+		t.Fatalf("offline synthesis error = %v; expected local engine error without socket dial", err)
+	}
+	if _, statErr := os.Stat(outPath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("output unexpectedly exists or stat failed: %v", statErr)
+	}
+}
+
 func TestSayCommandInterruptFromPrimaryRunsWlPasteAndReplaces(t *testing.T) {
 	runtimeDir := t.TempDir()
 	controller := &recordingReplaceController{}

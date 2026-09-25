@@ -35,13 +35,15 @@ func SocketPath(xdgRuntimeDir string, uid int) string {
 type Action string
 
 const (
-	ActionPlayPause Action = "play-pause"
-	ActionPause     Action = "pause"
-	ActionResume    Action = "resume"
-	ActionPrevious  Action = "previous"
-	ActionNext      Action = "next"
-	ActionStop      Action = "stop"
-	ActionClear     Action = "clear"
+	ActionPlayPause      Action = "play-pause"
+	ActionPause          Action = "pause"
+	ActionResume         Action = "resume"
+	ActionPrevious       Action = "previous"
+	ActionNext           Action = "next"
+	ActionStop           Action = "stop"
+	ActionClear          Action = "clear"
+	ActionRecordingStart Action = "recording-start"
+	ActionRecordingEnd   Action = "recording-end"
 )
 
 // QueueController is the monitor-owned queue and playback surface.
@@ -56,8 +58,9 @@ type request struct {
 }
 
 type response struct {
-	Accepted int    `json:"accepted,omitempty"`
-	Error    string `json:"error,omitempty"`
+	Accepted int       `json:"accepted,omitempty"`
+	Error    string    `json:"error,omitempty"`
+	Snapshot *Snapshot `json:"snapshot,omitempty"`
 }
 
 // Client sends bounded JSON-line requests to the active monitor.
@@ -81,6 +84,18 @@ func (c Client) Replace(ctx context.Context, text string) (int, error) {
 func (c Client) Control(ctx context.Context, action Action) error {
 	_, err := c.request(ctx, request{Command: action})
 	return err
+}
+
+// Snapshot reads queue telemetry without modifying playback.
+func (c Client) Snapshot(ctx context.Context) (Snapshot, error) {
+	res, err := c.request(ctx, request{Command: "snapshot"})
+	if err != nil {
+		return Snapshot{}, err
+	}
+	if res.Snapshot == nil {
+		return Snapshot{}, errors.New("TTS server returned no snapshot")
+	}
+	return *res.Snapshot, nil
 }
 
 func (c Client) request(ctx context.Context, req request) (response, error) {
@@ -207,6 +222,12 @@ func (s *Server) handle(conn net.Conn) {
 	}
 	res := response{}
 	switch req.Command {
+	case "snapshot":
+		if provider, ok := s.controller.(interface{ Snapshot() Snapshot }); ok {
+			res.Snapshot = ptrSnapshot(provider.Snapshot())
+		} else {
+			res.Error = "TTS telemetry unavailable"
+		}
 	case "say":
 		if strings.TrimSpace(req.Text) == "" {
 			res.Error = "text is empty"
@@ -225,7 +246,7 @@ func (s *Server) handle(conn net.Conn) {
 		} else {
 			res.Accepted = count
 		}
-	case ActionPlayPause, ActionPause, ActionResume, ActionPrevious, ActionNext, ActionStop, ActionClear:
+	case ActionPlayPause, ActionPause, ActionResume, ActionPrevious, ActionNext, ActionStop, ActionClear, ActionRecordingStart, ActionRecordingEnd:
 		if err := s.controller.Control(req.Command); err != nil {
 			res.Error = err.Error()
 		}
@@ -234,6 +255,8 @@ func (s *Server) handle(conn net.Conn) {
 	}
 	_ = json.NewEncoder(conn).Encode(res)
 }
+
+func ptrSnapshot(s Snapshot) *Snapshot { return &s }
 
 func removeStaleSocket(path string) error {
 	info, err := os.Lstat(path)
