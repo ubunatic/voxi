@@ -6,9 +6,9 @@ backend:
   # Select Piper when a model is configured, otherwise use the legacy chain.
   default_backend: auto
 piper:
-  # Empty paths let deployments choose a voice through user configuration.
-  model: ""
-  config: ""
+  # Installed by `voxi install`; user configuration can override these paths.
+  model: "~/.local/share/voxi/voices/en_US-lessac-medium.onnx"
+  config: "~/.local/share/voxi/voices/en_US-lessac-medium.onnx.json"
 playback:
   # Trim at most this much quiet audio from the end of each synthesized chunk.
   # This shortens pauses between chunks without cutting audible speech. Set to

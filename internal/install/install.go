@@ -234,7 +234,7 @@ func InstallWithOptions(ctx context.Context, out io.Writer, e Effects, options I
 		return err
 	}
 
-	if err := phase("user dependencies (crispasr, dotool, dotoold)", func() error {
+	if err := phase("user dependencies (crispasr, piper, dotool, dotoold)", func() error {
 		return installUserDependencies(ctx, e, userBin, serviceDir)
 	}); err != nil {
 		return err
@@ -452,6 +452,9 @@ func installUserDependencies(ctx context.Context, e Effects, userBin, serviceDir
 	if err := e.Run(ctx, crispBin, "--version"); err != nil {
 		return fmt.Errorf("verify crispasr: %w", err)
 	}
+	if err := installPiper(ctx, e, userBin); err != nil {
+		return err
+	}
 	if err := e.Run(ctx, "go", "install", "git.sr.ht/~geb/dotool@latest"); err != nil {
 		return fmt.Errorf("install dotool: %w", err)
 	}
@@ -473,6 +476,64 @@ func installUserDependencies(ctx context.Context, e Effects, userBin, serviceDir
 		}
 	}
 	_ = serviceDir // unit installation is kept in the following phase.
+	return nil
+}
+
+func installPiper(ctx context.Context, e Effects, userBin string) error {
+	if e.GOARCH != "amd64" && e.GOARCH != "arm64" {
+		return fmt.Errorf("unsupported architecture %q for Piper prebuilt release", e.GOARCH)
+	}
+	asset := "piper_linux_x86_64.tar.gz"
+	if e.GOARCH == "arm64" {
+		asset = "piper_linux_arm64.tar.gz"
+	}
+	piperDir := filepath.Join(e.Home, ".local", "lib", "voxi", "piper")
+	if err := e.MkdirAll(piperDir, 0755); err != nil {
+		return fmt.Errorf("create Piper directory: %w", err)
+	}
+	archive := filepath.Join(e.Home, ".cache", "voxi", asset)
+	if err := e.MkdirAll(filepath.Dir(archive), 0700); err != nil {
+		return fmt.Errorf("create download directory: %w", err)
+	}
+	url := "https://github.com/rhasspy/piper/releases/latest/download/" + asset
+	if err := downloadCrispASR(ctx, e, archive, url); err != nil {
+		return fmt.Errorf("download Piper failed: %w", err)
+	}
+	if err := e.Run(ctx, "tar", "-xzf", archive, "-C", piperDir, "--strip-components=1"); err != nil {
+		return fmt.Errorf("extract Piper: %w", err)
+	}
+	piperBin := filepath.Join(userBin, "piper")
+	if err := e.Remove(piperBin); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("replace Piper link: %w", err)
+	}
+	if err := e.Symlink(filepath.Join(piperDir, "piper"), piperBin); err != nil {
+		return fmt.Errorf("link Piper: %w", err)
+	}
+	voices := filepath.Join(e.Home, ".local", "share", "voxi", "voices")
+	if err := e.MkdirAll(voices, 0755); err != nil {
+		return fmt.Errorf("create Piper voices directory: %w", err)
+	}
+	for _, suffix := range []string{"onnx", "onnx.json"} {
+		name := "en_US-lessac-medium." + suffix
+		voiceURL := "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/" + name
+		target := filepath.Join(voices, name)
+		if err := downloadPiperVoice(ctx, e, target, voiceURL); err != nil {
+			return fmt.Errorf("download Piper voice %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
+func downloadPiperVoice(ctx context.Context, e Effects, target, url string) error {
+	if _, err := os.Stat(target); err == nil {
+		return nil
+	}
+	if err := e.Run(ctx, "curl", "-fL", "-o", target, url); err == nil {
+		return nil
+	}
+	if err := e.DownloadHTTP(ctx, url, target); err != nil {
+		return fmt.Errorf("curl and HTTP download failed: %w", err)
+	}
 	return nil
 }
 

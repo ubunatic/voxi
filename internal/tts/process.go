@@ -375,14 +375,28 @@ func (e *Engine) piperModelPath() string {
 	if e.deps.Getenv != nil && strings.TrimSpace(e.deps.Getenv("VOXI_PIPER_MODEL")) != "" {
 		return strings.TrimSpace(e.deps.Getenv("VOXI_PIPER_MODEL"))
 	}
-	return strings.TrimSpace(e.piperModel)
+	return expandPiperHome(strings.TrimSpace(e.piperModel), e.deps.Getenv)
 }
 
 func (e *Engine) piperConfigPath() string {
 	if e.deps.Getenv != nil && strings.TrimSpace(e.deps.Getenv("VOXI_PIPER_CONFIG")) != "" {
 		return strings.TrimSpace(e.deps.Getenv("VOXI_PIPER_CONFIG"))
 	}
-	return strings.TrimSpace(e.piperConfig)
+	return expandPiperHome(strings.TrimSpace(e.piperConfig), e.deps.Getenv)
+}
+
+func expandPiperHome(path string, getenv func(string) string) string {
+	if path != "~" && !strings.HasPrefix(path, "~/") {
+		return path
+	}
+	home := ""
+	if getenv != nil {
+		home = getenv("HOME")
+	}
+	if home == "" {
+		return path
+	}
+	return filepath.Join(home, strings.TrimPrefix(path, "~/"))
 }
 
 func piperModelAvailable(e *Engine, model string) bool {

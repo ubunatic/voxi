@@ -204,10 +204,10 @@ func TestInstallDefaultIsUserScopedAndIdempotent(t *testing.T) {
 	if strings.Contains(strings.Join(*commands, "\n"), "sudo") {
 		t.Fatalf("default install invoked sudo: %v", *commands)
 	}
-	if got := len(*commands); got != 16 {
+	if got := len(*commands); got != 24 {
 		t.Fatalf("commands = %d, want complete dependency/service sequence twice: %v", got, *commands)
 	}
-	if !strings.Contains((*commands)[0], "curl -fL") || !strings.Contains((*commands)[3], "go install") || !strings.Contains((*commands)[4], "daemon-reload") {
+	if !strings.Contains((*commands)[0], "crispasr-linux-x86_64") || !strings.Contains((*commands)[7], "go install") || !strings.Contains((*commands)[8], "daemon-reload") {
 		t.Fatalf("unexpected first install sequence: %v", (*commands)[:8])
 	}
 	service, err := os.ReadFile(filepath.Join(e.Home, ".config/systemd/user/voxi-agent.service"))
@@ -529,8 +529,42 @@ func TestInstallCachedArchiveSkipsDownload(t *testing.T) {
 		t.Fatal(err)
 	}
 	joined := strings.Join(*commands, "\n")
-	if strings.Contains(joined, "curl -fL") {
-		t.Fatalf("expected curl to be skipped when archive is cached, got commands: %s", joined)
+	if strings.Contains(joined, "curl -fL -o "+archivePath) {
+		t.Fatalf("expected CrispASR curl to be skipped when archive is cached, got commands: %s", joined)
+	}
+}
+
+func TestInstallPiperUsesVendoredBinaryAndDefaultVoice(t *testing.T) {
+	e, commands := testEffects(t)
+	var links [][2]string
+	e.Symlink = func(oldname, newname string) error {
+		links = append(links, [2]string{oldname, newname})
+		return nil
+	}
+	if err := installPiper(context.Background(), *e, filepath.Join(e.Home, ".local", "bin")); err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(*commands, "\n")
+	for _, expected := range []string{
+		"piper_linux_x86_64.tar.gz",
+		"https://github.com/rhasspy/piper/releases/latest/download/piper_linux_x86_64.tar.gz",
+		"en_US-lessac-medium.onnx",
+		"en_US-lessac-medium.onnx.json",
+	} {
+		if !strings.Contains(joined, expected) {
+			t.Errorf("commands missing %q: %s", expected, joined)
+		}
+	}
+	wantLink := filepath.Join(e.Home, ".local", "lib", "voxi", "piper", "piper")
+	wantTarget := filepath.Join(e.Home, ".local", "bin", "piper")
+	found := false
+	for _, link := range links {
+		if link == [2]string{wantLink, wantTarget} {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("missing Piper symlink %q -> %q; links = %v", wantLink, wantTarget, links)
 	}
 }
 

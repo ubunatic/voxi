@@ -17,8 +17,8 @@ func TestLoadTTSBackendDefaults(t *testing.T) {
 	if s.Backend.DefaultBackend != "auto" {
 		t.Errorf("default backend = %q, want auto", s.Backend.DefaultBackend)
 	}
-	if s.Piper.Model != "" || s.Piper.Config != "" {
-		t.Errorf("Piper defaults = %#v, want empty model/config", s.Piper)
+	if s.Piper.Model != "~/.local/share/voxi/voices/en_US-lessac-medium.onnx" || s.Piper.Config != "~/.local/share/voxi/voices/en_US-lessac-medium.onnx.json" {
+		t.Errorf("Piper defaults = %#v, want installed Lessac medium voice paths", s.Piper)
 	}
 }
 

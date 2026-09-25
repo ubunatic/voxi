@@ -156,8 +156,8 @@ func TestSynthesizeExplicitPiperFailsWhenExecutableOrModelMissing(t *testing.T) 
 			return "", os.ErrNotExist
 		},
 	}, "/usr/bin/voxi")
-	if _, _, err := engine.Synthesize(ctx, "hello"); err == nil || !strings.Contains(err.Error(), "VOXI_PIPER_MODEL is unset") {
-		t.Fatalf("expected unset model error, got: %v", err)
+	if _, _, err := engine.Synthesize(ctx, "hello"); err == nil || !strings.Contains(err.Error(), "model file") {
+		t.Fatalf("expected default model missing error, got: %v", err)
 	}
 
 	// Case 2: Piper missing
