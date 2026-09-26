@@ -491,7 +491,15 @@ func (m *Manager) applyCommand(
 	cleanupPrefetch func(),
 ) commandResult {
 	switch c.action {
-	case ActionRecordingStart, ActionRecordingEnd:
+	case ActionRecordingStart:
+		*items = nil
+		*cursor = 0
+		*current = ""
+		*paused = false
+		*firstQueuedAt = time.Time{}
+		*firstAudio = 0
+		return commandResult{}
+	case ActionRecordingEnd:
 		return commandResult{}
 	case "say":
 		newChunks := SplitText(c.text)

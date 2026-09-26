@@ -109,31 +109,44 @@ func TestManagerRejectsOversizedText(t *testing.T) {
 	}
 }
 
-func TestRecordingEpochHoldsQueuedPlaybackUntilEnd(t *testing.T) {
+func TestRecordingEpochPermanentlyDiscardsQueuedPlayback(t *testing.T) {
 	backend := &fakeBackend{started: make(chan string, 4), players: make(chan *fakePlayback, 4)}
 	manager := NewManager(context.Background(), backend)
 	defer manager.Close()
+	if _, err := manager.Enqueue("current chunk. queued chunk."); err != nil {
+		t.Fatal(err)
+	}
+	player := waitForPlayer(t, backend)
+	waitFor(t, func() bool {
+		snapshot := manager.Snapshot()
+		return snapshot.Current == "current chunk." && len(snapshot.Queue) == 1
+	})
+	for _, want := range []string{"current chunk.", "queued chunk."} {
+		select {
+		case got := <-backend.started:
+			if got != want {
+				t.Fatalf("pre-recording synthesis = %q, want %q", got, want)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("%q was not synthesized before recording", want)
+		}
+	}
 	if err := manager.Control(ActionRecordingStart); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := manager.Enqueue("muted while recording"); err != nil {
-		t.Fatal(err)
+	if !player.stopped() {
+		t.Fatal("recording start did not stop current playback")
 	}
-	select {
-	case got := <-backend.started:
-		t.Fatalf("synthesized during recording epoch: %q", got)
-	case <-time.After(80 * time.Millisecond):
+	if snapshot := manager.Snapshot(); snapshot.Current != "" || len(snapshot.Queue) != 0 {
+		t.Fatalf("snapshot after recording start = %+v, want empty playback queue", snapshot)
 	}
 	if err := manager.Control(ActionRecordingEnd); err != nil {
 		t.Fatal(err)
 	}
 	select {
 	case got := <-backend.started:
-		if got != "muted while recording" {
-			t.Fatalf("synthesized %q", got)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("queued speech did not resume after recording ended")
+		t.Fatalf("synthesized discarded speech after recording ended: %q", got)
+	case <-time.After(80 * time.Millisecond):
 	}
 }
 
