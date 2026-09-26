@@ -45,8 +45,44 @@ managing PyTorch ourselves.
 
 Sources inspected: [TalkWithMe README and source](https://github.com/scorbo2/TalkWithMe), its
 [requirements](https://github.com/scorbo2/TalkWithMe/blob/master/requirements.txt) and
-[MIT license](https://github.com/scorbo2/TalkWithMe/blob/master/LICENSE), plus
-[tts-serve LuxTTS setup/runtime notes](https://github.com/scorbo2/tts-serve/blob/master/impl/server_luxTTS.md).
+[MIT license](https://github.com/scorbo2/TalkWithMe/blob/master/LICENSE).
+
+### tts-serve (README, common API, implementations, and license)
+
+- `tts-serve` is a wrapper framework, not a TTS model: it launches a local FastAPI server around one
+  selected engine and presents a common REST interface. Routes include `GET /health`,
+  `GET /capabilities` (engine-specific request schema and supported settings), `GET /docs`, and
+  `POST /synthesize`. The POST takes JSON including `text` and, for cloning engines,
+  `audio_base64` with the reference WAV; `reference_text`, `language`, `seed`, and engine-specific
+  parameters vary by engine. It returns the synthesized PCM16 WAV as `audio_base64`, with sample rate
+  and timing metadata. Calls are request/response (not a streaming audio protocol); clients can
+  submit sentence-sized requests when incremental playback is desired.
+- The current README lists Chatterbox, OmniVoice, Qwen3-TTS, Qwen3-TTS (MLX), Faster Qwen3-TTS,
+  dots.tts, Index-TTS, LuxTTS, and VoxCPM. Many support reference-audio cloning from one sample;
+  transcript requirements differ: e.g. Chatterbox and IndexTTS condition on audio alone, LuxTTS
+  transcribes it internally, and Qwen3-TTS can use speaker-embedding-only mode when transcript is
+  omitted. Consult each server's live `/capabilities` and engine notes rather than assuming a
+  uniform cloning contract.
+- Runtime is local and each server loads its model at startup. Model weights normally download on
+  first use from Hugging Face, with engine-specific options for offline/local paths. The wrapper's
+  shared `tts-engine-common` package uses FastAPI/Pydantic and has no torch dependency, but the
+  engines must each have isolated Python environments because their ML dependency trees conflict.
+  Most listed engine scripts import PyTorch. Qwen3-TTS (MLX) is the Apple Silicon MLX variant; LuxTTS
+  has an ONNX-based CPU path but its server still imports PyTorch. So this reduces client coupling,
+  but does not eliminate PyTorch setup for the likely Linux/GPU or LuxTTS service. LuxTTS setup in
+  particular involves a Git checkout, a Git-only `linacodec` dependency and `zipvoice`; different
+  engines have their own setup burden.
+- The `tts-serve` repository is MIT licensed (copyright 2026 Steve Corbett). The license of each
+  wrapped engine and model is separate and should be checked independently.
+- A Go voxi client can call it directly using `net/http` and JSON: GET `/capabilities`, POST text and
+  base64 reference audio to `/synthesize`, then decode the base64 WAV and send it through voxi's
+  audio playback path. There is no Python dependency in the Go client. A configurable localhost
+  endpoint is sufficient; voxi would still need an installed/running Python engine service.
+
+Sources: [tts-serve README/API/engine list](https://github.com/scorbo2/tts-serve),
+[common API and capabilities](https://github.com/scorbo2/tts-serve/tree/master/tts-engine-common),
+[engine implementation notes](https://github.com/scorbo2/tts-serve/tree/master/impl), and
+[MIT license](https://github.com/scorbo2/tts-serve/blob/master/LICENSE).
 
 ### Linked video
 
@@ -59,16 +95,21 @@ Sources inspected: [TalkWithMe README and source](https://github.com/scorbo2/Tal
 
 ### Recommendation
 
-**Keep as an architectural reference; skip TalkWithMe as a direct voxi dependency or as a fix for
-issue 154.** Its useful ideas are a thin client talking to independently replaceable local speech
-services, reference-audio persona configuration, and CPU/VRAM-aware operation. LuxTTS is worth a
-separate canary if a PyTorch-backed engine is acceptable: it can clone from one WAV and its CPU
-path is ONNX-based. It does not meet the preference to avoid managing PyTorch, and no evidence in
-these sources establishes that it avoids the longer-text word drops seen with Pocket TTS. Keep
-investigating an ONNX-native runtime / packaged service for voxi; do not port the chat application.
+**Keep tts-serve as a strong integration candidate; skip TalkWithMe as a direct voxi dependency and
+do not treat either project as a demonstrated fix for issue 154.** The common local HTTP API is easy
+for Go to call, lets voxi swap speech engines without binding itself to their Python APIs, and
+supports reference-WAV voice cloning across several engines. A separately installed service
+isolates its Python/PyTorch conflicts from voxi itself. However, the server setup still requires
+Python and usually PyTorch, which misses the preference to avoid managing PyTorch; LuxTTS's ONNX CPU
+path does not remove its server's torch dependency. If a local Python service is acceptable, keep
+tts-serve and canary LuxTTS or another reference-audio engine against the long-text corpus, including
+word retention, before choosing it. The docs specify request/response rather than streaming, so
+voxi would need sentence chunking/queueing for eager playback. If Python/PyTorch-free deployment is
+a hard requirement, skip tts-serve for production and continue investigating ONNX-native embedding
+or packaging a service behind a similar local protocol.
 
 ## 3. Implementation & Verification Plan
-Research completed: TalkWithMe, relevant engines and local runtime, PyTorch burden, licensing, and
-video metadata are summarized in section 2. The transcript fetch was rate-limited (HTTP 429), so
-only the video title and description were reviewed. No implementation or code verification is part
-of this research ticket.
+Research completed: TalkWithMe and tts-serve findings, local runtime and dependencies, licensing,
+Go integration fit, and video metadata are summarized in section 2. The transcript fetch was
+rate-limited (HTTP 429), so only the video title and description were reviewed. No implementation
+or code verification is part of this research ticket.
