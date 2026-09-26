@@ -133,6 +133,7 @@ instead of `ls issues/`, `find`, or raw grep:
 - Wait: `harnez agent wait <session>` (session is positional).
 - Resume: `harnez agent resume --name <session> <prompt>`.
 - Stop: `harnez agent stop --name <session>`.
+- When a `/goal` without an exit clause is set (e.g. typed by the user), say so in the first reply and offer `/goal ... or stop and report when blocked on a user decision or denied permission`; once blocked on the user, suggest `/goal clear` instead of repeating the wait message.
 
 ### Code and Documentation Search
 - Before broad shell searches, use `harnez find code|docs` or MCP `harnez_find`; see `@docs/Search.md`.
