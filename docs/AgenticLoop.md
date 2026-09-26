@@ -10,6 +10,8 @@ Tagline-only variant. Same rules as the full doc, no prose/case-studies. See
 `AgenticLoop.md` (`harnez docs variant <name> full`) for rationale and examples.
 
 ## 1. Core Invariants
+For TUI layout work, use a checked-in `.ansi` mockup under `docs/data/` as the visual spec; have the host draft it and dispatch implementation against it. See `TUIDesign.md` for details.
+
 1. **Parallel Read, Sequential Write** — many may read/grep at once; one writer per workspace at a time. **Sequential dispatch is the default for every task type, not just file-overlapping code edits.** Includes read-then-write races on shared sequential resources (e.g. ticket numbers).
 2. **Canary & Test-Driven Verification** — verify with real test runs before declaring done; never assume an edit works.
 3. **Zero Zombie Guarantee** — track and terminate every background process, timer, and subagent before ending a session.

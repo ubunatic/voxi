@@ -59,6 +59,8 @@ Docs in `./docs/` are managed by harnez. <!-- harnez:bundled -->
   PascalCase for evergreens, kebab-case for ephemeral docs; ASCII art in chat, Mermaid only in docs/
 - Spec system @docs/Spec.md,
   YAML spec files as single source of truth; Go code must not duplicate spec values
+- Search Practices @docs/Search.md,
+  harnez find code/docs, finder configuration, partial results, and rg fallback
 <!-- harnez:end Language Conventions -->
 
 ## Workspace (uman)
@@ -115,13 +117,25 @@ instead of `ls issues/`, `find`, or raw grep:
 - `harnez find -d <repo> issues "<query>"` — fuzzy search across titles and body text (use `-I` for visual overview)
 - `harnez issues show -d <repo> <n> -I` — render single issue as styled visual PNG card (inspect via `view_file`)
 - `harnez find -d <repo> issues next` — report the next free ticket number (read-only)
-- `harnez issues new -d <repo> "<title>"` — atomically reserve that number and create
-  a placeholder ticket file; write the ticket to the printed path
+- `harnez issues new -d <repo> "<title>"` — run this right away; it reserves the number and creates the ticket skeleton.
+- Open the printed file and fill it in, keeping its schema; do not search for a template first.
+- Run `harnez index -d <repo>` and commit the ticket and index.
 - `harnez issues <verb> -d <repo> <n> [reason]` — change a ticket's status, resync
   `issues/README.md`, and commit, in one call
-- `harnez index -d <repo>` — update `issues/README.md` after filing or updating tickets
 - Commit documentation and `issues/*.md` changes immediately; don't batch them behind
   pending code work.
+
+### Harnez Agent
+- Prefer loaded `mcp__harnez__*` tools for lifecycle actions; otherwise use `harnez agent` via Bash (see the local Subagent Policy).
+- Start: `harnez agent start --detach --name <name> --role <role> --model <model> -p <prompt>`.
+- List: `harnez agent list`.
+- Status: `harnez agent status --name <session>`.
+- Wait: `harnez agent wait <session>` (session is positional).
+- Resume: `harnez agent resume --name <session> <prompt>`.
+- Stop: `harnez agent stop --name <session>`.
+
+### Code and Documentation Search
+- Before broad shell searches, use `harnez find code|docs` or MCP `harnez_find`; see `@docs/Search.md`.
 
 ### Agentic Loop Invariants
 Where `@docs/AgenticLoop.md` is present in this project, follow it rather than
