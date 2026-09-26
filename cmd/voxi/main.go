@@ -30,6 +30,7 @@ import (
 	"ubunatic.com/voxi/internal/shortcut"
 	"ubunatic.com/voxi/internal/telemetry"
 	"ubunatic.com/voxi/internal/tts"
+	ttsclone "ubunatic.com/voxi/internal/tts/clone"
 	"ubunatic.com/voxi/internal/typing"
 	"ubunatic.com/voxi/spec"
 )
@@ -380,7 +381,7 @@ func main() {
 		panic(fmt.Sprintf("load embedded model specification: %v", err))
 	}
 	configCmd.AddCommand(feedback.NewConfigImportCommand(d.Stdout, d.Getenv("HOME"), modelSpec.SpeechContext.MaxTermChars))
-	root.AddCommand(modeCmd, recordCmd, eagerCmd, monitorCmd, historyCmd, configCmd, daemonCmd, benchCmd, settings.NewCommand(d, modelSpec.Names()), shortcut.NewCommand(d), telemetry.NewCommand(d.Stdout, d.Getenv), feedback.NewCommand(d.Stdout, d.Getenv("HOME"), modelSpec.BuiltinStopWords(modelSpec.DefaultModel), modelSpec.SpeechContext.MaxTermChars, modelSpec.SpeechContext.Terms, d, eager.TranscribeCohereWAV), agent.NewCommand(d), chunks.NewCommand(d, nil), tts.NewSayCommand(d), tts.NewSupervisorCommand())
+	root.AddCommand(modeCmd, recordCmd, eagerCmd, monitorCmd, historyCmd, configCmd, daemonCmd, benchCmd, settings.NewCommand(d, modelSpec.Names()), shortcut.NewCommand(d), telemetry.NewCommand(d.Stdout, d.Getenv), feedback.NewCommand(d.Stdout, d.Getenv("HOME"), modelSpec.BuiltinStopWords(modelSpec.DefaultModel), modelSpec.SpeechContext.MaxTermChars, modelSpec.SpeechContext.Terms, d, eager.TranscribeCohereWAV), agent.NewCommand(d), chunks.NewCommand(d, nil), tts.NewSayCommand(d), ttsclone.NewCommand(d), tts.NewSupervisorCommand())
 	installEffects := install.DefaultEffects()
 	installEffects.Home = d.Getenv("HOME")
 	installEffects.Executable = os.Executable
