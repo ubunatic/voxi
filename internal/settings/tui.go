@@ -99,7 +99,7 @@ func RunInteractive(ctx context.Context, d deps.Dependencies, home string, asrMo
 			var restartErr error
 			if restart {
 				outcome = RestartRequested
-				restartErr = restartAgent(ctx, d)
+				restartErr = restartServices(ctx, d, home, updated)
 				if restartErr != nil {
 					outcome = RestartFailed
 				}

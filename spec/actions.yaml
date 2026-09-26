@@ -21,7 +21,7 @@ actions:
   hardware:
     title: "hardware load"
     short: "hardware"
-    keys: ["h", "H", "2", "c", "C", "g", "G"]
+    keys: ["h", "H", "2", "g", "G"]
     category: "monitor"
     default: false
   transcript:
@@ -36,6 +36,11 @@ actions:
     keys: ["d", "D", "4", "p", "P"]
     category: "monitor"
     default: true
+  compact:
+    title: "compact two-box view"
+    short: "compact"
+    keys: ["c", "C"]
+    category: "system"
   all:
     title: "show all sections"
     short: "all"

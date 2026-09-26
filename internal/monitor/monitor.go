@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"ubunatic.com/voxi/audiolevel"
+	"ubunatic.com/voxi/internal/chunks"
 	"ubunatic.com/voxi/internal/deps"
 	"ubunatic.com/voxi/internal/tts"
 	"ubunatic.com/voxi/spec"
@@ -74,6 +75,7 @@ type ResourceSections struct {
 	Transcript bool
 	Daemons    bool
 	TTS        bool
+	Compact    bool
 }
 
 // DefaultResourceSections returns panel visibility from spec/actions.yaml.
@@ -100,7 +102,7 @@ func ParseSections(s string) ResourceSections {
 		switch p {
 		case "s", "speed", "status", "voice", "v", "1":
 			sec.Speed = true
-		case "h", "hardware", "cpu", "gpu", "hw", "c", "g", "2":
+		case "h", "hardware", "cpu", "gpu", "hw", "g", "2":
 			sec.Hardware = true
 		case "t", "transcript", "sentences", "feed", "3":
 			sec.Transcript = true
@@ -108,9 +110,11 @@ func ParseSections(s string) ResourceSections {
 			sec.TTS = true
 		case "d", "daemons", "procs", "health", "p", "4":
 			sec.Daemons = true
+		case "c", "compact", "2box", "two-box":
+			sec.Compact = true
 		}
 	}
-	if !sec.Speed && !sec.Hardware && !sec.Transcript && !sec.Daemons && !sec.TTS {
+	if !sec.Speed && !sec.Hardware && !sec.Transcript && !sec.Daemons && !sec.TTS && !sec.Compact {
 		return DefaultResourceSections()
 	}
 	return sec
@@ -236,6 +240,9 @@ func RunWatchResources(ctx context.Context, d deps.Dependencies, interval time.D
 		case "all":
 			sec = ResourceSections{Speed: true, Hardware: true, Transcript: true, Daemons: true, TTS: true}
 			requestRedraw()
+		case "compact":
+			sec.Compact = !sec.Compact
+			requestRedraw()
 		case "quit":
 			secLock.Unlock()
 			stop()
@@ -357,12 +364,18 @@ func RunWatchResources(ctx context.Context, d deps.Dependencies, interval time.D
 		ttsLock.RLock()
 		currentTTSSnapshot := ttsSnapshot
 		ttsLock.RUnlock()
-		PrintVoiceResourceReport(&buf, report, activeSec)
-		if activeSec.Transcript {
-			PrintUnifiedFeed(&buf, CombineFeed(report.EagerMetrics, currentTTSSnapshot.History), 0)
-		}
-		if activeSec.TTS {
-			PrintTTSBox(&buf, currentTTSSnapshot)
+		chunkBuf := chunks.DefaultBuffer()
+		if activeSec.Compact {
+			recentChunks, _ := chunkBuf.List(false)
+			PrintCompactTwoBox(&buf, report, recentChunks, currentTTSSnapshot, 0)
+		} else {
+			PrintVoiceResourceReport(&buf, report, activeSec)
+			if activeSec.Transcript {
+				PrintUnifiedFeed(&buf, CombineFeed(report.EagerMetrics, currentTTSSnapshot.History), 0)
+			}
+			if activeSec.TTS {
+				PrintTTSBox(&buf, currentTTSSnapshot)
+			}
 		}
 		buf.WriteString("\033[J")
 		_, _ = d.Stdout.Write(buf.Bytes())

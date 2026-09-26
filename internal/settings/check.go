@@ -14,6 +14,8 @@ import (
 	"ubunatic.com/voxi/internal/config"
 	"ubunatic.com/voxi/internal/deps"
 	"ubunatic.com/voxi/internal/history"
+	"ubunatic.com/voxi/internal/install"
+	"ubunatic.com/voxi/spec"
 )
 
 // CheckStatus represents the diagnostic outcome of a test probe.
@@ -52,7 +54,7 @@ func RunDiagnostics(ctx context.Context, d deps.Dependencies, home string, s *co
 	report := &DiagnosticReport{}
 
 	// 1. ASR Transcription Engine
-	asrItem := checkASREngine(d, s.ASRModel)
+	asrItem := checkASREngine(ctx, d, home, s)
 	report.addItem(asrItem)
 
 	// 2. LLM Cleanup Service
@@ -92,58 +94,154 @@ func (r *DiagnosticReport) addItem(item DiagnosticItem) {
 	}
 }
 
-func checkASREngine(d deps.Dependencies, model string) DiagnosticItem {
+func checkASREngine(ctx context.Context, d deps.Dependencies, home string, s *config.UserSettings) DiagnosticItem {
 	item := DiagnosticItem{Name: "ASR Engine"}
-	if model == "" {
-		model = "cohere-transcribe-03-2026"
+	modelName := s.ASRModel
+	models, err := spec.LoadModels()
+	if err != nil {
+		item.Status = StatusFail
+		item.Summary = fmt.Sprintf("failed to load model spec: %v", err)
+		return item
+	}
+	if modelName == "" {
+		modelName = models.DefaultModel
 	}
 
-	if strings.HasPrefix(model, "cohere") {
+	modelInfo, ok := models.Models[modelName]
+	if !ok {
+		item.Status = StatusFail
+		item.Summary = fmt.Sprintf("unknown ASR model %q in configuration", modelName)
+		return item
+	}
+
+	switch modelInfo.Engine {
+	case "cohere-transcribe":
 		path, err := d.LookPath("crispasr")
 		if err != nil {
 			item.Status = StatusFail
-			item.Summary = fmt.Sprintf("crispasr binary not found (required for %s)", model)
+			item.Summary = fmt.Sprintf("crispasr binary not found (required for %s)", modelName)
 			item.Detail = "Install crispasr in ~/.local/bin or on $PATH"
 			return item
 		}
 		item.Status = StatusPass
-		item.Summary = fmt.Sprintf("%s (crispasr at %s)", model, path)
+		item.Summary = fmt.Sprintf("%s (crispasr at %s)", modelName, path)
 		return item
-	}
 
-	// Whisper models via voxtype
-	path, err := d.LookPath("voxtype")
-	if err != nil {
-		item.Status = StatusFail
-		item.Summary = fmt.Sprintf("voxtype binary not found (required for %s)", model)
-		item.Detail = "Install voxtype on $PATH"
-		return item
-	}
+	case "openai-transcribe":
+		baseURL := modelInfo.BaseURL
+		if baseURL == "" {
+			baseURL = s.OpenAIASRBaseURL
+		}
+		if baseURL == "" {
+			baseURL = "http://127.0.0.1:8090/v1"
+		}
 
-	if model == "large-v3-turbo" {
-		// Check for GPU render node
-		hasGPU := false
-		if entries, err := os.ReadDir("/dev/dri"); err == nil {
-			for _, e := range entries {
-				if strings.HasPrefix(e.Name(), "renderD") {
-					hasGPU = true
-					break
+		// If this is R2T2
+		if install.IsR2T2Active(modelName, models) {
+			// Check llama-server binary
+			serverPath := s.LlamaServerPath
+			if serverPath == "" {
+				serverPath = "llama-server"
+			}
+			resolvedPath, err := d.LookPath(serverPath)
+			if err != nil {
+				item.Status = StatusFail
+				item.Summary = fmt.Sprintf("llama-server binary not found for %s", modelName)
+				item.Detail = "Configure llama_server_path in ~/.config/voxi/config.yaml or add llama-server to PATH"
+				return item
+			}
+
+			// Check model files
+			modelsDir := filepath.Join(home, ".cache", "voxi", "models")
+			for _, mf := range []string{"Confucius4-R2T2-Q4_K_M.gguf", "mmproj-Confucius4-R2T2-Q8_0.gguf"} {
+				if _, err := os.Stat(filepath.Join(modelsDir, mf)); err != nil {
+					item.Status = StatusFail
+					item.Summary = fmt.Sprintf("R2T2 model file missing: %s", mf)
+					item.Detail = fmt.Sprintf("Place %s in %s", mf, modelsDir)
+					return item
 				}
 			}
-		}
-		if !hasGPU {
+
+			// Probe endpoint
+			healthURL := "http://127.0.0.1:18131/health"
+			client := &http.Client{Timeout: 800 * time.Millisecond}
+			req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
+			if reqErr == nil {
+				resp, respErr := client.Do(req)
+				if respErr == nil {
+					resp.Body.Close()
+					if resp.StatusCode == http.StatusOK {
+						item.Status = StatusPass
+						item.Summary = fmt.Sprintf("%s via llama-server (%s, endpoint %s online)", modelName, resolvedPath, baseURL)
+						return item
+					}
+				}
+			}
+
 			item.Status = StatusWarn
-			item.Summary = fmt.Sprintf("%s requires GPU render node (/dev/dri/renderD*); cpu fallback will be used", model)
+			item.Summary = fmt.Sprintf("%s backend offline @ %s (voxi-r2t2.service not responding)", modelName, baseURL)
+			item.Detail = "Run: systemctl --user start voxi-r2t2.service"
 			return item
 		}
+
+		// Generic openai-transcribe endpoint check
+		probeURL := strings.TrimRight(baseURL, "/") + "/models"
+		client := &http.Client{Timeout: 800 * time.Millisecond}
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, probeURL, nil)
+		if reqErr == nil {
+			resp, respErr := client.Do(req)
+			if respErr == nil {
+				resp.Body.Close()
+				item.Status = StatusPass
+				item.Summary = fmt.Sprintf("%s via OpenAI API (%s, online)", modelName, baseURL)
+				return item
+			}
+		}
+
+		item.Status = StatusWarn
+		item.Summary = fmt.Sprintf("%s endpoint unreachable @ %s", modelName, baseURL)
+		item.Detail = "Ensure the OpenAI-compatible transcription server is running"
+		return item
+
+	case "whisper":
+		path, err := d.LookPath("voxtype")
+		if err != nil {
+			item.Status = StatusFail
+			item.Summary = fmt.Sprintf("voxtype binary not found (required for %s)", modelName)
+			item.Detail = "Install voxtype on $PATH"
+			return item
+		}
+
+		if modelName == "large-v3-turbo" {
+			// Check for GPU render node
+			hasGPU := false
+			if entries, err := os.ReadDir("/dev/dri"); err == nil {
+				for _, e := range entries {
+					if strings.HasPrefix(e.Name(), "renderD") {
+						hasGPU = true
+						break
+					}
+				}
+			}
+			if !hasGPU {
+				item.Status = StatusWarn
+				item.Summary = fmt.Sprintf("%s requires GPU render node (/dev/dri/renderD*); cpu fallback will be used", modelName)
+				return item
+			}
+			item.Status = StatusPass
+			item.Summary = fmt.Sprintf("%s via voxtype (%s, GPU render node detected)", modelName, path)
+			return item
+		}
+
 		item.Status = StatusPass
-		item.Summary = fmt.Sprintf("%s via voxtype (%s, GPU render node detected)", model, path)
+		item.Summary = fmt.Sprintf("%s via voxtype (%s)", modelName, path)
+		return item
+
+	default:
+		item.Status = StatusFail
+		item.Summary = fmt.Sprintf("unsupported ASR engine %q for model %s", modelInfo.Engine, modelName)
 		return item
 	}
-
-	item.Status = StatusPass
-	item.Summary = fmt.Sprintf("%s via voxtype (%s)", model, path)
-	return item
 }
 
 func checkLLMCleaner(ctx context.Context, s *config.UserSettings) DiagnosticItem {

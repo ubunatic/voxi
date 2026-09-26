@@ -391,10 +391,10 @@ func TestInstallDoesNotStartR2T2ForDifferentLoopbackPort(t *testing.T) {
 }
 
 func TestSameLoopbackEndpointRejectsDifferentPort(t *testing.T) {
-	if sameLoopbackEndpoint("http://127.0.0.1:8090/v1", "http://127.0.0.1:18131/v1") {
+	if SameLoopbackEndpoint("http://127.0.0.1:8090/v1", "http://127.0.0.1:18131/v1") {
 		t.Fatal("different loopback port matched the R2T2 endpoint")
 	}
-	if !sameLoopbackEndpoint("http://127.0.0.1:18131/v1", "http://127.0.0.1:18131/v1") {
+	if !SameLoopbackEndpoint("http://127.0.0.1:18131/v1", "http://127.0.0.1:18131/v1") {
 		t.Fatal("identical R2T2 endpoint did not match")
 	}
 }

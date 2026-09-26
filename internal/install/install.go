@@ -165,12 +165,11 @@ func InstallWithOptions(ctx context.Context, out io.Writer, e Effects, options I
 	if !modelExists {
 		return fmt.Errorf("install: model spec is missing r2t2-confucius4")
 	}
-	selectedModel, selectedExists := models.Models[settings.ASRModel]
-	r2t2Port, validR2T2URL := loopbackEndpointPort(r2t2Model.BaseURL)
+	r2t2Port, validR2T2URL := LoopbackEndpointPort(r2t2Model.BaseURL)
 	if !validR2T2URL {
 		return fmt.Errorf("install: r2t2-confucius4 base_url %q must use http://127.0.0.1:<port>", r2t2Model.BaseURL)
 	}
-	r2t2Active := selectedExists && selectedModel.Engine == "openai-transcribe" && sameLoopbackEndpoint(selectedModel.BaseURL, r2t2Model.BaseURL)
+	r2t2Active := IsR2T2Active(settings.ASRModel, models)
 	if r2t2Active {
 		for _, name := range []string{"Confucius4-R2T2-Q4_K_M.gguf", "mmproj-Confucius4-R2T2-Q8_0.gguf"} {
 			path := filepath.Join(e.Home, ".cache", "voxi", "models", name)
@@ -356,7 +355,8 @@ func InstallWithOptions(ctx context.Context, out io.Writer, e Effects, options I
 	})
 }
 
-func loopbackEndpointPort(rawURL string) (string, bool) {
+// LoopbackEndpointPort parses rawURL and returns the port number if rawURL is an http://127.0.0.1:<port> URL.
+func LoopbackEndpointPort(rawURL string) (string, bool) {
 	u, err := url.Parse(rawURL)
 	if err != nil || u.Scheme != "http" || u.Hostname() != "127.0.0.1" || u.Port() == "" {
 		return "", false
@@ -368,8 +368,9 @@ func loopbackEndpointPort(rawURL string) (string, bool) {
 	return strconv.Itoa(port), true
 }
 
-func sameLoopbackEndpoint(candidate, target string) bool {
-	if _, ok := loopbackEndpointPort(target); !ok {
+// SameLoopbackEndpoint returns true if candidate points to the same loopback host and port as target.
+func SameLoopbackEndpoint(candidate, target string) bool {
+	if _, ok := LoopbackEndpointPort(target); !ok {
 		return false
 	}
 	targetURL, err := url.Parse(target)
@@ -381,6 +382,19 @@ func sameLoopbackEndpoint(candidate, target string) bool {
 		return false
 	}
 	return candidateURL.Hostname() == targetURL.Hostname() && candidateURL.Port() == targetURL.Port()
+}
+
+// IsR2T2Active returns true if selectedModelName uses the local R2T2 backend endpoint.
+func IsR2T2Active(selectedModelName string, models *spec.ModelSpec) bool {
+	if models == nil {
+		return false
+	}
+	r2t2Model, modelExists := models.Models["r2t2-confucius4"]
+	if !modelExists {
+		return false
+	}
+	selectedModel, selectedExists := models.Models[selectedModelName]
+	return selectedExists && selectedModel.Engine == "openai-transcribe" && SameLoopbackEndpoint(selectedModel.BaseURL, r2t2Model.BaseURL)
 }
 
 func resolveLlamaServerPath(e Effects, configured string) (string, error) {

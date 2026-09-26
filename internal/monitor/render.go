@@ -12,7 +12,9 @@ import (
 	"golang.org/x/term"
 
 	"ubunatic.com/voxi/internal/asr"
+	"ubunatic.com/voxi/internal/chunks"
 	"ubunatic.com/voxi/internal/eager"
+	"ubunatic.com/voxi/internal/listing"
 	"ubunatic.com/voxi/internal/tts"
 )
 
@@ -324,17 +326,29 @@ func getTerminalWidth() int {
 
 // BoxSpec defines a rendered bordered panel.
 type BoxSpec struct {
-	Title string
-	Lines []string
-	Width int
+	Title  string
+	Lines  []string
+	Width  int
+	Square bool
 }
 
-// RenderBoxLines renders a bordered box with rounded corners.
+// RenderBoxLines renders a bordered box with rounded or square corners.
 func RenderBoxLines(b BoxSpec) []string {
 	var res []string
 
+	topLeft := "╭─ "
+	topRight := "╮"
+	botLeft := "╰"
+	botRight := "╯"
+	if b.Square {
+		topLeft = "┌─ "
+		topRight = "┐"
+		botLeft = "└"
+		botRight = "┘"
+	}
+
 	var top strings.Builder
-	top.WriteString("╭─ ")
+	top.WriteString(topLeft)
 	top.WriteString(b.Title)
 	top.WriteString(" ")
 	visTitleLen := StringDisplayWidth(b.Title) + 4
@@ -343,7 +357,7 @@ func RenderBoxLines(b BoxSpec) []string {
 		rem = 1
 	}
 	top.WriteString(strings.Repeat("─", rem))
-	top.WriteString("╮")
+	top.WriteString(topRight)
 	res = append(res, top.String())
 
 	maxContentWidth := b.Width - 4
@@ -370,9 +384,9 @@ func RenderBoxLines(b BoxSpec) []string {
 	}
 
 	var bot strings.Builder
-	bot.WriteString("╰")
+	bot.WriteString(botLeft)
 	bot.WriteString(strings.Repeat("─", b.Width-2))
-	bot.WriteString("╯")
+	bot.WriteString(botRight)
 	res = append(res, bot.String())
 
 	return res
@@ -711,3 +725,232 @@ func formatRecordState(status string, micLevel float64, micAvailable bool) strin
 		return status
 	}
 }
+
+// PrintCompactTwoBox writes the high-density two-box compact monitor layout matching design 008.
+func PrintCompactTwoBox(w io.Writer, r VoiceResourceReport, recentChunks []chunks.Chunk, ttsSnapshot tts.Snapshot, width int) {
+	if width <= 0 {
+		width = currentTerminalWidth()
+	}
+	if width > 110 {
+		width = 110
+	}
+	if width < 76 {
+		width = 76
+	}
+
+	colWidthLeft := (width - 1) / 2
+	colWidthRight := width - 1 - colWidthLeft
+
+	// Header line
+	engineName := r.ActiveModel
+	if engineName == "" {
+		engineName = "default"
+	}
+	socketStr := "127.0.0.1:18131"
+	if r.ASRBackend.Applicable && r.ASRBackend.Online {
+		socketStr = r.ASRBackend.Endpoint
+	}
+	timeStr := time.Now().Format("15:04:05 MST")
+	fmt.Fprintf(w, " \x1b[1mVoxi Monitor\x1b[0m  \x1b[2m%s\x1b[0m   \x1b[2mengine:\x1b[0m \x1b[36m%s\x1b[0m   \x1b[2msocket:\x1b[0m \x1b[32m%s\x1b[0m\n", timeStr, engineName, socketStr)
+
+	// Left Box: Live Voice Stream
+	var leftLines []string
+	recBadge := "\x1b[34m○ IDLE\x1b[0m"
+	if strings.ToLower(r.RecordStatus) == "recording" || strings.ToLower(r.RecordStatus) == "active" {
+		recBadge = "\x1b[32;1m● REC\x1b[0m"
+	} else if strings.ToLower(r.RecordStatus) == "transcribing" {
+		recBadge = "\x1b[33;1m⏳ TRANSCRIBE\x1b[0m"
+	}
+	micChar := RenderLevelChar(r.MicLevel)
+	leftLines = append(leftLines, fmt.Sprintf("state:   %s · \x1b[36m%s\x1b[0m · mic %s \x1b[2m%.0f%%\x1b[0m", recBadge, engineName, micChar, r.MicLevel))
+
+	modStr := "\x1b[90mneutral\x1b[0m"
+	if r.ModifierStatus != "" && r.ModifierStatus != "neutral" {
+		modStr = fmt.Sprintf("\x1b[32m%s active\x1b[0m", r.ModifierStatus)
+	}
+	rtfStr := "\x1b[90m---\x1b[0m \x1b[2m(idle)\x1b[0m"
+	if r.EagerMetrics != nil && r.EagerMetrics.LastUtterance != nil {
+		u := r.EagerMetrics.LastUtterance
+		speed := 0.0
+		if u.RTF > 0 {
+			speed = 1.0 / u.RTF
+		}
+		rtfStr = fmt.Sprintf("\x1b[36mRTF %.1fx\x1b[0m \x1b[2m(%.2fs lag)\x1b[0m", speed, u.TranscribeSecs)
+	}
+	leftLines = append(leftLines, fmt.Sprintf("gating:  %s · %s", modStr, rtfStr))
+	leftLines = append(leftLines, "\x1b[90m── chunks timeline ─────────────────────────────\x1b[0m")
+
+	// Up to 4 chunks in timeline (most recent 4)
+	timelineChunks := recentChunks
+	if len(timelineChunks) > 4 {
+		timelineChunks = timelineChunks[len(timelineChunks)-4:]
+	}
+	if len(timelineChunks) == 0 {
+		leftLines = append(leftLines, "\x1b[90m(no chunks recorded yet)\x1b[0m")
+	} else {
+		for _, c := range timelineChunks {
+			leftLines = append(leftLines, formatCompactChunkLine(c, colWidthLeft-4))
+		}
+	}
+
+	// Right Box: Dictation In/Out & Health
+	var rightLines []string
+	asrPart := formatCompactASR(r.ASRBackend)
+	ramStr := formatCompactBytes(r.ServiceMemory)
+	vramStr := ""
+	if r.VRAMUsedBytes > 0 {
+		vramStr = fmt.Sprintf(" · \x1b[34mvram %s\x1b[0m", formatCompactBytes(r.VRAMUsedBytes))
+	}
+	rightLines = append(rightLines, fmt.Sprintf("asr:    %s · \x1b[35mram %s\x1b[0m%s", asrPart, ramStr, vramStr))
+
+	daemonsSummary := formatCompactDaemons(r.Processes, r.ActiveService)
+	rightLines = append(rightLines, fmt.Sprintf("daemons: %s", daemonsSummary))
+	rightLines = append(rightLines, "\x1b[90m── recent dictation (in / out) ─────────────────\x1b[0m")
+
+	feedEntries := CombineFeed(r.EagerMetrics, ttsSnapshot.History)
+	if len(feedEntries) > 4 {
+		feedEntries = feedEntries[len(feedEntries)-4:]
+	}
+	if len(feedEntries) == 0 {
+		rightLines = append(rightLines, "\x1b[90m(no dictation yet)\x1b[0m")
+	} else {
+		for _, fe := range feedEntries {
+			rightLines = append(rightLines, formatCompactFeedEntry(fe, colWidthRight-4))
+		}
+	}
+
+	// Ensure equal height for side-by-side display
+	for len(leftLines) < len(rightLines) {
+		leftLines = append(leftLines, "")
+	}
+	for len(rightLines) < len(leftLines) {
+		rightLines = append(rightLines, "")
+	}
+
+	boxLeft := BoxSpec{Title: "\x1b[1;36m¹\x1b[0m \x1b[1;37mLive Voice Stream\x1b[0m", Lines: leftLines, Width: colWidthLeft, Square: true}
+	boxRight := BoxSpec{Title: "\x1b[1;36m²\x1b[0m \x1b[1;37mDictation In/Out & Health\x1b[0m", Lines: rightLines, Width: colWidthRight, Square: true}
+
+	rendered := CombineSideBySide(RenderBoxLines(boxLeft), RenderBoxLines(boxRight))
+	for _, line := range rendered {
+		fmt.Fprintln(w, line)
+	}
+
+	// Footer
+	fmt.Fprintf(w, " \x1b[1;36m¹\x1b[0m Voice Stream \x1b[32m●\x1b[0m   \x1b[1;36m²\x1b[0m Dictation & Daemons \x1b[32m●\x1b[0m   \x1b[90m│\x1b[0m   \x1b[2m[c]ompact   [a]ll   [q]uit\x1b[0m\n")
+}
+
+func formatCompactChunkLine(c chunks.Chunk, maxWidth int) string {
+	ts := c.Timestamp.Local().Format("15:04:05")
+	badge := "\x1b[32m✓\x1b[0m"
+	if !c.Accepted {
+		badge = "\x1b[31m✗\x1b[0m"
+	}
+	levelSpark := listing.FormatSparklineCell(c.VolumeSparkline, 10, true)
+
+	var text string
+	if c.Accepted {
+		text = c.CleanedTranscript
+		if text == "" && c.RawTranscript != "" {
+			text = "[" + c.RawTranscript + "]"
+		}
+	} else {
+		if c.RejectionReason != "" {
+			text = c.RejectionReason
+		} else {
+			text = "transient"
+		}
+	}
+
+	prefix := fmt.Sprintf("\x1b[2m#%d %s\x1b[0m %4.1fs %s %s ", c.Index, ts, c.AudioDurationSecs, levelSpark, badge)
+	prefixWidth := StringDisplayWidth(prefix)
+	avail := maxWidth - prefixWidth
+	if avail < 3 {
+		avail = 3
+	}
+	text = TruncateLineANSI(text, avail)
+	return prefix + text
+}
+
+func formatCompactFeedEntry(fe FeedEntry, maxWidth int) string {
+	ts := fe.Timestamp.Format("15:04:05")
+	prefix, color := "[IN]", "\x1b[1;33m"
+	if strings.HasPrefix(fe.Text, "Super+Y") || strings.HasPrefix(fe.Text, "TTS") {
+		prefix, color = "[TTS]", "\x1b[1;36m"
+	} else if fe.Direction == FeedOutput {
+		prefix, color = "[OUT]", "\x1b[1;32m"
+	}
+
+	timePart := fmt.Sprintf("\x1b[2m%s\x1b[0m %s%s\x1b[0m ", ts, color, prefix)
+	statusPart := ""
+	if fe.Status != "" {
+		statusPart = fmt.Sprintf(" \x1b[36m%s\x1b[0m", fe.Status)
+	}
+	fixedWidth := StringDisplayWidth(timePart) + StringDisplayWidth(statusPart)
+	avail := maxWidth - fixedWidth
+	if avail < 3 {
+		avail = 3
+	}
+	text := TruncateLineANSI(fe.Text, avail)
+	return timePart + text + statusPart
+}
+
+func formatCompactASR(s ASRBackendState) string {
+	if !s.Applicable {
+		return "\x1b[90mno server\x1b[0m"
+	}
+	if s.Online {
+		endpoint := s.Endpoint
+		if endpoint == "" {
+			endpoint = ":18131"
+		} else {
+			// Extract port or keep host:port
+			if strings.Contains(endpoint, ":") {
+				parts := strings.Split(endpoint, ":")
+				endpoint = ":" + parts[len(parts)-1]
+			}
+		}
+		return fmt.Sprintf("\x1b[32m● %s\x1b[0m \x1b[2m(online)\x1b[0m", endpoint)
+	}
+	return "\x1b[31;1m● offline\x1b[0m"
+}
+
+func formatCompactDaemons(procs []ProcessResource, activeService string) string {
+	if len(procs) == 0 {
+		if activeService != "" {
+			return fmt.Sprintf("\x1b[32m● %s\x1b[0m", activeService)
+		}
+		return "\x1b[90m(no daemons)\x1b[0m"
+	}
+	var names []string
+	seen := make(map[string]bool)
+	for _, p := range procs {
+		if !seen[p.Name] {
+			seen[p.Name] = true
+			names = append(names, fmt.Sprintf("\x1b[32m● %s\x1b[0m", p.Name))
+		}
+	}
+	return strings.Join(names, "  ")
+}
+
+func formatCompactBytes(bytes int64) string {
+	if bytes <= 0 {
+		return "0B"
+	}
+	const (
+		kb = 1024
+		mb = 1024 * kb
+		gb = 1024 * mb
+	)
+	switch {
+	case bytes >= gb:
+		return fmt.Sprintf("%.1fG", float64(bytes)/float64(gb))
+	case bytes >= mb:
+		return fmt.Sprintf("%.1fM", float64(bytes)/float64(mb))
+	case bytes >= kb:
+		return fmt.Sprintf("%.1fK", float64(bytes)/float64(kb))
+	default:
+		return fmt.Sprintf("%dB", bytes)
+	}
+}
+
+
