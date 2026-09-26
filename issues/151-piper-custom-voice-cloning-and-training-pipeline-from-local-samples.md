@@ -1,6 +1,6 @@
 # 151 — Piper custom voice cloning and training pipeline from local samples
 
-**Status**: In Progress
+**Status**: Closed — Implemented local sample preparation, Piper training harness, and ONNX voice export (voxi voice prepare, voxi voice train)
 **Priority**: P1 (High)
 **Severity**: Feature
 **Category**: Feature
