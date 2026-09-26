@@ -1,0 +1,10 @@
+ [1mVoxi Monitor[0m  [2m11:54:30 CEST[0m   [2mengine:[0m [36mr2t2-confucius4[0m   [2mmodifiers:[0m [32mactive[0m   [2msocket:[0m [32m127.0.0.1:18131[0m
+[90m┌─[0m [1;36m¹[0m [1;37mVoice & Speech[0m [90m─────────────────────────────┐[0m [90m┌─[0m [1;36m⁷[0m [1;37mSystem Load[0m [90m────────────────────────────────┐[0m
+[90m│[0m status:    [32m●[0m [1mrecording[0m [2m(r2t2-confucius4)[0m       [90m│[0m [90m│[0m cpu (12 cores)   [32m[⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀][0m 2% (60°C)        [90m│[0m
+[90m│[0m modifiers: [32mL-Ctrl[0m active [2m(release-to-type)[0m     [90m│[0m [90m│[0m ram (23G)        [35m[⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤][0m 6.3/23.3G 27%    [90m│[0m
+[90m│[0m mic level: [32m[⣿⣿⣿⣿⣿⡇      ][0m 46% [2m(-14 dB)[0m         [90m│[0m [90m│[0m gpu (Cezanne)    [32m[⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀][0m 0% (48°C)        [90m│[0m
+[90m│[0m RTF speed: [36m[⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿][0m 2.2x [2m(1.3s / 3.0s)[0m     [90m│[0m [90m│[0m gpu vram/gtt     [34m[⣿⣿⣿⣿][0m[90m[⣀⣀⣀⣀][0m 10.6/27.0G 39%   [90m│[0m
+[90m│[0m last text: [2m"Chunk one, chunk two..."[0m [36m1.3s[0m      [90m│[0m [90m│[0m ASR @ :18131     [32m● online[0m [2m(12ms) · r2t2[0m        [90m│[0m
+[90m│[0m tts read:  [2mSuper+Y "Voxi input engine"[0m [36m1.4s[0m    [90m│[0m [90m│[0m daemons:         [32m● agent[0m  [32m● r2t2[0m  [32m● dotoold[0m    [90m│[0m
+[90m└────────────────────────────────────────────────┘[0m [90m└────────────────────────────────────────────────┘[0m
+ [1;36m¹[0m Voice [32m●[0m   [1;36m²[0m Daemons [32m●[0m   [1;36m³[0m Feed ○   [1;36m⁴[0m TTS ○   [1;36m⁷[0m Load [32m●[0m   [90m│[0m   [2m[c]ompact   [a]ll panels   [q]uit[0m

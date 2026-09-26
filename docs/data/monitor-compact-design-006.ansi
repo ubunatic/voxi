@@ -1,0 +1,11 @@
+ [1mVoxi Monitor[0m  [2m11:54:30 CEST[0m   [2mengine:[0m [36mr2t2-confucius4[0m   [2msocket:[0m [32m127.0.0.1:18131[0m
+[90m┌─[0m [1;36m¹[0m [1;37mVoice Stream & Chunks[0m [90m───────────────────────┐[0m [90m┌─[0m [1;36m²[0m [1;37mDictation & Services[0m [90m─────────────────────────┐[0m
+[90m│[0m status:  [32m● recording[0m · [36mr2t2-confucius4[0m           [90m│[0m [90m│[0m asr:     [32m● 127.0.0.1:18131[0m [2m(online · 12ms · r2t2)[0m [90m│[0m
+[90m│[0m mods:    [32mL-Ctrl active[0m · mic: [38;5;208m▄[0m [2m46% (-14dB)[0m      [90m│[0m [90m│[0m daemons: [32m● voxi-agent[0m  [32m● voxi-r2t2[0m  [32m● dotoold[0m    [90m│[0m
+[90m│[0m speed:   [36m2.2x realtime[0m · [2m1.30s lag / 3.0s audio[0m  [90m│[0m [90m│[0m memory:  [35mram 6.3/23G[0m [2m(27%)[0m · [34mvram 2.8/8G[0m [2m(35%)[0m   [90m│[0m
+[90m│[0m [90m── chunk timeline ──────────────────────────────[0m [90m│[0m [90m│[0m [90m── dictation / voice feed (last 3) ─────────────[0m [90m│[0m
+[90m│[0m [2m#53[0m 11:51:11 0.4s [90m[⣆⣀⣀⣀⣀⣀⣀⣀⣀⣀][0m [31m✗[0m [2m(low_energy)[0m    [90m│[0m [90m│[0m [2m11:53:10[0m [1;36m[TTS][0m [2mSuper+Y "Voxi input engine"[0m [36m1.4s[0m  [90m│[0m
+[90m│[0m [2m#54[0m 11:51:14 2.9s [32m[⣠⣄⣀⣀⣀⣀⣀⣀⣀⣀][0m [32m✓[0m [2mChunk one, two...[0m [90m│[0m [90m│[0m [2m11:53:45[0m [1;32m[OUT][0m Dictating continuous stream... [36m0.8s[0m [90m│[0m
+[90m│[0m [2m#55[0m 11:51:19 1.1s [90m[⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀][0m [31m✗[0m [2m(silence)[0m       [90m│[0m [90m│[0m [2m11:54:12[0m [1;33m[IN][0m  Chunk one, chunk two, three.   [36m1.3s[0m [90m│[0m
+[90m└──────────────────────────────────────────────────┘[0m [90m└──────────────────────────────────────────────────┘[0m
+ [1;36m¹[0m Voice Stream [32m●[0m   [1;36m²[0m Dictation & Daemons [32m●[0m   [90m│[0m   [2m[c]ompact   [a]ll   [q]uit[0m

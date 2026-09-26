@@ -1,0 +1,11 @@
+ [1mVoxi Monitor[0m  [2m11:54:30 CEST[0m   [2mengine:[0m [36mr2t2-confucius4[0m   [2mmodifiers:[0m [32mactive[0m   [2msocket:[0m [32m127.0.0.1:18131[0m
+[90m┌─[0m [1;36m¹[0m [1;37mDictation & Audio Stream[0m [90m───────────────────┐[0m [90m┌─[0m [1;36m⁷[0m [1;37mEngine & Host Resources[0m [90m────────────────────┐[0m
+[90m│[0m state:     [32m● REC[0m [2m(r2t2-confucius4 · GPU)[0m       [90m│[0m [90m│[0m cpu load   [32m[⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀][0m  3% [2m(12 cores · 58°C)[0m  [90m│[0m
+[90m│[0m modifier:  [32mL-Ctrl pressed[0m · [2mgated typing[0m       [90m│[0m [90m│[0m ram usage  [35m[⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤][0m 27% [2m(6.3G / 23.3G)[0m     [90m│[0m
+[90m│[0m mic VU:    [32m[⣿⣿⣿⣿⣿⣿⣄    ][0m -11 dB [2m(0.48 peak)[0m    [90m│[0m [90m│[0m gpu gfx    [32m[⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀][0m  1% [2m(Cezanne · 47°C)[0m   [90m│[0m
+[90m│[0m speed RTF: [36m[⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿][0m 2.45x [2m(410ms lag)[0m      [90m│[0m [90m│[0m gpu vram   [34m[⣿⣿⣿⣿⣿⣿][0m[90m[⣀⣀][0m 41% [2m(2.8G / 8.0G max)[0m  [90m│[0m
+[90m│[0m stream:    3.2s audio · 1 chunk accepted       [90m│[0m [90m│[0m asr server [32m● 127.0.0.1:18131[0m [2m(HTTP 200 · 8ms)[0m  [90m│[0m
+[90m│[0m [1;33mdictation:[0m [2m"Testing the compact monitor"[0m       [90m│[0m [90m│[0m agent pid  [2m63673 (9.4 MB) · eager child active[0m [90m│[0m
+[90m│[0m [1;36mtts queue:[0m [2midle (0 items, last: 1.4s clip)[0m     [90m│[0m [90m│[0m dotoold    [2muinput injection active (0ms delay)[0m [90m│[0m
+[90m└────────────────────────────────────────────────┘[0m [90m└────────────────────────────────────────────────┘[0m
+ [1;36m¹[0m Voice [32m●[0m   [1;36m²[0m Daemons [32m●[0m   [1;36m³[0m Feed ○   [1;36m⁴[0m TTS ○   [1;36m⁷[0m Load [32m●[0m   [90m│[0m   [2m[c]ompact   [a]ll panels   [q]uit[0m
