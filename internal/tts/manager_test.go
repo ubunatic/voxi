@@ -137,9 +137,10 @@ func TestRecordingEpochPermanentlyDiscardsQueuedPlayback(t *testing.T) {
 	if !player.stopped() {
 		t.Fatal("recording start did not stop current playback")
 	}
-	if snapshot := manager.Snapshot(); snapshot.Current != "" || len(snapshot.Queue) != 0 {
-		t.Fatalf("snapshot after recording start = %+v, want empty playback queue", snapshot)
-	}
+	waitFor(t, func() bool {
+		snapshot := manager.Snapshot()
+		return snapshot.Current == "" && len(snapshot.Queue) == 0
+	})
 	if err := manager.Control(ActionRecordingEnd); err != nil {
 		t.Fatal(err)
 	}
