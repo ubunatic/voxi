@@ -1,6 +1,6 @@
 # 152 — Super+X must permanently stop all TTS playback instead of resuming when recording ends
 
-**Status**: Open
+**Status**: Closed — Fixed: Super+X permanently discards the TTS playback queue on recording start and never resumes after recording ends
 **Priority**: P1 (High)
 **Severity**: Normal
 **Category**: Bug
