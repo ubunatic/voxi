@@ -27,18 +27,17 @@ Piper ONNX models run directly in the C++ runtime with zero Python dependency at
    - Export PyTorch checkpoint directly to ONNX (`.onnx`) with configuration (`.onnx.json`).
 
 3. **CLI Workflow & Integration**:
-   - Command: `voxi voice clone` (or `voxi voice train` / `voxi voice build`).
-   - Flag options: `--samples-dir`, `--name <voice_name>`, `--base <base_voice>`, `--epochs`.
+   - Command: `voxi voice train` (and `voxi voice prepare`).
+   - Flag options: `--samples-dir`, `--name <voice_name>`, `--base <base_voice>`, `--epochs`, `--batch-size`, `--accelerator`.
    - Automated output placement: Installs into `~/.local/share/voxi/voices/<name>.onnx` and enables via `voxi config --tts-model`.
 
 ## 3. Milestones & Delivery Status
 
 ### Milestone M1: Dataset Preparation & Training Harness Scaffolding
-- **Delivered**: `a8230d8`
-- **Review Findings (Pre-Work for M1 Fix & M2)**:
-  - `internal/tts/clone/dataset.go:116`: Inverted containment check `if within(resolvedSamples, resolvedInput)` incorrectly rejected files inside `SamplesDir`. Must be `if !within(resolvedSamples, resolvedInput)`.
-  - Add test asserting symlinked/traversal WAV paths resolving outside `SamplesDir` are rejected.
-  - Verify all tests pass with `make test-q1`.
+- **Delivered**: `a8230d8` + `d4e5b1c` (path containment fix & regression tests).
 
 ### Milestone M2: Fine-Tuning Execution & Export Workflow
-- Wire `voxi voice train` (or integrate into `voxi voice clone`) invoking `scripts/voice-training/runner.py` via `uv` with checkpoint downloads and ONNX export to `~/.local/share/voxi/voices/<name>.onnx`.
+- **Delivered**: `253209e`
+- **Review Findings (Pre-Work for Hardening / M3)**:
+  - `scripts/voice-training/runner.py:54`: Preserve existing output artifacts upon training failure rather than unlinking prior ONNX before training completes.
+  - `internal/tts/clone/train.go:187`: Key downloaded checkpoint cache by URL hash or full URL namespace instead of solely basename to avoid collisions.
