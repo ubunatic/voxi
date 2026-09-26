@@ -1,6 +1,6 @@
 # 150 — Add compact two-box mode to voxi monitor (-c, --compact)
 
-**Status**: In Progress
+**Status**: Closed — Implemented two-box compact monitor layout and live-verified
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Feature
