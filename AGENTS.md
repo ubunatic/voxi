@@ -57,10 +57,10 @@ Docs in `./docs/` are managed by harnez. <!-- harnez:bundled -->
   cobra/doc GenManTree; <cmd> man / man --install; XDG ~/.local/share/man/man1
 - Markdown @docs/Markdown.md,
   PascalCase for evergreens, kebab-case for ephemeral docs; ASCII art in chat, Mermaid only in docs/
-- Spec system @docs/Spec.md,
-  YAML spec files as single source of truth; Go code must not duplicate spec values
 - Search Practices @docs/Search.md,
   harnez find code/docs, finder configuration, partial results, and rg fallback
+- Spec system @docs/Spec.md,
+  YAML spec files as single source of truth; Go code must not duplicate spec values
 <!-- harnez:end Language Conventions -->
 
 ## Workspace (uman)
@@ -127,7 +127,7 @@ instead of `ls issues/`, `find`, or raw grep:
 
 ### Harnez Agent
 - Prefer loaded `mcp__harnez__*` tools for lifecycle actions; otherwise use `harnez agent` via Bash (see the local Subagent Policy).
-- Start: `harnez agent start --detach --name <name> --role <role> --model <model> -p <prompt>`.
+- Start (run it in a background shell, e.g. Claude `run_in_background`): `harnez agent start --name <name> --role <role> --model <model> -p <prompt>`.
 - List: `harnez agent list`.
 - Status: `harnez agent status --name <session>`.
 - Wait: `harnez agent wait <session>` (session is positional).

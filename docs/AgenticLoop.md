@@ -22,6 +22,9 @@ For TUI layout work, use a checked-in `.ansi` mockup under `docs/data/` as the v
 8. **Deployment Transparency — 3-State Grounding (when applicable)** — **Local State**, **Deployed Artifact State**, and **Active Daemon State** are independent; local build/test proves nothing about the other two (remote-deploying projects only).
 9. **One-Level Delegation** — `harnez agent --role orchestrator|developer|reviewer|advisor`: only an orchestrator starts helpers (one writer at a time); developers, reviewers and advisors are leaf workers that never run `harnez agent`, native subagents or delegating skills. harnez enforces it. Live checks that need an agent session are run by the orchestrator.
 
+### Multi-session peer assistance
+`/peer-assistant` uses available native session messaging for explicit peer requests; it does not imply an always-on watcher. Persist handoffs and findings in tickets/docs, keep one writer per workspace, and track/clean up helpers.
+
 ## 2. The 5-Phase Sprint Loop
 Each phase's **Mechanics** and **Constraints** are summarized inline below; see the full doc for step-by-step detail.
 - **### Phase 1: Parallel Advisory Discovery (Read-Only)** — concurrent read-only advisors find exact line ranges, return plans; never write or spawn side effects. **Kickoff & Commit Policy**: agree upfront whether subagents commit directly or return diffs.
@@ -47,6 +50,7 @@ For a single focused ticket: **Clean Goal Handoff** (one objective; **Trust the 
 | Independent Reviewer | Read-only + diff | Audits diff vs. acceptance criteria | Spawned in Phase 3 |
 
 ## 6. Anti-Patterns to Avoid
+- **Goals Without Exit Clauses** — a `/goal` without an exit clause deadlocks the Stop hook when progress needs user input.
 - **Parallel Writing** — multiple write-permitted subagents on one workspace at once.
 - **Blocking Handoff Waits** — treating a handoff as license to block the main chat.
 - **Silent Verification** — assuming a fix works without running tests/canaries.
@@ -57,6 +61,7 @@ For a single focused ticket: **Clean Goal Handoff** (one objective; **Trust the 
 - **Narrow String-Substitution Edits Over Structured Patches** — prefer `apply_patch`/whole-block replacement; measured **11.1%** failure rate for `Edit` vs. **4.2%** for `apply_patch` (2.6×) in the same repo.
 - **Baking Real Credentials In For A Fast Dev Loop** — no real hostnames/MACs/credentials "temporarily"; use RFC-1918/example values + a secret scanner from commit one.
 - **Orphaned Background Tasks** — leftover `tail -f`/watch loops/timers after work is done.
+- **Shell `&` Detaching** — never `&`/`nohup`/`disown` a command; use the harness's tracked background facility.
 - **Lost Context / Ephemeral-Only Retrospectives** — friction/bugs discussed in chat but never written to a durable doc/ticket.
 - **Rubber-Stamp Reviews** — a review that doesn't actually inspect assertions or diffs.
 - **Unbounded Doc Ingestion** — whole-file-reading `AGENTS.md`/bundled docs already in the active prompt.
