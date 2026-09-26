@@ -70,6 +70,16 @@ func Prepare(ctx context.Context, opts Options) (Result, error) {
 	if len(samples) == 0 {
 		return Result{}, errors.New("corpus contains no samples")
 	}
+	transcribed := samples[:0]
+	for _, sample := range samples {
+		if strings.TrimSpace(sample.Text) != "" {
+			transcribed = append(transcribed, sample)
+		}
+	}
+	samples = transcribed
+	if len(samples) == 0 {
+		return Result{}, errors.New("corpus contains no transcribed samples")
+	}
 	if err := validateSamples(samples); err != nil {
 		return Result{}, err
 	}

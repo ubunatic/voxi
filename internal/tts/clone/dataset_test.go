@@ -40,13 +40,61 @@ func TestPrepareWritesLJSpeechDatasetInStableOrder(t *testing.T) {
 	}
 }
 
+func TestPrepareSkipsUntranscribedSamples(t *testing.T) {
+	samples := t.TempDir()
+	writeCorpus(t, samples, "noise\tmissing-noise.wav\t \t\nspeech\tspeech.wav\tHello there.\t\n")
+	writeFile(t, filepath.Join(samples, "speech.wav"), []byte("source"))
+	output := filepath.Join(t.TempDir(), "dataset")
+	converted := 0
+	result, err := Prepare(context.Background(), Options{
+		SamplesDir: samples,
+		OutputDir:  output,
+		ConvertAudio: func(ctx context.Context, input, destination string) error {
+			converted++
+			return fakeConverter(ctx, input, destination)
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Samples != 1 || converted != 1 {
+		t.Fatalf("result = %#v, conversions = %d; want one transcribed sample", result, converted)
+	}
+	metadata, err := os.ReadFile(filepath.Join(output, "metadata.csv"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(metadata), "speech|Hello there.|Hello there.\n"; got != want {
+		t.Fatalf("metadata = %q, want %q", got, want)
+	}
+	if _, err := os.Stat(filepath.Join(output, "wavs", "noise.wav")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("noise WAV exists or stat failed unexpectedly: %v", err)
+	}
+}
+
+func TestPrepareRejectsCorpusWithoutTranscribedSamples(t *testing.T) {
+	samples := t.TempDir()
+	writeCorpus(t, samples, "noise\tmissing.wav\t \t\nnoise2\tmissing2.wav\t\t\n")
+	_, err := Prepare(context.Background(), Options{
+		SamplesDir: samples,
+		OutputDir:  filepath.Join(t.TempDir(), "dataset"),
+		ConvertAudio: func(context.Context, string, string) error {
+			t.Fatal("converter called without a transcribed sample")
+			return nil
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "no transcribed samples") {
+		t.Fatalf("Prepare error = %v, want no-transcribed-samples error", err)
+	}
+}
+
 func TestPrepareRejectsInvalidCorpusBeforeReplacingExistingOutput(t *testing.T) {
 	cases := []struct {
 		name, corpus, want string
 	}{
 		{"invalid id", "../escape\ta.wav\tText.\t\n", "invalid sample ID"},
 		{"duplicate id", "same\ta.wav\tOne.\t\nsame\tb.wav\tTwo.\t\n", "duplicate sample ID"},
-		{"empty transcript", "sample\ta.wav\t   \t\n", "transcript"},
+		{"padded transcript", "sample\ta.wav\t Text. \t\n", "transcript"},
 		{"pipe transcript", "sample\ta.wav\tA|B\t\n", "transcript"},
 		{"control transcript", "sample\ta.wav\tA\x01B\t\n", "control character"},
 		{"unsafe path", "sample\t../escape.wav\tText.\t\n", "unsafe WAV path"},
