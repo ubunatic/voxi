@@ -2,6 +2,8 @@ package clone
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -181,6 +183,8 @@ func ensureCheckpoint(ctx context.Context, base, home string, getenv func(string
 			cacheRoot = filepath.Join(home, ".cache")
 		}
 		cacheDir := filepath.Join(cacheRoot, "voxi", "piper-checkpoints")
+		urlHash := sha256.Sum256([]byte(base))
+		cacheDir = filepath.Join(cacheDir, hex.EncodeToString(urlHash[:]))
 		if err := os.MkdirAll(cacheDir, 0700); err != nil {
 			return "", fmt.Errorf("create checkpoint cache: %w", err)
 		}

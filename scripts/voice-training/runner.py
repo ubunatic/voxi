@@ -4,9 +4,12 @@
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -51,8 +54,6 @@ def main() -> int:
     config = run_dir / f"{args.name}.onnx.json"
     final_onnx = output / f"{args.name}.onnx"
     final_config = output / f"{args.name}.onnx.json"
-    final_onnx.unlink(missing_ok=True)
-    final_config.unlink(missing_ok=True)
     fit = [
         sys.executable, "-m", "piper.train", "fit",
         f"--data.voice_name={args.name}",
@@ -80,16 +81,51 @@ def main() -> int:
     ], check=True, cwd=run_dir)
     if not onnx.is_file() or not config.is_file():
         raise SystemExit("Piper export did not produce both ONNX model and JSON config")
-    final_onnx = output / onnx.name
-    final_config = output / config.name
-    final_config_tmp = output / f".{config.name}.part"
-    final_onnx_tmp = output / f".{onnx.name}.part"
-    shutil.copyfile(config, final_config_tmp)
-    shutil.copyfile(onnx, final_onnx_tmp)
-    final_config_tmp.replace(final_config)
-    final_onnx_tmp.replace(final_onnx)
+    try:
+        config_data = json.loads(config.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as err:
+        raise SystemExit(f"Piper export produced an invalid JSON config: {err}") from err
+    if not isinstance(config_data, dict):
+        raise SystemExit("Piper export config must contain a JSON object")
+    publish_artifacts(onnx, config, final_onnx, final_config, output)
     print(f"exported {final_onnx} and {final_config}")
     return 0
+
+
+def publish_artifacts(onnx: Path, config: Path, final_onnx: Path, final_config: Path, output: Path) -> None:
+    """Stage both exports before replacing either prior destination artifact."""
+    with tempfile.TemporaryDirectory(prefix=".voice-export-", dir=output) as temporary:
+        stage = Path(temporary)
+        staged_onnx = stage / final_onnx.name
+        staged_config = stage / final_config.name
+        backup_onnx = stage / "previous.onnx"
+        backup_config = stage / "previous.onnx.json"
+        shutil.copyfile(onnx, staged_onnx)
+        shutil.copyfile(config, staged_config)
+
+        had_onnx = had_config = False
+        published_onnx = published_config = False
+        try:
+            if final_onnx.exists() or final_onnx.is_symlink():
+                os.replace(final_onnx, backup_onnx)
+                had_onnx = True
+            if final_config.exists() or final_config.is_symlink():
+                os.replace(final_config, backup_config)
+                had_config = True
+            os.replace(staged_config, final_config)
+            published_config = True
+            os.replace(staged_onnx, final_onnx)
+            published_onnx = True
+        except OSError:
+            if published_onnx:
+                final_onnx.unlink(missing_ok=True)
+            if published_config:
+                final_config.unlink(missing_ok=True)
+            if had_onnx:
+                os.replace(backup_onnx, final_onnx)
+            if had_config:
+                os.replace(backup_config, final_config)
+            raise
 
 
 if __name__ == "__main__":
