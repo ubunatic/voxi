@@ -72,6 +72,47 @@ func TestPrepareSkipsUntranscribedSamples(t *testing.T) {
 	}
 }
 
+func TestPrepareTrainsOnlyAllowlistedSamples(t *testing.T) {
+	samples := t.TempDir()
+	writeCorpus(t, samples, "bug\tbug.wav\tMisheard text.\t\nclone\tclone.wav\tGood speech.\t\n")
+	writeFile(t, filepath.Join(samples, AllowlistFile), []byte("# clone set\n\nclone\n"))
+	writeFile(t, filepath.Join(samples, "clone.wav"), []byte("source"))
+	output := filepath.Join(t.TempDir(), "dataset")
+	result, err := Prepare(context.Background(), Options{SamplesDir: samples, OutputDir: output, ConvertAudio: fakeConverter})
+	if err != nil {
+		t.Fatal(err)
+	}
+	metadata, err := os.ReadFile(filepath.Join(output, "metadata.csv"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Samples != 1 || string(metadata) != "clone|Good speech.|Good speech.\n" {
+		t.Fatalf("result = %#v, metadata = %q", result, metadata)
+	}
+}
+
+func TestPrepareRequiresAllowlist(t *testing.T) {
+	samples := t.TempDir()
+	writeCorpus(t, samples, "clone\tclone.wav\tGood speech.\t\n")
+	if err := os.Remove(filepath.Join(samples, AllowlistFile)); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Prepare(context.Background(), Options{SamplesDir: samples, OutputDir: filepath.Join(t.TempDir(), "dataset"), ConvertAudio: fakeConverter})
+	if err == nil || !strings.Contains(err.Error(), "allowlist") {
+		t.Fatalf("err = %v, want missing allowlist error", err)
+	}
+}
+
+func TestPrepareRejectsUnknownAllowlistID(t *testing.T) {
+	samples := t.TempDir()
+	writeCorpus(t, samples, "clone\tclone.wav\tGood speech.\t\n")
+	writeFile(t, filepath.Join(samples, AllowlistFile), []byte("clone\ntypo\n"))
+	_, err := Prepare(context.Background(), Options{SamplesDir: samples, OutputDir: filepath.Join(t.TempDir(), "dataset"), ConvertAudio: fakeConverter})
+	if err == nil || !strings.Contains(err.Error(), "typo") {
+		t.Fatalf("err = %v, want unknown id error", err)
+	}
+}
+
 func TestPrepareRejectsCorpusWithoutTranscribedSamples(t *testing.T) {
 	samples := t.TempDir()
 	writeCorpus(t, samples, "noise\tmissing.wav\t \t\nnoise2\tmissing2.wav\t\t\n")
@@ -259,6 +300,14 @@ func wavBytes(rate uint32, channelCount, bitDepth uint16) []byte {
 func writeCorpus(t *testing.T, dir, corpus string) {
 	t.Helper()
 	writeFile(t, filepath.Join(dir, "corpus.tsv"), []byte(corpus))
+	var ids strings.Builder
+	for line := range strings.Lines(corpus) {
+		id, _, _ := strings.Cut(line, "\t")
+		if id = strings.TrimSpace(id); id != "" && !strings.HasPrefix(id, "#") {
+			ids.WriteString(id + "\n")
+		}
+	}
+	writeFile(t, filepath.Join(dir, AllowlistFile), []byte(ids.String()))
 }
 
 func writeFile(t *testing.T, path string, data []byte) {

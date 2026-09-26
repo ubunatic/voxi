@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -22,6 +23,11 @@ const (
 	channels   = 1
 	bits       = 16
 )
+
+// AllowlistFile names the file in the samples directory that lists, one id
+// per line, the samples fit for voice training. The corpus also holds bug
+// reproductions and noise, so nothing trains unless it is listed here.
+const AllowlistFile = "voice-training.txt"
 
 var safeID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`)
 
@@ -69,6 +75,14 @@ func Prepare(ctx context.Context, opts Options) (Result, error) {
 	}
 	if len(samples) == 0 {
 		return Result{}, errors.New("corpus contains no samples")
+	}
+	allowed, err := readAllowlist(filepath.Join(samplesDir, AllowlistFile))
+	if err != nil {
+		return Result{}, err
+	}
+	samples, err = filterAllowed(samples, allowed)
+	if err != nil {
+		return Result{}, err
 	}
 	transcribed := samples[:0]
 	for _, sample := range samples {
@@ -147,6 +161,54 @@ func Prepare(ctx context.Context, opts Options) (Result, error) {
 		return Result{}, err
 	}
 	return Result{OutputDir: outputDir, Samples: len(samples)}, nil
+}
+
+// readAllowlist returns the sample ids listed in path. Blank lines and lines
+// starting with # are ignored.
+func readAllowlist(path string) (map[string]bool, error) {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("voice training allowlist %s is missing: list the sample ids to train on, one per line", path)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read voice training allowlist: %w", err)
+	}
+	allowed := map[string]bool{}
+	for line := range strings.Lines(string(data)) {
+		id := strings.TrimSpace(line)
+		if id == "" || strings.HasPrefix(id, "#") {
+			continue
+		}
+		allowed[id] = true
+	}
+	if len(allowed) == 0 {
+		return nil, fmt.Errorf("voice training allowlist %s lists no samples", path)
+	}
+	return allowed, nil
+}
+
+// filterAllowed keeps the allowlisted samples in corpus order and rejects
+// allowlist ids that the corpus does not contain.
+func filterAllowed(samples []devsample.Sample, allowed map[string]bool) ([]devsample.Sample, error) {
+	kept := make([]devsample.Sample, 0, len(allowed))
+	found := map[string]bool{}
+	for _, sample := range samples {
+		if allowed[sample.Name] {
+			kept = append(kept, sample)
+			found[sample.Name] = true
+		}
+	}
+	var missing []string
+	for id := range allowed {
+		if !found[id] {
+			missing = append(missing, id)
+		}
+	}
+	if len(missing) > 0 {
+		slices.Sort(missing)
+		return nil, fmt.Errorf("voice training allowlist names samples missing from the corpus: %s", strings.Join(missing, ", "))
+	}
+	return kept, nil
 }
 
 func validateSamples(samples []devsample.Sample) error {
