@@ -44,11 +44,15 @@ def main() -> int:
     output.mkdir(parents=True, exist_ok=True)
     runs = output / "runs"
     runs.mkdir(exist_ok=True)
-    run_dir = runs / f"{args.name}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+    run_dir = runs / f"{args.name}-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}"
     run_dir.mkdir()
     cache = run_dir / "cache"
     cache.mkdir(exist_ok=True)
-    config = output / f"{args.name}.onnx.json"
+    config = run_dir / f"{args.name}.onnx.json"
+    final_onnx = output / f"{args.name}.onnx"
+    final_config = output / f"{args.name}.onnx.json"
+    final_onnx.unlink(missing_ok=True)
+    final_config.unlink(missing_ok=True)
     fit = [
         sys.executable, "-m", "piper.train", "fit",
         f"--data.voice_name={args.name}",
@@ -68,7 +72,7 @@ def main() -> int:
     checkpoints = sorted(run_dir.glob("**/*.ckpt"), key=lambda path: path.stat().st_mtime)
     if not checkpoints:
         raise SystemExit(f"training completed without a checkpoint under {run_dir}")
-    onnx = output / f"{args.name}.onnx"
+    onnx = run_dir / f"{args.name}.onnx"
     subprocess.run([
         sys.executable, "-m", "piper.train.export_onnx",
         "--checkpoint", str(checkpoints[-1]),
@@ -76,7 +80,15 @@ def main() -> int:
     ], check=True, cwd=run_dir)
     if not onnx.is_file() or not config.is_file():
         raise SystemExit("Piper export did not produce both ONNX model and JSON config")
-    print(f"exported {onnx} and {config}")
+    final_onnx = output / onnx.name
+    final_config = output / config.name
+    final_config_tmp = output / f".{config.name}.part"
+    final_onnx_tmp = output / f".{onnx.name}.part"
+    shutil.copyfile(config, final_config_tmp)
+    shutil.copyfile(onnx, final_onnx_tmp)
+    final_config_tmp.replace(final_config)
+    final_onnx_tmp.replace(final_onnx)
+    print(f"exported {final_onnx} and {final_config}")
     return 0
 
 

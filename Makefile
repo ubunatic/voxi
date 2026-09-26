@@ -31,6 +31,8 @@ run: ⚙️ build  # run voxi monitor
 
 install: ⚙️ build  # install the binary, dependencies, user services, and man page through voxi install
 	./$(BINARY) install
+	install -d $(HOME)/.local/share/voxi/voice-training
+	install -m 0644 scripts/voice-training/pyproject.toml scripts/voice-training/runner.py scripts/voice-training/README.md $(HOME)/.local/share/voxi/voice-training/
 	./$(BINARY) man --install
 
 man: ⚙️ build  # generate roff man page to $(BINARY).1

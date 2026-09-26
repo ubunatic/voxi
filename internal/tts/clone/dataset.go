@@ -58,9 +58,10 @@ func Prepare(ctx context.Context, opts Options) (Result, error) {
 	if outputDir == samplesDir || within(outputDir, samplesDir) || within(samplesDir, outputDir) {
 		return Result{}, errors.New("output directory must be separate from the samples directory")
 	}
-	manifest, err := os.ReadFile(devsample.ManifestPathIn(samplesDir))
+	manifestPath := devsample.ManifestPathIn(samplesDir)
+	manifest, err := os.ReadFile(manifestPath)
 	if err != nil {
-		return Result{}, fmt.Errorf("read corpus manifest: %w", err)
+		return Result{}, fmt.Errorf("read corpus manifest %s: %w", manifestPath, err)
 	}
 	samples, err := devsample.ParseManifest(manifest)
 	if err != nil {
