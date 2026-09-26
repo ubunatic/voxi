@@ -113,7 +113,7 @@ func Prepare(ctx context.Context, opts Options) (Result, error) {
 		if err != nil {
 			return Result{}, fmt.Errorf("resolve samples directory: %w", err)
 		}
-		if within(resolvedSamples, resolvedInput) {
+		if !within(resolvedSamples, resolvedInput) {
 			return Result{}, fmt.Errorf("sample %q WAV path resolves outside the samples directory", sample.Name)
 		}
 		info, err := os.Stat(resolvedInput)
@@ -176,8 +176,9 @@ func validateWAV(path string) error {
 		return errors.New("not a valid RIFF/WAVE file")
 	}
 	var rate uint32
-	var channelCount, bitDepth, format uint16
+	var channelCount, bitDepth, blockAlign, format uint16
 	var dataSize uint32
+	var formatSeen bool
 	for {
 		chunkHeader := make([]byte, 8)
 		n, err := io.ReadFull(f, chunkHeader)
@@ -200,7 +201,9 @@ func validateWAV(path string) error {
 			format = binary.LittleEndian.Uint16(chunk[0:2])
 			channelCount = binary.LittleEndian.Uint16(chunk[2:4])
 			rate = binary.LittleEndian.Uint32(chunk[4:8])
+			blockAlign = binary.LittleEndian.Uint16(chunk[12:14])
 			bitDepth = binary.LittleEndian.Uint16(chunk[14:16])
+			formatSeen = true
 			if size%2 == 1 {
 				if _, err := io.CopyN(io.Discard, f, 1); err != nil {
 					return errors.New("truncated WAV format padding")
@@ -222,7 +225,7 @@ func validateWAV(path string) error {
 			}
 		}
 	}
-	if format != 1 || channelCount != channels || rate != SampleRate || bitDepth != bits || dataSize == 0 {
+	if !formatSeen || format != 1 || channelCount != channels || rate != SampleRate || bitDepth != bits || blockAlign != channels*bits/8 || dataSize == 0 {
 		return fmt.Errorf("expected PCM %d Hz, %d channel, %d-bit WAV with audio data", SampleRate, channels, bits)
 	}
 	return nil

@@ -106,6 +106,28 @@ func TestPrepareRejectsOutputOverlappingSamples(t *testing.T) {
 	}
 }
 
+func TestPrepareRejectsWAVSymlinkOutsideSamplesDirectory(t *testing.T) {
+	samples := t.TempDir()
+	outside := t.TempDir()
+	writeCorpus(t, samples, "sample\tlinked.wav\tText.\t\n")
+	target := filepath.Join(outside, "outside.wav")
+	writeFile(t, target, []byte("source"))
+	if err := os.Symlink(target, filepath.Join(samples, "linked.wav")); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Prepare(context.Background(), Options{
+		SamplesDir: samples,
+		OutputDir:  filepath.Join(t.TempDir(), "dataset"),
+		ConvertAudio: func(context.Context, string, string) error {
+			t.Fatal("converter called for out-of-directory symlink")
+			return nil
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "resolves outside the samples directory") {
+		t.Fatalf("Prepare error = %v, want outside-samples rejection", err)
+	}
+}
+
 func TestPrepareReportsConversionErrors(t *testing.T) {
 	samples := t.TempDir()
 	writeCorpus(t, samples, "sample\ta.wav\tText.\t\n")
@@ -172,7 +194,8 @@ func wavBytes(rate uint32, channelCount, bitDepth uint16) []byte {
 	buf := make([]byte, 44+dataLen)
 	copy(buf[0:4], "RIFF")
 	binary.LittleEndian.PutUint32(buf[4:8], uint32(len(buf)-8))
-	copy(buf[8:12], "WAVEfmt ")
+	copy(buf[8:12], "WAVE")
+	copy(buf[12:16], "fmt ")
 	binary.LittleEndian.PutUint32(buf[16:20], 16)
 	binary.LittleEndian.PutUint16(buf[20:22], 1)
 	binary.LittleEndian.PutUint16(buf[22:24], channelCount)
