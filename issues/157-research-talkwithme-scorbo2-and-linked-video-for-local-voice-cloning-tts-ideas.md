@@ -1,6 +1,6 @@
 # 157 — research TalkWithMe (scorbo2) and linked video for local voice cloning / TTS ideas
 
-**Status**: Open
+**Status**: Closed — Done; see docs/Roadmap.md close/park section
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Research
