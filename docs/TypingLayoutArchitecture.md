@@ -2,102 +2,81 @@
 
 **Related:** [Issue 129](../issues/129-dotoold-keyboard-layout-must-follow-the-active-input-source-not-the-install-time-layout.md), [Issue 081](../issues/081-install-and-run-a-persistent-dotoold-systemd-user-service.md), [Issue 128](../issues/128-settings-save-should-restart-the-daemon-or-auto-reload-changed-config.md), [VoiceInput.md](VoiceInput.md), [InstallationArchitecture.md](InstallationArchitecture.md)
 
-Why dictated text can come out with `y` and `z` swapped, and how voxi picks the
-keyboard layout it types with. Also records the neighbouring "config change needs a
-restart" pitfalls found in the same investigation.
+Why dictated text can come out with `y` and `z` swapped, and how Voxi keeps
+`dotoold` aligned with the desktop keyboard layout.
 
 ## 1. The two-layout problem
 
 Typing goes through two independent layout lookups:
 
-1. **`dotool`** turns each character into a Linux keycode using its *own* XKB layout,
-   read once at process start from `DOTOOL_XKB_LAYOUT` and `DOTOOL_XKB_VARIANT`.
-2. **The compositor** (GNOME/Mutter) turns those keycodes back into characters using
-   the session's *active input source*.
+1. `dotool` converts each character to a Linux keycode using its XKB layout,
+   read when `dotoold` starts from `DOTOOL_XKB_LAYOUT` and
+   `DOTOOL_XKB_VARIANT`.
+2. The compositor converts that keycode to a character using the active input
+   source.
 
-They only agree if both use the same layout. If dotool assumes `de` and GNOME is on
-`us`, the keycode dotool chose for `z` (the `Y` position on QWERTZ) is read as `y`.
-Symbols, dead keys and umlauts break the same way, and a missing variant
-(`mac-iso`, `nodeadkeys`) breaks them further.
+They agree only when both use the same layout and variant. If dotool assumes
+`de` while GNOME is on `us`, the keycode for `z` can be interpreted as `y`;
+symbols, dead keys, and umlauts can also differ.
 
-Consequences worth remembering:
+The correct setting is the active input source, not the physical keyboard or
+install-time locale. GNOME has one active source for all keyboards, so connecting
+another keyboard does not change the source. In
+`org.gnome.desktop.input-sources`, Voxi selects `sources[current]`; `mru-sources`
+is only an ordering by recent use and does not identify the current selection.
 
-- The correct layout is the **active input source**, not the physical keyboard and not
-  the install-time locale. GNOME has one active source for all keyboards, so attaching
-  an English keyboard to a German laptop changes nothing by itself. The user switches
-  source (for example a profile `EN2` = `us+mac-iso`).
-- The install-time `localectl` X11 layout (`Makefile`, `internal/install`) is baked into
-  `dotoold.service` as `DOTOOL_XKB_LAYOUT`. It is right for a single-layout machine and
-  wrong as soon as the session switches source. Issue 081 required "not hardcoded",
-  which install-time detection satisfied only for a fixed layout.
-- `mru-sources` in `org.gnome.desktop.input-sources` is ordered by recent use and is
-  **not** the active source. Use `sources` indexed by `current`.
+## 2. Runtime behavior
 
-## 2. Current design
+- `internal/inputsource.DetectActive` reads the GNOME source and returns its XKB
+  layout and optional variant. Voxi caches source reads for 500 ms to avoid
+  launching `gsettings` for every eager chunk.
+- When the persistent `dotoold` FIFO is ready, typing compares the detected
+  source with the daemon's configured layout. If they differ, Voxi writes
+  `~/.config/systemd/user/dotoold.service.d/voxi-layout.conf`, runs
+  `systemctl --user daemon-reload`, and restarts `dotoold.service` with the new
+  `DOTOOL_XKB_LAYOUT` and `DOTOOL_XKB_VARIANT`.
+- Voxi waits up to 1.5 seconds for the restarted daemon's FIFO to become ready
+  before sending the `dotoolc` command. Typing operations are serialized across
+  synchronization and injection.
+- If source detection fails, Voxi logs a warning, removes
+  `voxi-layout.conf`, reloads systemd, and restarts the daemon with the
+  install-time layout from its unit. It then waits for the FIFO and continues
+  typing when it is ready.
+- `voxi status` displays the active source, the layout configured for `dotoold`,
+  and whether fallback is active. It also reports detection or layout warnings.
+- Non-GNOME desktops are outside the first-cut detection support. If Voxi cannot
+  detect an XKB source (including unsupported source types), it uses the
+  install-time unit layout and reports fallback in the warning and status.
 
-- `internal/inputsource.DetectActive` runs `gsettings get
-  org.gnome.desktop.input-sources sources` and `current` through
-  `deps.Dependencies.RunOutput`, picks the tuple at index `current`, and splits an XKB id
-  `layout+variant` into `Source{Layout, Variant}`. Non-`xkb` sources (IBus and similar),
-  malformed output and gsettings failure all return an error.
-- `typing.TypeTextObserved` calls it on every injection. On success it runs a
-  **standalone `dotool`** through `deps.RunStdinEnv` with `DOTOOL_XKB_LAYOUT` and,
-  when present, `DOTOOL_XKB_VARIANT`. On error it falls back to the old path: the
-  `dotoold` pipe if ready, else plain `dotool`, with the install-time layout.
-- Modifier gating and `type_delay_ms` are unchanged and run before detection.
+The unit's base `DOTOOL_XKB_LAYOUT` comes from `localectl` at install time and
+can be overridden with `make DOTOOL_XKB_LAYOUT=<layout> install-dotoold`. It is
+the fallback layout; GNOME source changes are applied through the per-user
+`voxi-layout.conf` drop-in.
 
-### Trade-offs of this choice
+## 3. Switch timing
 
-Issue 129 listed two approaches: restart `dotoold` on a layout change, or spawn a
-standalone `dotool` per injection. The shipped one is the second.
+The source cache can lag a desktop switch by up to 500 ms. A switch immediately
+after detection can also race a chunk while Voxi restarts `dotoold`. Typing is
+serialized within Voxi, and the new daemon FIFO is checked before injection, but
+the compositor can still change its source independently. Live acceptance should
+check a Y/Z-sensitive phrase before and after switching between
+`us+mac-iso` and `de+nodeadkeys`.
 
-| | Standalone `dotool` per injection (shipped) | Restart `dotoold` on change |
-| :--- | :--- | :--- |
-| Layout switch | Correct on the next injection, no race | Race between switch and restart |
-| Latency | Process spawn plus `/dev/uinput` device setup per chunk | Keeps the fast FIFO path |
-| State | Stateless | Must track the daemon's layout |
+## 4. Related config-change behavior (issue 128)
 
-The cost is that on GNOME the persistent `dotoold` FIFO path is no longer used at all
-(detection succeeds, so the pipe is never reached). The "<10 ms via named pipe" claim
-in [VoiceInputArchitecture.md](VoiceInputArchitecture.md) now only holds on the
-fallback path. Measure per-chunk spawn cost before deciding whether to move to the
-restart approach; a `dotoold` restart only on detected change would restore it.
+- `voxi eager --daemon` reads `UserSettings` once at start. Saving settings does
+  not reload that process; `voxi settings` offers a restart prompt.
+- `systemctl --user try-restart voxi-agent.service` restarts only a running
+  service. A plain `restart` would start a service the user had stopped.
+- Restarting can interrupt dictation. The settings prompt mitigates this, but
+  the drain and delivery-ledger check in
+  [EagerDeliverySafety.md](EagerDeliverySafety.md) is not implemented.
 
-### Known gaps (issue 129 remaining scope)
+## 5. Testing
 
-- Detection runs two `gsettings` subprocesses per injection; a `dconf` watch could
-  make it event-driven.
-- The fallback silently uses the install-time layout. The issue asks for a logged
-  warning and a `voxi status` line showing layout in use versus active (M3).
-- Non-GNOME compositors (KDE, Sway, Hyprland) always take the fallback.
-- Live verification ("zebra yellow" under `us+mac-iso`, then `de+nodeadkeys`, then back)
-  and `make restart-service` are still owed before the issue can close.
-
-## 3. Config-change pitfalls found alongside (issue 128)
-
-- `voxi eager --daemon` is spawned by `voxi agent --daemon` and reads `UserSettings`
-  **once at start**. Saving in `voxi settings` does not reach it. `make install` does
-  not either, since the running unit keeps the old binary in memory.
-- `voxi settings` now offers a `[y/N]` restart after a successful save, running
-  `systemctl --user try-restart voxi-agent.service`.
-- `try-restart` restarts only a running unit and succeeds silently on an inactive one.
-  A plain `restart` would *start* a service the user had stopped. Wording must say
-  "restart requested (only applies if running)", never "restarted".
-- The restart can interrupt an active dictation, hence the prompt. The drain and
-  delivery-ledger check from the ticket ([EagerDeliverySafety.md](EagerDeliverySafety.md))
-  is not implemented; the prompt only mitigates it.
-- The settings TUI's `Key` is an int enum (`KeyUnknown`..`KeyQuit`), so a rune such as
-  `'y'` can never equal a `Key`. The confirmation is therefore a cooked-mode line read
-  (`confirmRestart`), which also avoids raw-mode terminal state at the prompt.
-- Render each restart outcome separately (declined, requested, failed). An early version
-  printed "restarted" after the user declined.
-
-## 4. Testing notes
-
-- Detection is unit-testable through `deps.Dependencies.RunOutput`; table cases cover
-  `de+nodeadkeys`, `gb+mac`, `us+mac-iso`, no variant and failure.
-- Real typing behaviour depends on the live compositor and cannot be proven by
-  `go test`. The acceptance check is manual, on the machine, with a Y/Z-sensitive
-  phrase.
-- Typing code is on the live daemon path: use `make restart-service`, not
-  `make install`.
+Source parsing is covered by table-driven tests for `de+nodeadkeys`, `gb+mac`,
+`us+mac-iso`, plain layouts, and detection errors. Typing tests use fake
+dependencies to check restart-on-change, unchanged-layout behavior, FIFO
+readiness, fallback restoration and warnings, caching, and status data. Real
+keystroke delivery still requires the live compositor; use the acceptance
+sequence above and `make restart-service` after changing typing code.

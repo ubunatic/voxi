@@ -298,18 +298,29 @@ guided manual test; ordinary `go test` never runs it.
 As of issue 081, the `dotoold` daemon setup above is no longer manual: `make
 install-dotoold` (folded into `install-all`) installs the `dotoold`/`dotoolc` scripts
 shipped alongside `dotool`, installs `systemd/dotoold.service`, and runs `systemctl
---user enable --now dotoold.service`. During GNOME sessions, Voxi detects the active
-input source and runs standalone `dotool` with its current `DOTOOL_XKB_LAYOUT` and
-optional `DOTOOL_XKB_VARIANT`, so switching sources does not require restarting
-`dotoold`. Non-GNOME sessions and detection failures fall back to the install-time
-daemon layout (see [TypingLayoutArchitecture.md](TypingLayoutArchitecture.md)). That
-fallback layout (`DOTOOL_XKB_LAYOUT`) is not hardcoded to `de` — it is auto-detected
-per machine from `localectl status`'s X11 Layout at install time, overridable with
-`make DOTOOL_XKB_LAYOUT=<layout> install-dotoold`. This closed the last gap where telemetry reported `typing_completed:
-success: true` even though nothing was typed: raw one-shot `dotool` exits 0 on an
-ephemeral `/dev/uinput` device the compositor never reliably picks up, while the
-persistent `dotoold` daemon (one stable device, fed via the `dotoolc` pipe) is the path
-this canary actually validated.
+--user enable --now dotoold.service`. Typing uses the persistent `dotoold` virtual
+device and `dotoolc` FIFO. During GNOME sessions, Voxi detects the active input source
+(layout and variant) and compares it with the layout configured for the running
+daemon. When they differ, it writes
+`~/.config/systemd/user/dotoold.service.d/voxi-layout.conf`, reloads the user systemd
+manager, and restarts `dotoold` with the active `DOTOOL_XKB_LAYOUT` and
+`DOTOOL_XKB_VARIANT`. Voxi waits for the FIFO to become ready before sending the next
+typing command.
+
+If source detection fails or is unavailable, Voxi logs a warning, removes the
+`voxi-layout.conf` override, and restarts `dotoold` with its install-time layout.
+The base `DOTOOL_XKB_LAYOUT` is detected from `localectl status`'s X11 Layout during
+installation, with `make DOTOOL_XKB_LAYOUT=<layout> install-dotoold` available as an
+override. Active-source detection currently targets GNOME; other desktop environments
+use this install-time fallback. `voxi status` shows the active source, the layout used
+by `dotoold`, and whether fallback is active. See
+[TypingLayoutArchitecture.md](TypingLayoutArchitecture.md) for cache and switch timing
+details.
+
+The persistent daemon path is required for reliable GNOME/Wayland input. A standalone
+one-shot `dotool` process can exit successfully even when the compositor does not
+receive usable input; Voxi therefore keeps injection FIFO-first and does not replay a
+failed FIFO submission, whose partial-write state is unknown.
 
 ## Streaming (opt-in — see issue 021)
 
