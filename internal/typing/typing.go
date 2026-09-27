@@ -18,6 +18,27 @@ import (
 
 var typingMu sync.Mutex
 
+const sourceCacheTTL = 500 * time.Millisecond
+
+var layoutCache struct {
+	activeKey           string
+	active              inputsource.Source
+	activeErr           error
+	activeAt            time.Time
+	daemonKey           string
+	daemon              inputsource.Source
+	daemonOK            bool
+	fallbackRestoredKey string
+}
+
+// LayoutStatus is the active desktop source and the layout currently used by dotoold.
+type LayoutStatus struct {
+	ActiveSource string
+	Dotoold      string
+	Fallback     bool
+	Warning      string
+}
+
 // InjectionAttempt describes one and only one submission to an injector.
 // PID is zero when the test/legacy dependency boundary cannot expose it.
 type InjectionAttempt struct {
@@ -108,15 +129,15 @@ func TypeTextObserved(ctx context.Context, d deps.Dependencies, text string, obs
 	commands := BuildDotoolCommands(text, typeDelayMs)
 
 	if dotoolDaemonReady(dotoolPipePath(d.Getenv)) {
-		if active, err := inputsource.DetectActive(ctx, d); err == nil {
-			if current, ok := daemonSource(ctx, d); ok && current != active {
-				if err := restartDotooldForSource(ctx, d, active); err != nil {
-					fmt.Fprintf(d.Stderr, "voxi: warning: update dotoold layout to %s: %v; continuing with current layout %s\n", formatSource(active), err, formatSource(current))
-				}
-			}
-		} else {
-			current, _ := daemonSource(ctx, d)
-			fmt.Fprintf(d.Stderr, "voxi: warning: detect active keyboard layout: %v; continuing with dotoold layout %s\n", err, formatSource(current))
+		status, err := synchronizeDotoold(ctx, d)
+		if err != nil {
+			return err
+		}
+		if status.Warning != "" && d.Stderr != nil {
+			fmt.Fprintf(d.Stderr, "voxi: warning: %s\n", status.Warning)
+		}
+		if !dotoolDaemonReady(dotoolPipePath(d.Getenv)) {
+			return fmt.Errorf("dotoold FIFO is not ready after layout synchronization")
 		}
 		// Once a FIFO submission is attempted its partial-write status is
 		// unknowable. Never retry the whole script through standalone dotool.
@@ -139,6 +160,18 @@ func formatSource(source inputsource.Source) string {
 }
 
 func daemonSource(ctx context.Context, d deps.Dependencies) (inputsource.Source, bool) {
+	key := cacheKey(d)
+	if layoutCache.daemonKey == key && layoutCache.daemonOK {
+		return layoutCache.daemon, true
+	}
+	source, ok := readDaemonSource(ctx, d)
+	if ok {
+		layoutCache.daemonKey, layoutCache.daemon, layoutCache.daemonOK = key, source, true
+	}
+	return source, ok
+}
+
+func readDaemonSource(ctx context.Context, d deps.Dependencies) (inputsource.Source, bool) {
 	if d.RunOutput == nil {
 		return inputsource.Source{}, false
 	}
@@ -159,6 +192,122 @@ func daemonSource(ctx context.Context, d deps.Dependencies) (inputsource.Source,
 		return inputsource.Source{}, false
 	}
 	return source, true
+}
+
+func cacheKey(d deps.Dependencies) string {
+	if d.Getenv != nil {
+		return d.Getenv("HOME") + "\x00" + dotoolPipePath(d.Getenv)
+	}
+	return dotoolPipePath(nil)
+}
+
+func detectActiveCached(ctx context.Context, d deps.Dependencies) (inputsource.Source, error) {
+	key := cacheKey(d)
+	if layoutCache.activeKey == key && time.Since(layoutCache.activeAt) < sourceCacheTTL {
+		return layoutCache.active, layoutCache.activeErr
+	}
+	source, err := inputsource.DetectActive(ctx, d)
+	layoutCache.activeKey, layoutCache.active, layoutCache.activeErr, layoutCache.activeAt = key, source, err, time.Now()
+	return source, err
+}
+
+func synchronizeDotoold(ctx context.Context, d deps.Dependencies) (LayoutStatus, error) {
+	active, detectErr := detectActiveCached(ctx, d)
+	current, currentOK := daemonSource(ctx, d)
+	status := LayoutStatus{ActiveSource: formatSource(active), Dotoold: formatSource(current)}
+	if detectErr != nil {
+		status.Fallback = true
+		status.Warning = fmt.Sprintf("detect active keyboard layout: %v; restoring install-time dotoold layout", detectErr)
+		key := cacheKey(d)
+		if layoutCache.fallbackRestoredKey != key {
+			if err := restoreInstallLayout(ctx, d); err != nil {
+				status.Warning += fmt.Sprintf(" (restore failed: %v)", err)
+			} else {
+				layoutCache.fallbackRestoredKey = key
+			}
+		}
+		if restored, ok := readDaemonSource(ctx, d); ok {
+			layoutCache.daemonKey, layoutCache.daemon, layoutCache.daemonOK = cacheKey(d), restored, true
+			status.Dotoold = formatSource(restored)
+		}
+		return status, nil
+	}
+	if layoutCache.fallbackRestoredKey == cacheKey(d) {
+		layoutCache.fallbackRestoredKey = ""
+	}
+	if !currentOK {
+		status.Warning = "cannot read dotoold layout from systemd; using its configured install-time layout"
+		return status, nil
+	}
+	if current != active {
+		if err := restartDotooldForSource(ctx, d, active); err != nil {
+			status.Warning = fmt.Sprintf("update dotoold layout to %s: %v; continuing with current layout %s", formatSource(active), err, formatSource(current))
+			return status, nil
+		}
+		layoutCache.daemonKey, layoutCache.daemon, layoutCache.daemonOK = cacheKey(d), active, true
+		if !waitForDotoolDaemon(ctx, d, 1500*time.Millisecond) {
+			return status, fmt.Errorf("dotoold restarted for %s but its FIFO did not become ready", formatSource(active))
+		}
+		current = active
+	}
+	if layoutCache.fallbackRestoredKey == cacheKey(d) {
+		layoutCache.fallbackRestoredKey = ""
+	}
+	status.Dotoold = formatSource(current)
+	return status, nil
+}
+
+func waitForDotoolDaemon(ctx context.Context, d deps.Dependencies, timeout time.Duration) bool {
+	path := dotoolPipePath(d.Getenv)
+	deadline := time.Now().Add(timeout)
+	for {
+		if dotoolDaemonReady(path) {
+			return true
+		}
+		if ctx.Err() != nil || !time.Now().Before(deadline) {
+			return false
+		}
+		if d.Sleep != nil {
+			d.Sleep(20 * time.Millisecond)
+		} else {
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+}
+
+func restoreInstallLayout(ctx context.Context, d deps.Dependencies) error {
+	if d.Getenv == nil || d.Getenv("HOME") == "" || d.Remove == nil || d.Run == nil {
+		return fmt.Errorf("systemd layout dependencies are unavailable")
+	}
+	path := filepath.Join(d.Getenv("HOME"), ".config", "systemd", "user", "dotoold.service.d", "voxi-layout.conf")
+	if err := d.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if err := d.Run(ctx, "systemctl", "--user", "daemon-reload"); err != nil {
+		return err
+	}
+	if err := d.Run(ctx, "systemctl", "--user", "restart", "dotoold.service"); err != nil {
+		return err
+	}
+	if !waitForDotoolDaemon(ctx, d, 1500*time.Millisecond) {
+		return fmt.Errorf("dotoold FIFO did not become ready after restoring install-time layout")
+	}
+	return nil
+}
+
+// InspectLayout reports source and daemon layout for the top-level status command.
+func InspectLayout(ctx context.Context, d deps.Dependencies) LayoutStatus {
+	typingMu.Lock()
+	defer typingMu.Unlock()
+	active, activeErr := detectActiveCached(ctx, d)
+	daemon, ok := daemonSource(ctx, d)
+	status := LayoutStatus{ActiveSource: formatSource(active), Dotoold: formatSource(daemon), Fallback: activeErr != nil}
+	if activeErr != nil {
+		status.Warning = fmt.Sprintf("active source detection failed: %v", activeErr)
+	} else if !ok {
+		status.Warning = "dotoold layout unavailable"
+	}
+	return status
 }
 
 func restartDotooldForSource(ctx context.Context, d deps.Dependencies, source inputsource.Source) error {

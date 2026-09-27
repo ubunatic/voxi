@@ -1,6 +1,7 @@
 package typing
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -97,6 +98,215 @@ func TestTypeTextSynchronizesDotooldLayoutBeforeFIFO(t *testing.T) {
 				t.Fatalf("drop-in=%q", wrote)
 			}
 		})
+	}
+}
+
+func TestTypeTextWaitsForRestartedFIFOBeforeWriting(t *testing.T) {
+	pipe := filepath.Join(t.TempDir(), "dotool-pipe")
+	if err := syscall.Mkfifo(pipe, 0600); err != nil {
+		t.Fatal(err)
+	}
+	reader, err := os.OpenFile(pipe, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	var restartedReader *os.File
+	var order []string
+	d := deps.Dependencies{
+		Getenv: func(key string) string {
+			if key == "HOME" {
+				return t.TempDir()
+			}
+			if key == "DOTOOL_PIPE" {
+				return pipe
+			}
+			return ""
+		},
+		RunOutput: func(_ context.Context, name string, args ...string) (string, error) {
+			if name == "ibus" {
+				return "", errors.New("no ibus")
+			}
+			if name == "gsettings" {
+				if args[len(args)-1] == "sources" {
+					return "[('xkb', 'us')]", nil
+				}
+				return "uint32 0", nil
+			}
+			return "DOTOOL_XKB_LAYOUT=de", nil
+		},
+		MkdirAll: os.MkdirAll, WriteFile: os.WriteFile,
+		Run: func(_ context.Context, _ string, args ...string) error {
+			if args[len(args)-1] == "dotoold.service" {
+				order = append(order, "restart")
+				if err := os.Remove(pipe); err != nil {
+					return err
+				}
+				if err := syscall.Mkfifo(pipe, 0600); err != nil {
+					return err
+				}
+				restartedReader, err = os.OpenFile(pipe, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+				return err
+			}
+			return nil
+		},
+		RunStdin: func(_ context.Context, _ string, name string, _ ...string) error {
+			order = append(order, name)
+			return nil
+		},
+	}
+	if err := TypeText(context.Background(), d, "text"); err != nil {
+		t.Fatal(err)
+	}
+	if restartedReader == nil {
+		t.Fatal("restart did not create FIFO reader")
+	}
+	defer restartedReader.Close()
+	if got := strings.Join(order, ","); got != "restart,dotoolc" {
+		t.Fatalf("operation order=%q", got)
+	}
+}
+
+func TestTypeTextDetectionFailureRestoresInstallLayoutAndWarns(t *testing.T) {
+	home := t.TempDir()
+	pipe := filepath.Join(t.TempDir(), "dotool-pipe")
+	if err := syscall.Mkfifo(pipe, 0600); err != nil {
+		t.Fatal(err)
+	}
+	reader, err := os.OpenFile(pipe, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	dropin := filepath.Join(home, ".config", "systemd", "user", "dotoold.service.d", "voxi-layout.conf")
+	if err := os.MkdirAll(filepath.Dir(dropin), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dropin, []byte("[Service]\nEnvironment=DOTOOL_XKB_LAYOUT=us\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	var stderr bytes.Buffer
+	var layout = "us"
+	d := deps.Dependencies{
+		Getenv: func(key string) string {
+			if key == "HOME" {
+				return home
+			}
+			if key == "DOTOOL_PIPE" {
+				return pipe
+			}
+			return ""
+		},
+		RunOutput: func(_ context.Context, name string, _ ...string) (string, error) {
+			if name == "ibus" || name == "gsettings" {
+				return "", errors.New("source unavailable")
+			}
+			return "DOTOOL_XKB_LAYOUT=" + layout, nil
+		},
+		Remove: os.Remove, Run: func(_ context.Context, _ string, args ...string) error {
+			if args[len(args)-1] == "dotoold.service" {
+				layout = "de"
+			}
+			return nil
+		},
+		RunStdin: func(_ context.Context, _ string, name string, _ ...string) error {
+			if name != "dotoolc" {
+				t.Fatalf("injector=%q", name)
+			}
+			return nil
+		},
+		Stderr: &stderr,
+	}
+	if err := TypeText(context.Background(), d, "fallback"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(dropin); !os.IsNotExist(err) {
+		t.Fatalf("layout drop-in remains: %v", err)
+	}
+	if !strings.Contains(stderr.String(), "restoring install-time dotoold layout") {
+		t.Fatalf("warning=%q", stderr.String())
+	}
+	status := InspectLayout(context.Background(), d)
+	if !status.Fallback || status.Dotoold != "de" {
+		t.Fatalf("layout status=%+v", status)
+	}
+}
+
+func TestInspectLayoutReportsActiveAndDaemonSources(t *testing.T) {
+	d := deps.Dependencies{
+		Getenv: func(key string) string {
+			if key == "DOTOOL_PIPE" {
+				return t.TempDir() + "/pipe"
+			}
+			return t.TempDir()
+		},
+		RunOutput: func(_ context.Context, name string, args ...string) (string, error) {
+			if name == "ibus" {
+				return "", errors.New("no ibus")
+			}
+			if name == "gsettings" {
+				if args[len(args)-1] == "sources" {
+					return "[('xkb', 'us+mac-iso')]", nil
+				}
+				return "uint32 0", nil
+			}
+			return "DOTOOL_XKB_LAYOUT=us DOTOOL_XKB_VARIANT=mac-iso", nil
+		},
+	}
+	status := InspectLayout(context.Background(), d)
+	if status.ActiveSource != "us+mac-iso" || status.Dotoold != "us+mac-iso" || status.Fallback {
+		t.Fatalf("layout status=%+v", status)
+	}
+}
+
+func TestTypeTextCachesActiveAndDaemonSourceReads(t *testing.T) {
+	pipe := filepath.Join(t.TempDir(), "dotool-pipe")
+	if err := syscall.Mkfifo(pipe, 0600); err != nil {
+		t.Fatal(err)
+	}
+	reader, err := os.OpenFile(pipe, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	home := t.TempDir()
+	var ibusCalls, gsettingsCalls, systemctlCalls int
+	d := deps.Dependencies{
+		Getenv: func(key string) string {
+			if key == "HOME" {
+				return home
+			}
+			if key == "DOTOOL_PIPE" {
+				return pipe
+			}
+			return ""
+		},
+		RunOutput: func(_ context.Context, name string, args ...string) (string, error) {
+			switch name {
+			case "ibus":
+				ibusCalls++
+				return "", errors.New("no ibus")
+			case "gsettings":
+				gsettingsCalls++
+				if args[len(args)-1] == "sources" {
+					return "[('xkb', 'de+nodeadkeys')]", nil
+				}
+				return "uint32 0", nil
+			default:
+				systemctlCalls++
+				return "DOTOOL_XKB_LAYOUT=de DOTOOL_XKB_VARIANT=nodeadkeys", nil
+			}
+		},
+		RunStdin: func(context.Context, string, string, ...string) error { return nil },
+	}
+	if err := TypeText(context.Background(), d, "first"); err != nil {
+		t.Fatal(err)
+	}
+	if err := TypeText(context.Background(), d, "second"); err != nil {
+		t.Fatal(err)
+	}
+	if ibusCalls != 1 || gsettingsCalls != 2 || systemctlCalls != 1 {
+		t.Fatalf("source command calls: ibus=%d gsettings=%d systemctl=%d", ibusCalls, gsettingsCalls, systemctlCalls)
 	}
 }
 

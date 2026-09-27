@@ -80,6 +80,25 @@ func main() {
 	}
 
 	// 2. record command
+	layoutStatusCmd := &cobra.Command{
+		Use:   "status",
+		Short: "Show the active keyboard source and dotoold layout",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			status := typing.InspectLayout(cmd.Context(), d)
+			fallback := "no"
+			if status.Fallback {
+				fallback = "yes"
+			}
+			fmt.Fprintf(d.Stdout, "active source: %s\ndotoold layout: %s\nfallback active: %s\n", status.ActiveSource, status.Dotoold, fallback)
+			if status.Warning != "" {
+				fmt.Fprintf(d.Stdout, "warning: %s\n", status.Warning)
+			}
+			return nil
+		},
+	}
+	root.AddCommand(layoutStatusCmd)
+
 	recordCmd := &cobra.Command{
 		Use:   "record",
 		Short: "Start, stop, or toggle active voice dictation recording",

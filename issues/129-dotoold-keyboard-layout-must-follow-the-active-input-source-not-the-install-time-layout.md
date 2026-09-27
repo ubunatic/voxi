@@ -101,10 +101,7 @@ next manual change.
 - 2026-09-19, `5d5c2c3`: M1 (`internal/inputsource`) and M2 landed, using approach 2
   (standalone `dotool` with `DOTOOL_XKB_LAYOUT`/`DOTOOL_XKB_VARIANT` per injection when
   detection succeeds). `docs/VoiceInput.md` updated in part.
-- Still open: M3 (logged fallback warning, `voxi status` layout line), live acceptance
-  check and `make restart-service`, and measuring the per-injection spawn cost, since
-  the fast `dotoold` pipe is no longer used on GNOME. See
-  [TypingLayoutArchitecture.md](../docs/TypingLayoutArchitecture.md).
+- Still open: live acceptance check and `make restart-service`.
 - 2026-09-27, M2 canary: a disposable user unit started with
   `DOTOOL_XKB_LAYOUT=de` was given a unit-local drop-in with `us` and `mac-iso`,
   followed by `systemctl --user daemon-reload` and restart. The new process
@@ -127,3 +124,11 @@ next manual change.
 3. Cache the daemon source (and ideally the active source) so each chunk does
    not spawn `systemctl show` and `gsettings` synchronously.
 4. Use conventional commit subjects, e.g. `fix(typing): ...`.
+
+- 2026-09-27, M3: bounded FIFO readiness waits after daemon restart; detection
+  failure removes the Voxi layout drop-in and restarts with the unit's
+  install-time layout; active and daemon source reads are cached for 500 ms;
+  `voxi status` reports the active source, dotoold layout, and fallback state.
+  Fake based tests cover readiness ordering, fallback restoration/warning,
+  caching, and status data. `go test ./internal/typing/ ./internal/inputsource/`
+  passed; `go build ./cmd/voxi` passed. Live acceptance and service restart remain.

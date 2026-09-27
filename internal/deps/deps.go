@@ -20,6 +20,7 @@ type Dependencies struct {
 	ReadFile       func(string) ([]byte, error)
 	WriteFile      func(string, []byte, os.FileMode) error
 	MkdirAll       func(string, os.FileMode) error
+	Remove         func(string) error
 	Stat           func(string) (os.FileInfo, error)
 	LookPath       func(string) (string, error)
 	Run            func(context.Context, string, ...string) error
@@ -81,6 +82,7 @@ func DefaultDependencies(in io.Reader, out io.Writer) Dependencies {
 		ReadFile:  os.ReadFile,
 		WriteFile: os.WriteFile,
 		MkdirAll:  os.MkdirAll,
+		Remove:    os.Remove,
 		Stat:      os.Stat,
 		LookPath:  lookPathWithFallbacks,
 		Run: func(ctx context.Context, name string, args ...string) error {
