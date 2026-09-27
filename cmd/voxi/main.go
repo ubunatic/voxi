@@ -158,9 +158,7 @@ func main() {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			eagerOpts.HistorySet = cmd.Flags().Changed("history")
 			eagerOpts.ModifierGatingSet = cmd.Flags().Changed("modifier-gating")
-			if !cmd.Flags().Changed("model") {
-				eagerOpts.Model = ""
-			}
+			eagerOpts.ModelSet = cmd.Flags().Changed("model")
 			return eager.RunEagerDictation(cmd.Context(), d, eagerOpts)
 		},
 	}

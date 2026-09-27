@@ -47,19 +47,7 @@ func (b *EagerChildBackend) Start(ctx context.Context) error {
 		b.mu.Unlock()
 		return err
 	}
-	args := []string{"eager", "--daemon"}
-	// The saved ASR model (voxi settings / VOXI_ASR_MODEL) otherwise never
-	// reaches this child process: `voxi eager`'s own --model flag defaults
-	// to spec/models.yaml's default_model, not the user's setting, so
-	// without this the settings UI's "ASR Model Engine" choice was silently
-	// ignored by the actual running daemon.
-	if settings, err := config.LoadUserSettings(b.d.Getenv("HOME")); err == nil && settings != nil {
-		if settings.ASRModel != "" {
-			args = append(args, "--model", settings.ASRModel)
-		}
-		args = append(args, "--history", strconv.FormatBool(settings.DictationHistory))
-		args = append(args, "--modifier-gating", strconv.FormatBool(settings.ModifierGating))
-	}
+	args := eagerArgs(b.d.Getenv("HOME"))
 	childCtx, cancel := context.WithCancel(ctx)
 	cmd := exec.CommandContext(childCtx, voxiPath, args...)
 	cmd.Stdout = os.Stdout
@@ -81,6 +69,23 @@ func (b *EagerChildBackend) Start(ctx context.Context) error {
 		return err
 	}
 	return nil
+}
+
+func eagerArgs(home string) []string {
+	args := []string{"eager", "--daemon"}
+	// The saved ASR model (voxi settings / VOXI_ASR_MODEL) otherwise never
+	// reaches this child process: `voxi eager`'s own --model flag defaults
+	// to spec/models.yaml's default_model, not the user's setting, so
+	// without this the settings UI's "ASR Model Engine" choice was silently
+	// ignored by the actual running daemon.
+	if settings, err := config.LoadUserSettings(home); err == nil && settings != nil {
+		if settings.ASRModel != "" {
+			args = append(args, "--model", settings.ASRModel)
+		}
+		args = append(args, "--history", strconv.FormatBool(settings.DictationHistory))
+		args = append(args, "--modifier-gating", strconv.FormatBool(settings.ModifierGating))
+	}
+	return args
 }
 
 func (b *EagerChildBackend) Stop(ctx context.Context) error {

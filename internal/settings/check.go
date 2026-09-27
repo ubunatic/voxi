@@ -357,6 +357,7 @@ func checkModifierGating(ctx context.Context, d deps.Dependencies, enabled bool)
 		if _, err := d.ReadFile(statePath); err == nil {
 			item.Status = StatusPass
 			item.Summary = "Enabled; active (system daemon exporting to " + statePath + ")"
+			item.Detail = "Saved gating is applied in eager buffering, direct typing waits, and layout synchronization remains active."
 			return item
 		}
 	}
@@ -367,6 +368,7 @@ func checkModifierGating(ctx context.Context, d deps.Dependencies, enabled bool)
 	if err == nil && trimmed == "active" {
 		item.Status = StatusPass
 		item.Summary = "Enabled; voxi-modifierd.service is active (system daemon)"
+		item.Detail = "Saved gating is applied in eager buffering and direct typing waits."
 		return item
 	}
 

@@ -54,10 +54,15 @@ func TestSavedSettingsRespectExplicitFlags(t *testing.T) {
 
 	explicit := applySavedSettings(EagerOptions{
 		Model: "cli-model", RecordHistory: true, HistorySet: true,
-		ModifierGating: true, ModifierGatingSet: true,
+		ModifierGating: true, ModifierGatingSet: true, ModelSet: true,
 	}, saved)
 	if explicit.Model != "cli-model" || !explicit.RecordHistory || !explicit.ModifierGating {
 		t.Fatalf("explicit CLI values were overridden: %+v", explicit)
+	}
+
+	model := applySavedSettings(EagerOptions{Model: "cli-model", ModelSet: true}, saved)
+	if model.Model != "cli-model" {
+		t.Fatalf("explicit model = %q, want cli-model", model.Model)
 	}
 }
 

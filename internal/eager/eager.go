@@ -49,6 +49,7 @@ type EagerOptions struct {
 	ModifierGating    bool
 	HistorySet        bool
 	ModifierGatingSet bool
+	ModelSet          bool
 	Daemon            bool
 	Model             string
 	SpeechContext     bool
@@ -451,8 +452,7 @@ func applySavedSettings(opts EagerOptions, settings *config.UserSettings) EagerO
 	if !opts.ModifierGatingSet {
 		opts.ModifierGating = settings.ModifierGating
 	}
-	models, err := spec.LoadModels()
-	if err == nil && (opts.Model == "" || opts.Model == models.DefaultModel) {
+	if !opts.ModelSet {
 		opts.Model = settings.ASRModel
 	}
 	return opts
