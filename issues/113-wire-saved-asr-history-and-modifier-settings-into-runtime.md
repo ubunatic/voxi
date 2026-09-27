@@ -38,3 +38,6 @@ The findings are from source inspection; the disabled-history behavior has not y
 - **Milestone 3:** In progress — diagnostics describe effective history/modifier behavior and separate chunk storage; saved settings reach fresh daemon child sessions, while explicit CLI model/history/modifier flags take precedence.
 - **Milestone 3:** Complete — diagnostics explain applied gating/history behavior and chunk storage; fresh agent launches pass saved settings; explicit CLI flag precedence is covered.
 - **Verification:** First `make test-q1` found three drain tests that relied on modifier buffering without setting the new option and one diagnostic assertion that expected hidden detail in terminal output. Updated those test fixtures/assertions; rerunning the quota suite once.
+- **Verification:** `make test-q1` passed after the fixture/assertion corrections; captured at `/tmp/voxi-issue113-test-q1-final.log`, with no `FAIL` matches. `make install` completed. No service restart was run as requested.
+
+**Implementation complete.**
