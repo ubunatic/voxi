@@ -17,6 +17,22 @@ playback:
   # A sample is considered quiet below this full-scale amplitude level.
   trailing_silence_threshold_db: -42
 
+# Cloned-voice synthesis via a separately installed tts-serve HTTP server
+# (issue 155 M1, API in issue 157). Opt-in only: "auto" never selects this
+# backend even when it is reachable; set backend.default_backend or
+# VOXI_TTS_BACKEND to "tts-serve" explicitly.
+tts_serve:
+  # Local tts-serve endpoint; voxi does not install or launch the server.
+  url: "http://127.0.0.1:8000"
+  # Chatterbox on CPU costs about 10s of compute per 1s of audio.
+  timeout_ms: 60000
+  # Reference WAV for voice cloning (issue 153 allowlist); set via voxi voice
+  # tooling in M2. Empty until a voice profile is configured.
+  reference_wav: ""
+  engine: "chatterbox"
+  # Passed through verbatim as the request's "settings" object.
+  settings: {}
+
 # Speech-ready narration through lmcoder.
 llm:
   # Used when ~/.config/voxi/config.yaml and --llm do not select a host.

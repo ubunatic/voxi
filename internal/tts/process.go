@@ -275,6 +275,7 @@ type Engine struct {
 	backend                  string
 	piperModel               string
 	piperConfig              string
+	ttsServeClient           *ttsServeClient
 }
 
 // NewEngine creates a Festival-first engine with espeak-ng fallback.
@@ -311,6 +312,7 @@ func NewEngine(d deps.Dependencies, executable string) *Engine {
 		backend:                  backend,
 		piperModel:               model,
 		piperConfig:              piperConfig,
+		ttsServeClient:           newTTSServeClient(ttsSpec.TTSServe),
 	}
 }
 
@@ -420,6 +422,18 @@ func (e *Engine) Synthesize(ctx context.Context, text string) (audioFile, time.D
 	started := time.Now()
 	backend := e.selectedBackend()
 	model := e.piperModelPath()
+	if backend == "tts-serve" {
+		audio, synthErr := e.ttsServeClient.Synthesize(ctx, text)
+		if synthErr != nil {
+			_ = os.RemoveAll(dir)
+			return audioFile{}, 0, synthErr
+		}
+		if writeErr := os.WriteFile(wavPath, audio, 0o600); writeErr != nil {
+			_ = os.RemoveAll(dir)
+			return audioFile{}, 0, fmt.Errorf("write tts-serve WAV: %w", writeErr)
+		}
+		return e.finishSynthesis(wavPath, dir, started)
+	}
 	if backend == "piper" || (backend == "auto" && model != "") {
 		piper, lookErr := e.deps.LookPath("piper")
 		if !piperModelAvailable(e, model) || lookErr != nil {
@@ -465,7 +479,7 @@ func (e *Engine) Synthesize(ctx context.Context, text string) (audioFile, time.D
 	}
 	if backend != "auto" && backend != "festival" && backend != "espeak-ng" && backend != "piper" {
 		_ = os.RemoveAll(dir)
-		return audioFile{}, 0, fmt.Errorf("unknown TTS backend %q (choose auto, piper, festival, or espeak-ng)", backend)
+		return audioFile{}, 0, fmt.Errorf("unknown TTS backend %q (choose auto, piper, festival, espeak-ng, or tts-serve)", backend)
 	}
 	if festival, lookErr := e.deps.LookPath("text2wave"); lookErr == nil && backend != "espeak-ng" {
 		stdin, err := writeTextFile(dir, text)

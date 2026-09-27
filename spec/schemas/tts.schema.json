@@ -3,13 +3,13 @@
   "title": "Voxi TTS Playback Tuning",
   "description": "Playback tuning for monitor-gated text to speech.",
   "type": "object",
-  "required": ["backend", "piper", "playback", "llm"],
+  "required": ["backend", "piper", "playback", "tts_serve", "llm"],
   "properties": {
     "backend": {
       "type": "object",
       "required": ["default_backend"],
       "properties": {
-        "default_backend": { "type": "string", "enum": ["auto", "piper", "festival", "espeak-ng"] }
+        "default_backend": { "type": "string", "enum": ["auto", "piper", "festival", "espeak-ng", "tts-serve"] }
       },
       "additionalProperties": false
     },
@@ -37,6 +37,32 @@
           "minimum": -80,
           "maximum": -10,
           "description": "PCM amplitude threshold in dBFS; samples below this level count as trailing silence."
+        }
+      },
+      "additionalProperties": false
+    },
+    "tts_serve": {
+      "type": "object",
+      "required": ["url", "timeout_ms", "reference_wav", "engine", "settings"],
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "Local tts-serve HTTP endpoint (issue 157 API); voxi does not install or launch the server."
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 600000,
+          "description": "Request timeout; Chatterbox on CPU costs about 10s of compute per 1s of audio."
+        },
+        "reference_wav": {
+          "type": "string",
+          "description": "Reference WAV for voice cloning; empty until a voice profile is configured."
+        },
+        "engine": { "type": "string" },
+        "settings": {
+          "type": "object",
+          "description": "Passed through verbatim as the request's settings object."
         }
       },
       "additionalProperties": false
