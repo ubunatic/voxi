@@ -1,6 +1,6 @@
 # 155 — integrate cloned-voice TTS backend (Chatterbox via tts-serve)
 
-**Status**: Open
+**Status**: Closed — tts-serve (Chatterbox) cloned-voice backend shipped in 09fbca9, add8ba7, 49af619, 7d8184d; live check pending a running tts-serve server
 **Priority**: P2 (Medium)
 **Severity**: Feature
 **Category**: Feature
@@ -100,3 +100,6 @@ split at clause then word boundaries; parts joined into one WAV. Tests green, ar
    the first part (silent truncation). Return an error instead, and also error when parts' fmt chunks differ.
 2. Unit tests for `parseWAV`/`concatWAV`: two valid parts -> correct RIFF and data sizes and PCM
    order; odd-size chunk padding; mismatched fmt -> error; garbage -> error.
+
+### M4 delivered (7d8184d): strict WAV concat
+Invalid or mismatched WAV parts now return an error; four concat unit tests added. Full suite green.
