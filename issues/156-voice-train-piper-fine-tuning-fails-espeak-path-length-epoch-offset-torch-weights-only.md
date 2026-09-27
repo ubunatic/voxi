@@ -1,6 +1,6 @@
 # 156 — voice train: Piper fine-tuning fails (espeak path length, epoch offset, torch weights_only)
 
-**Status**: Open
+**Status**: Blocked — Parked: Chatterbox via tts-serve (155) replaces Piper fine-tuning
 **Priority**: P3 (Low)
 **Severity**: Major
 **Category**: Bug
