@@ -173,3 +173,8 @@ next manual change.
   writing. Fakes cover proactive restart without injection and immediate typing
   blocked until the device readiness signal. `make test-q1` passed with no
   `FAIL` lines; captured output is `/tmp/voxi-issue129-m5-test.log`.
+- 2026-09-27, `32af120`: M5 delivered (source watcher prewarms dotoold; readiness =
+  gnome-shell opened the new device, measured 0.9-1.6 s). Terra review, open for M6
+  if the live retest shows problems: a chunk that times out after the 5 s wait is
+  dropped with an error, not retried; the watcher holds typingMu during the wait;
+  a readiness timeout may cause repeated restarts every 150 ms tick.
