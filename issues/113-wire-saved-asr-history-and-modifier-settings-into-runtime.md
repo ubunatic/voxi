@@ -28,3 +28,7 @@ The findings are from source inspection; the disabled-history behavior has not y
 - Apply ASR model and modifier gating values in their respective runtime paths, or remove controls that are intentionally unsupported.
 - Make diagnostics report effective behavior rather than merely saved values.
 - Add behavioral tests for each toggle and verify a fresh daemon session uses saved settings. In particular, test that disabled history leaves no new history entry.
+
+## 4. Implementation Progress
+
+- **Milestone 1:** In progress — saved history setting controls accepted eager dictation entries; explicit `--history` wins. Chunk transcript/audio storage remains independent and is called out in diagnostics and settings UI. Behavioral no-entry coverage added.

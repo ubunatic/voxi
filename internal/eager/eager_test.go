@@ -26,8 +26,40 @@ import (
 	"ubunatic.com/voxi/internal/config"
 	"ubunatic.com/voxi/internal/deps"
 	"ubunatic.com/voxi/internal/feedback"
+	"ubunatic.com/voxi/internal/history"
 	"ubunatic.com/voxi/internal/telemetry"
 )
+
+func TestDisabledDictationHistoryDoesNotWriteEntry(t *testing.T) {
+	path := history.HistoryPath(t.TempDir())
+	if err := appendDictationHistory(path, "private spoken words", false); err != nil {
+		t.Fatalf("appendDictationHistory: %v", err)
+	}
+	entries, err := history.ListHistory(path)
+	if err != nil {
+		t.Fatalf("ListHistory: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("history entries = %d, want 0", len(entries))
+	}
+}
+
+func TestSavedSettingsRespectExplicitFlags(t *testing.T) {
+	saved := &config.UserSettings{ASRModel: "saved-model", DictationHistory: false, ModifierGating: false}
+
+	defaultOpts := applySavedSettings(EagerOptions{RecordHistory: true, ModifierGating: true}, saved)
+	if defaultOpts.Model != "saved-model" || defaultOpts.RecordHistory || defaultOpts.ModifierGating {
+		t.Fatalf("saved settings not applied: %+v", defaultOpts)
+	}
+
+	explicit := applySavedSettings(EagerOptions{
+		Model: "cli-model", RecordHistory: true, HistorySet: true,
+		ModifierGating: true, ModifierGatingSet: true,
+	}, saved)
+	if explicit.Model != "cli-model" || !explicit.RecordHistory || !explicit.ModifierGating {
+		t.Fatalf("explicit CLI values were overridden: %+v", explicit)
+	}
+}
 
 func TestAcceptTranscriptRejectsIsolatedSilenceArtifactBeforeTypingAndHistory(t *testing.T) {
 	artifacts := []string{"bye"}

@@ -156,6 +156,11 @@ func main() {
 			"required when an explicit Whisper --model is selected.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			eagerOpts.HistorySet = cmd.Flags().Changed("history")
+			eagerOpts.ModifierGatingSet = cmd.Flags().Changed("modifier-gating")
+			if !cmd.Flags().Changed("model") {
+				eagerOpts.Model = ""
+			}
 			return eager.RunEagerDictation(cmd.Context(), d, eagerOpts)
 		},
 	}
@@ -166,6 +171,7 @@ func main() {
 	eagerCmd.Flags().IntVar(&eagerOpts.MaxWindowMs, "max-window", eagerOpts.MaxWindowMs, "maximum window length in ms before forcing a phrase chunk (default: 8000)")
 	eagerCmd.Flags().BoolVar(&eagerOpts.TypeOutput, "type", eagerOpts.TypeOutput, "type transcribed sentences directly into the focused window via dotool")
 	eagerCmd.Flags().BoolVar(&eagerOpts.RecordHistory, "history", eagerOpts.RecordHistory, "record transcribed utterances into local dictation history")
+	eagerCmd.Flags().BoolVar(&eagerOpts.ModifierGating, "modifier-gating", eagerOpts.ModifierGating, "wait for physical modifiers before typing output")
 	eagerCmd.Flags().BoolVar(&eagerOpts.Daemon, "daemon", eagerOpts.Daemon, "run as background systemd daemon listening for toggle control")
 	eagerCmd.Flags().StringVar(&eagerOpts.Model, "model", eagerOpts.Model, fmt.Sprintf("model name, see spec/models.yaml (default: %s, engine cohere-transcribe via crispasr; explicit whisper-engine models need voxtype)", eagerOpts.Model))
 	eagerCmd.Flags().BoolVar(&eagerOpts.SpeechContext, "speech-context", eagerOpts.SpeechContext, "bounded local vocabulary hints for Whisper small.en (default: on; ignored by default Cohere; use --speech-context=false to disable)")

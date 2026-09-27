@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"sync"
 	"time"
 
@@ -52,8 +53,12 @@ func (b *EagerChildBackend) Start(ctx context.Context) error {
 	// to spec/models.yaml's default_model, not the user's setting, so
 	// without this the settings UI's "ASR Model Engine" choice was silently
 	// ignored by the actual running daemon.
-	if settings, err := config.LoadUserSettings(b.d.Getenv("HOME")); err == nil && settings.ASRModel != "" {
-		args = append(args, "--model", settings.ASRModel)
+	if settings, err := config.LoadUserSettings(b.d.Getenv("HOME")); err == nil && settings != nil {
+		if settings.ASRModel != "" {
+			args = append(args, "--model", settings.ASRModel)
+		}
+		args = append(args, "--history", strconv.FormatBool(settings.DictationHistory))
+		args = append(args, "--modifier-gating", strconv.FormatBool(settings.ModifierGating))
 	}
 	childCtx, cancel := context.WithCancel(ctx)
 	cmd := exec.CommandContext(childCtx, voxiPath, args...)

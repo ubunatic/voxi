@@ -39,17 +39,20 @@ import (
 
 // EagerOptions holds configuration parameters for Continuous Eager Sentence Streaming dictation.
 type EagerOptions struct {
-	ThresholdRMS  int
-	SilenceMs     int
-	PreRollMs     int
-	MinSpeechMs   int
-	MaxWindowMs   int
-	TypeOutput    bool
-	RecordHistory bool
-	Daemon        bool
-	Model         string
-	SpeechContext bool
-	Vocabulary    []string
+	ThresholdRMS      int
+	SilenceMs         int
+	PreRollMs         int
+	MinSpeechMs       int
+	MaxWindowMs       int
+	TypeOutput        bool
+	RecordHistory     bool
+	ModifierGating    bool
+	HistorySet        bool
+	ModifierGatingSet bool
+	Daemon            bool
+	Model             string
+	SpeechContext     bool
+	Vocabulary        []string
 }
 
 // DefaultEagerOptions returns standard defaults for eager sentence streaming dictation.
@@ -62,16 +65,17 @@ func DefaultEagerOptions() EagerOptions {
 		panic(err)
 	}
 	return EagerOptions{
-		ThresholdRMS:  150,
-		SilenceMs:     800,
-		PreRollMs:     500,
-		MinSpeechMs:   200,
-		MaxWindowMs:   8000,
-		TypeOutput:    true,
-		RecordHistory: true,
-		Daemon:        false,
-		Model:         s.DefaultModel,
-		SpeechContext: true,
+		ThresholdRMS:   150,
+		SilenceMs:      800,
+		PreRollMs:      500,
+		MinSpeechMs:    200,
+		MaxWindowMs:    8000,
+		TypeOutput:     true,
+		RecordHistory:  true,
+		ModifierGating: true,
+		Daemon:         false,
+		Model:          s.DefaultModel,
+		SpeechContext:  true,
 	}
 }
 
@@ -378,6 +382,10 @@ func checkEagerModelReady(ctx context.Context, d deps.Dependencies, opts EagerOp
 // default, Whisper via voxtype for an explicit Whisper --model), instant text typing via
 // dotool, and history appending.
 func RunEagerDictation(ctx context.Context, d deps.Dependencies, opts EagerOptions) error {
+	settings, _ := config.LoadUserSettings(d.Getenv("HOME"))
+	if settings != nil {
+		opts = applySavedSettings(opts, settings)
+	}
 	if opts.Daemon {
 		return runEagerDaemon(ctx, d, opts)
 	}
@@ -431,6 +439,23 @@ func RunEagerDictation(ctx context.Context, d deps.Dependencies, opts EagerOptio
 	// without the daemon's socket/signal listener. This standalone CLI
 	// invocation keeps its existing immediate-type behavior.
 	return runEagerCaptureSessionAt(ctx, d, opts, tmpDir, recCmdName, recArgs, false, sessionID, nil, recorder, nil, nil)
+}
+
+func applySavedSettings(opts EagerOptions, settings *config.UserSettings) EagerOptions {
+	if settings == nil {
+		return opts
+	}
+	if !opts.HistorySet {
+		opts.RecordHistory = settings.DictationHistory
+	}
+	if !opts.ModifierGatingSet {
+		opts.ModifierGating = settings.ModifierGating
+	}
+	models, err := spec.LoadModels()
+	if err == nil && (opts.Model == "" || opts.Model == models.DefaultModel) {
+		opts.Model = settings.ASRModel
+	}
+	return opts
 }
 
 // runEagerCaptureSession runs one audio-capture + sequential-transcription
@@ -812,7 +837,11 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 					// transWg.Wait() below) releases it -- since a modifier press
 					// going stale mid-buffer does not retroactively make it safe
 					// to type into whatever now has focus.
-					if buffer, justEntered := eagerBuf.EnterIfNeeded(sessions, modifierTimeout); buffer {
+					buffer, justEntered := false, false
+					if opts.ModifierGating {
+						buffer, justEntered = eagerBuf.EnterIfNeeded(sessions, modifierTimeout)
+					}
+					if buffer {
 						eagerBuf.AppendDelivery(chunkID, text+" ", job.Index, chunkMeta)
 						if justEntered {
 							eagerBuf.ScheduleNotify(d, modifierNotifyDelay)
@@ -839,7 +868,7 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 							continue
 						}
 						injectCtx, cancelInject := newInjectionContext(injectionTimeout)
-						typeErr := typing.TypeTextObserved(injectCtx, d, text+" ", &injectorObserver{recorder: recorder, output: d.Stdout, sessionID: sessionID, chunkID: chunkID, chunkIndex: job.Index, deliveryID: chunkID})
+						typeErr := typing.TypeTextObservedWithGating(injectCtx, d, text+" ", &injectorObserver{recorder: recorder, output: d.Stdout, sessionID: sessionID, chunkID: chunkID, chunkIndex: job.Index, deliveryID: chunkID}, opts.ModifierGating)
 						cancelInject()
 						typeEnd := time.Now()
 						typeSuccess := typeErr == nil
@@ -855,8 +884,8 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 					}
 				}
 
-				if historyPath != "" {
-					_, _ = history.AppendHistory(historyPath, text, history.DefaultHistoryLimit, time.Now())
+				if err := appendDictationHistory(historyPath, text, opts.RecordHistory); err != nil {
+					reportEagerFailure(d, "history", sessionID, chunkID, err)
 				}
 
 				recordEagerStat(UtteranceStat{
@@ -1058,7 +1087,7 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 			typeStart := time.Now()
 			_ = recorder.Record(telemetry.Event{Event: telemetry.TypingStarted, Timestamp: typeStart, SessionID: sessionID, ChunkID: item.ID, ChunkIndex: item.Index, DeliveryID: item.ID, Attempt: 1})
 			injectCtx, cancelInject := newInjectionContext(injectionTimeout)
-			typeErr := typing.TypeTextObserved(injectCtx, d, item.Text, &injectorObserver{recorder: recorder, output: d.Stdout, sessionID: sessionID, chunkID: item.ID, chunkIndex: item.Index, deliveryID: item.ID})
+			typeErr := typing.TypeTextObservedWithGating(injectCtx, d, item.Text, &injectorObserver{recorder: recorder, output: d.Stdout, sessionID: sessionID, chunkID: item.ID, chunkIndex: item.Index, deliveryID: item.ID}, opts.ModifierGating)
 			cancelInject()
 			typeEnd := time.Now()
 			typeSuccess := typeErr == nil
@@ -1087,6 +1116,14 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 	}
 
 	return nil
+}
+
+func appendDictationHistory(path, text string, enabled bool) error {
+	if !enabled || path == "" {
+		return nil
+	}
+	_, err := history.AppendHistory(path, text, history.DefaultHistoryLimit, time.Now())
+	return err
 }
 
 func beginPlaybackMute(ctx context.Context, d deps.Dependencies) {
@@ -1804,20 +1841,22 @@ func runEagerDaemon(ctx context.Context, d deps.Dependencies, opts EagerOptions)
 	// noisy in practice, is a one-line change to the mask check below, not
 	// an architectural one). Polls at the same 10ms cadence
 	// modifiers.WaitModifiersReleased already uses.
-	go func() {
-		ticker := time.NewTicker(10 * time.Millisecond)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				if active, _ := modifiers.AreModifiersActive(); active {
-					sessions.NoteModifierPress(time.Now())
+	if opts.ModifierGating {
+		go func() {
+			ticker := time.NewTicker(10 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					if active, _ := modifiers.AreModifiersActive(); active {
+						sessions.NoteModifierPress(time.Now())
+					}
 				}
 			}
-		}
-	}()
+		}()
+	}
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGUSR1, syscall.SIGUSR2)
