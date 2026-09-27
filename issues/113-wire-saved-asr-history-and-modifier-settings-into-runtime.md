@@ -41,3 +41,10 @@ The findings are from source inspection; the disabled-history behavior has not y
 - **Verification:** `make test-q1` passed after the fixture/assertion corrections; captured at `/tmp/voxi-issue113-test-q1-final.log`, with no `FAIL` matches. `make install` completed. No service restart was run as requested.
 
 **Implementation complete.**
+
+### M4 Pre-Work / Required Refinements (terra review of 137bbe4..9c0045b)
+
+1. `voxi history record` (cmd/voxi/main.go) still calls `history.AppendHistory`
+   unconditionally; honor the disabled history setting there too, with a test.
+2. Add a test that gating off still runs the issue 129 layout sync under
+   `typingMu` (public TypeText path, not only the private helper).
