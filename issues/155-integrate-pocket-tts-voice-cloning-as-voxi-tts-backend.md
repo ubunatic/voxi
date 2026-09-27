@@ -49,3 +49,18 @@ not install or launch the Python server in this ticket. Piper stays the default 
   can start before the whole text is synthesized, and a sane default timeout.
 - Update `docs/TTSReading.md` (setup, consent: own voice only, RAM ~8 GB, latency).
 - Acceptance: unit tests; one live end-to-end check if a tts-serve server is running, else document skip.
+
+### M1 delivered (09fbca9): spec + HTTP client
+`tts_serve` spec block, opt-in `tts-serve` backend (auto never picks it), `internal/tts/ttsserve.go`
+client with httptest coverage. Tests green.
+
+### M2 Pre-Work / Required Refinements (from M1 review)
+1. **Request shape unverified:** issue 157 says engine-specific parameters "vary by engine"; the client
+   nests them under a `settings` object and sends an `engine` field. Check the tts-serve source
+   (tts-engine-common request model, Chatterbox impl) and match it (likely flat top-level keys, no
+   `engine` field). Record the source link in a code comment.
+2. **reference_wav is not user-settable:** the spec is embedded, so an empty `reference_wav` can only
+   change by rebuilding. The M2 voice profile path (`~/.local/share/voxi/voices/`) or user config must
+   supply it at runtime; the spec keeps only the default.
+3. **Timeout vs latency:** 60 s covers only ~6 s of audio on CPU. Sentence chunking (M2) must keep each
+   request well under the timeout; add a test that long text becomes several requests.
