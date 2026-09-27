@@ -1,6 +1,6 @@
 # 129 — dotoold keyboard layout must follow the active input source, not the install-time layout
 
-**Status**: Open
+**Status**: Closed — M1-M5 done; live switching test passed
 **Priority**: P1 (High)
 **Severity**: Major
 **Category**: Bug
