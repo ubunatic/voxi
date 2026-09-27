@@ -1,6 +1,6 @@
 # 149 — Personalized Speaker Voice Model (my-voice) for TTS Synthesis
 
-**Status**: Open
+**Status**: Closed — Folded into 155 (Chatterbox via tts-serve)
 **Priority**: P3 (Low)
 **Severity**: Minor
 **Category**: Feature
