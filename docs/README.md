@@ -48,6 +48,7 @@ In-depth references for architecture, decisions, and operations of the Voxi Linu
 | [studies/2026-09-15-agy-cleanup-latency-and-session-strategies.md](studies/2026-09-15-agy-cleanup-latency-and-session-strategies.md) | agy (Antigravity) subprocess latency for LLM transcript cleanup: cold-spawn vs -c vs persistent stream-JSON, the ~13k-token fixed tool-schema tax, and the local-model near-miss timeout finding that came from live dictation during the same investigation |
 | [studies/2026-09-26-ansi-design-tour-and-compact-monitor.md](studies/2026-09-26-ansi-design-tour-and-compact-monitor.md) | Terminal User Interface (TUI), ANSI design prototyping, `voxi monitor --compact`, visual CLI testing, display width calculation, Go text layout engines, and Web App comparative engineering effort. |
 | [studies/2026-09-26-linux-desktop-tts-reading-pipeline.md](studies/2026-09-26-linux-desktop-tts-reading-pipeline.md) | Text-to-Speech (TTS) engine, GNOME Wayland selection reading hotkeys, LLM document narration, pip-free native Piper ONNX runtime, multi-voice library, and persistent systemd daemon queue ownership with STT recording epoch muting. |
+| [studies/2026-09-27-local-voice-cloning-research.md](studies/2026-09-27-local-voice-cloning-research.md) | Local voice cloning research (2026-09-27) |
 
 
 <!-- End of studies index. -->
