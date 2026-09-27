@@ -1,17 +1,24 @@
 package tts
 
 import (
+	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
 
 	"ubunatic.com/voxi/internal/deps"
+	"ubunatic.com/voxi/spec"
 )
 
 func TestEngineBackendStatusReportsPreferredFallbackAndMissing(t *testing.T) {
@@ -177,6 +184,63 @@ func TestSynthesizeExplicitPiperFailsWhenExecutableOrModelMissing(t *testing.T) 
 	}, "/usr/bin/voxi")
 	if _, _, err := engine.Synthesize(ctx, "hello"); err == nil || !strings.Contains(err.Error(), "piper executable not found") {
 		t.Fatalf("expected piper not found error, got: %v", err)
+	}
+}
+
+func TestTTSServeEngineSendsOneRequestPerSentenceChunk(t *testing.T) {
+	referenceWav := filepath.Join(t.TempDir(), "reference.wav")
+	if err := os.WriteFile(referenceWav, []byte("RIFF-fake-reference-wav"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.Mutex
+	var gotTexts []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
+		mu.Lock()
+		gotTexts = append(gotTexts, fmt.Sprint(req["text"]))
+		mu.Unlock()
+		resp := ttsServeResponse{AudioBase64: base64.StdEncoding.EncodeToString([]byte("RIFF-fake-audio"))}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	engine := &Engine{
+		deps:                 deps.Dependencies{},
+		backend:              "tts-serve",
+		ttsServeReferenceWav: referenceWav,
+		ttsServeClient: newTTSServeClient(spec.TTSServeSpec{
+			URL:       server.URL,
+			TimeoutMs: 1000, // far below the ~10s/1s-audio latency a whole long text would need
+			Engine:    "chatterbox",
+		}),
+	}
+
+	longText := "First sentence here. Second sentence follows. A third one wraps it up."
+	chunks := SplitText(longText)
+	if len(chunks) < 2 {
+		t.Fatalf("SplitText(longText) = %d chunk(s), want at least 2 to exercise chunked requests", len(chunks))
+	}
+	for _, chunk := range chunks {
+		audio, _, err := engine.Synthesize(context.Background(), chunk)
+		if err != nil {
+			t.Fatalf("Synthesize(%q) error = %v", chunk, err)
+		}
+		_ = audio.Close()
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(gotTexts) != len(chunks) {
+		t.Fatalf("tts-serve received %d request(s), want one per chunk (%d): %v", len(gotTexts), len(chunks), gotTexts)
+	}
+	for i, chunk := range chunks {
+		if gotTexts[i] != chunk {
+			t.Errorf("request %d text = %q, want chunk %q", i, gotTexts[i], chunk)
+		}
 	}
 }
 

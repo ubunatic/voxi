@@ -24,13 +24,21 @@ playback:
 tts_serve:
   # Local tts-serve endpoint; voxi does not install or launch the server.
   url: "http://127.0.0.1:8000"
-  # Chatterbox on CPU costs about 10s of compute per 1s of audio.
+  # Chatterbox on CPU costs about 10s of compute per 1s of audio. Text is sent
+  # sentence-chunked (see internal/tts.SplitText), so each request only needs
+  # to cover one sentence's audio, well under this ceiling.
   timeout_ms: 60000
-  # Reference WAV for voice cloning (issue 153 allowlist); set via voxi voice
-  # tooling in M2. Empty until a voice profile is configured.
+  # Default reference WAV; stays empty here. `voxi voice clone` (issue 155 M2)
+  # writes the resolved voice profile to tts_serve_reference_wav in
+  # ~/.config/voxi/config.yaml (or set VOXI_TTS_SERVE_REFERENCE_WAV) instead of
+  # rebuilding, because the wrapped engine requires a non-empty reference clip.
   reference_wav: ""
+  # Each tts-serve instance wraps one engine; "chatterbox" is descriptive only
+  # (used in error messages) and is not sent in the request.
   engine: "chatterbox"
-  # Passed through verbatim as the request's "settings" object.
+  # Merged as flat top-level request fields (e.g. seed, exaggeration,
+  # cfg_weight) -- the wrapped engine's schema has no nested "settings" object
+  # and rejects unknown top-level keys (issue 155 M2 pre-work).
   settings: {}
 
 # Speech-ready narration through lmcoder.

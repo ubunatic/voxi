@@ -15,17 +15,16 @@ import (
 
 func newTestTTSServeSpec(url string) spec.TTSServeSpec {
 	return spec.TTSServeSpec{
-		URL:          url,
-		TimeoutMs:    5000,
-		ReferenceWav: "",
-		Engine:       "chatterbox",
-		Settings:     map[string]any{"seed": 42},
+		URL:       url,
+		TimeoutMs: 5000,
+		Engine:    "chatterbox",
+		Settings:  map[string]any{"seed": 42},
 	}
 }
 
 func TestTTSServeClientRequestShape(t *testing.T) {
 	referenceWav := []byte("RIFF-fake-wav-bytes")
-	var gotRequest ttsServeRequest
+	var gotRequest map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Errorf("method = %q, want POST", r.Method)
@@ -49,51 +48,40 @@ func TestTTSServeClientRequestShape(t *testing.T) {
 	s := newTestTTSServeSpec(server.URL)
 	client := newTTSServeClient(s)
 	client.readFile = func(path string) ([]byte, error) { return referenceWav, nil }
-	client.referenceWav = "/fake/reference.wav"
 
-	audio, err := client.Synthesize(context.Background(), "hello world")
+	audio, err := client.Synthesize(context.Background(), "hello world", "/fake/reference.wav")
 	if err != nil {
 		t.Fatalf("Synthesize() error = %v", err)
 	}
 	if string(audio) != "RIFF-fake-response-wav" {
 		t.Errorf("audio = %q, want decoded response WAV", audio)
 	}
-	if gotRequest.Text != "hello world" {
-		t.Errorf("request text = %q, want %q", gotRequest.Text, "hello world")
+	if gotRequest["text"] != "hello world" {
+		t.Errorf("request text = %v, want %q", gotRequest["text"], "hello world")
 	}
-	if gotRequest.Engine != "chatterbox" {
-		t.Errorf("request engine = %q, want chatterbox", gotRequest.Engine)
+	if _, hasEngine := gotRequest["engine"]; hasEngine {
+		t.Errorf("request must not include an \"engine\" field (each tts-serve instance wraps one engine)")
+	}
+	if _, hasSettings := gotRequest["settings"]; hasSettings {
+		t.Errorf("request must not nest engine-specific parameters under \"settings\" (flat top-level keys)")
 	}
 	wantAudioB64 := base64.StdEncoding.EncodeToString(referenceWav)
-	if gotRequest.AudioBase64 != wantAudioB64 {
-		t.Errorf("request audio_base64 = %q, want %q", gotRequest.AudioBase64, wantAudioB64)
+	if gotRequest["audio_base64"] != wantAudioB64 {
+		t.Errorf("request audio_base64 = %v, want %q", gotRequest["audio_base64"], wantAudioB64)
 	}
-	if seed, ok := gotRequest.Settings["seed"].(float64); !ok || seed != 42 {
-		t.Errorf("request settings[seed] = %v, want 42", gotRequest.Settings["seed"])
+	if seed, ok := gotRequest["seed"].(float64); !ok || seed != 42 {
+		t.Errorf("request seed = %v, want 42 as a flat top-level field", gotRequest["seed"])
 	}
 }
 
-func TestTTSServeClientSuccessWithoutReferenceWav(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req ttsServeRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			t.Fatalf("decode request: %v", err)
-		}
-		if req.AudioBase64 != "" {
-			t.Errorf("audio_base64 = %q, want empty when no reference WAV configured", req.AudioBase64)
-		}
-		resp := ttsServeResponse{AudioBase64: base64.StdEncoding.EncodeToString([]byte("wav-bytes"))}
-		_ = json.NewEncoder(w).Encode(resp)
-	}))
-	defer server.Close()
-
-	client := newTTSServeClient(newTestTTSServeSpec(server.URL))
-	audio, err := client.Synthesize(context.Background(), "hi")
-	if err != nil {
-		t.Fatalf("Synthesize() error = %v", err)
+func TestTTSServeClientRequiresReferenceWav(t *testing.T) {
+	client := newTTSServeClient(newTestTTSServeSpec("http://127.0.0.1:1"))
+	_, err := client.Synthesize(context.Background(), "hi", "")
+	if err == nil {
+		t.Fatal("Synthesize() error = nil, want error when no reference WAV is configured")
 	}
-	if string(audio) != "wav-bytes" {
-		t.Errorf("audio = %q, want wav-bytes", audio)
+	if !strings.Contains(err.Error(), "reference WAV") {
+		t.Errorf("error = %v, want it to explain that a reference WAV is required", err)
 	}
 }
 
@@ -105,7 +93,8 @@ func TestTTSServeClientNon200(t *testing.T) {
 	defer server.Close()
 
 	client := newTTSServeClient(newTestTTSServeSpec(server.URL))
-	_, err := client.Synthesize(context.Background(), "hi")
+	client.readFile = func(path string) ([]byte, error) { return []byte("wav"), nil }
+	_, err := client.Synthesize(context.Background(), "hi", "/fake/reference.wav")
 	if err == nil {
 		t.Fatal("Synthesize() error = nil, want error for HTTP 500")
 	}
@@ -129,8 +118,9 @@ func TestTTSServeClientTimeout(t *testing.T) {
 	s.TimeoutMs = 1000
 	client := newTTSServeClient(s)
 	client.timeout = 50 * time.Millisecond
+	client.readFile = func(path string) ([]byte, error) { return []byte("wav"), nil }
 
-	_, err := client.Synthesize(context.Background(), "hi")
+	_, err := client.Synthesize(context.Background(), "hi", "/fake/reference.wav")
 	if err == nil {
 		t.Fatal("Synthesize() error = nil, want timeout error")
 	}
@@ -145,8 +135,9 @@ func TestTTSServeClientTimeout(t *testing.T) {
 func TestTTSServeClientUnreachable(t *testing.T) {
 	client := newTTSServeClient(newTestTTSServeSpec("http://127.0.0.1:1"))
 	client.timeout = time.Second
+	client.readFile = func(path string) ([]byte, error) { return []byte("wav"), nil }
 
-	_, err := client.Synthesize(context.Background(), "hi")
+	_, err := client.Synthesize(context.Background(), "hi", "/fake/reference.wav")
 	if err == nil {
 		t.Fatal("Synthesize() error = nil, want error for unreachable server")
 	}
@@ -160,17 +151,16 @@ func TestTTSServeClientUnreachable(t *testing.T) {
 
 func TestTTSServeClientReferenceWavReadError(t *testing.T) {
 	client := newTTSServeClient(newTestTTSServeSpec("http://127.0.0.1:1"))
-	client.referenceWav = "/missing/reference.wav"
 	client.readFile = func(path string) ([]byte, error) {
 		return nil, &pathError{path: path}
 	}
 
-	_, err := client.Synthesize(context.Background(), "hi")
+	_, err := client.Synthesize(context.Background(), "hi", "/missing/reference.wav")
 	if err == nil {
 		t.Fatal("Synthesize() error = nil, want reference WAV read error")
 	}
-	if !strings.Contains(err.Error(), "tts_serve.reference_wav") {
-		t.Errorf("error = %v, want it to name the tts_serve.reference_wav spec setting", err)
+	if !strings.Contains(err.Error(), "tts_serve_reference_wav") {
+		t.Errorf("error = %v, want it to name the tts_serve_reference_wav setting", err)
 	}
 	if !strings.Contains(err.Error(), "/missing/reference.wav") {
 		t.Errorf("error = %v, want it to name the reference WAV path", err)

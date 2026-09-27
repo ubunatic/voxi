@@ -276,6 +276,7 @@ type Engine struct {
 	piperModel               string
 	piperConfig              string
 	ttsServeClient           *ttsServeClient
+	ttsServeReferenceWav     string
 }
 
 // NewEngine creates a Festival-first engine with espeak-ng fallback.
@@ -304,6 +305,10 @@ func NewEngine(d deps.Dependencies, executable string) *Engine {
 	if piperConfig == "" {
 		piperConfig = ttsSpec.Piper.Config
 	}
+	referenceWav := settings.TTSServeReferenceWav
+	if referenceWav == "" {
+		referenceWav = ttsSpec.TTSServe.ReferenceWav
+	}
 	return &Engine{
 		deps:                     d,
 		executable:               executable,
@@ -313,6 +318,7 @@ func NewEngine(d deps.Dependencies, executable string) *Engine {
 		piperModel:               model,
 		piperConfig:              piperConfig,
 		ttsServeClient:           newTTSServeClient(ttsSpec.TTSServe),
+		ttsServeReferenceWav:     referenceWav,
 	}
 }
 
@@ -377,17 +383,27 @@ func (e *Engine) piperModelPath() string {
 	if e.deps.Getenv != nil && strings.TrimSpace(e.deps.Getenv("VOXI_PIPER_MODEL")) != "" {
 		return strings.TrimSpace(e.deps.Getenv("VOXI_PIPER_MODEL"))
 	}
-	return expandPiperHome(strings.TrimSpace(e.piperModel), e.deps.Getenv)
+	return expandUserHome(strings.TrimSpace(e.piperModel), e.deps.Getenv)
 }
 
 func (e *Engine) piperConfigPath() string {
 	if e.deps.Getenv != nil && strings.TrimSpace(e.deps.Getenv("VOXI_PIPER_CONFIG")) != "" {
 		return strings.TrimSpace(e.deps.Getenv("VOXI_PIPER_CONFIG"))
 	}
-	return expandPiperHome(strings.TrimSpace(e.piperConfig), e.deps.Getenv)
+	return expandUserHome(strings.TrimSpace(e.piperConfig), e.deps.Getenv)
 }
 
-func expandPiperHome(path string, getenv func(string) string) string {
+// ttsServeReferenceWavPath resolves the voice profile WAV for the tts-serve
+// backend: VOXI_TTS_SERVE_REFERENCE_WAV, then tts_serve_reference_wav in user
+// config (set by `voxi voice clone`), then the embedded spec default (empty).
+func (e *Engine) ttsServeReferenceWavPath() string {
+	if e.deps.Getenv != nil && strings.TrimSpace(e.deps.Getenv("VOXI_TTS_SERVE_REFERENCE_WAV")) != "" {
+		return strings.TrimSpace(e.deps.Getenv("VOXI_TTS_SERVE_REFERENCE_WAV"))
+	}
+	return expandUserHome(strings.TrimSpace(e.ttsServeReferenceWav), e.deps.Getenv)
+}
+
+func expandUserHome(path string, getenv func(string) string) string {
 	if path != "~" && !strings.HasPrefix(path, "~/") {
 		return path
 	}
@@ -423,7 +439,7 @@ func (e *Engine) Synthesize(ctx context.Context, text string) (audioFile, time.D
 	backend := e.selectedBackend()
 	model := e.piperModelPath()
 	if backend == "tts-serve" {
-		audio, synthErr := e.ttsServeClient.Synthesize(ctx, text)
+		audio, synthErr := e.ttsServeClient.Synthesize(ctx, text, e.ttsServeReferenceWavPath())
 		if synthErr != nil {
 			_ = os.RemoveAll(dir)
 			return audioFile{}, 0, synthErr

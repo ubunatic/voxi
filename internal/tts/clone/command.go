@@ -13,7 +13,7 @@ import (
 // NewCommand creates the voice management command.
 func NewCommand(d deps.Dependencies) *cobra.Command {
 	voice := &cobra.Command{Use: "voice", Short: "Prepare and train custom Piper voices"}
-	voice.AddCommand(NewPrepareCommand(d), NewTrainCommand(d))
+	voice.AddCommand(NewPrepareCommand(d), NewTrainCommand(d), NewCloneCommand(d))
 	return voice
 }
 

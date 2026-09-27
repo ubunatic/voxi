@@ -35,6 +35,9 @@ type UserSettings struct {
 	TTSBackend       string `json:"tts_backend,omitempty" yaml:"tts_backend,omitempty"`
 	TTSPiperModel    string `json:"tts_piper_model,omitempty" yaml:"tts_piper_model,omitempty"`
 	TTSPiperConfig   string `json:"tts_piper_config,omitempty" yaml:"tts_piper_config,omitempty"`
+	// TTSServeReferenceWav overrides spec/tts.yaml's tts_serve.reference_wav
+	// (which stays empty). Set by `voxi voice clone` (issue 155 M2) or by hand.
+	TTSServeReferenceWav string `json:"tts_serve_reference_wav,omitempty" yaml:"tts_serve_reference_wav,omitempty"`
 }
 
 // DefaultUserSettings returns standard user settings.
@@ -101,6 +104,55 @@ func SetTTSEnabled(home string, enabled bool) error {
 		return fmt.Errorf("encode %s: %w", path, err)
 	}
 	return WriteConfigAtomic(path, encoded)
+}
+
+// SetTTSServeReferenceWav updates only tts_serve_reference_wav in config.yaml,
+// preserving other keys and their comments, for `voxi voice clone` (issue 155 M2).
+func SetTTSServeReferenceWav(home, path string) error {
+	if home == "" {
+		if h, err := os.UserHomeDir(); err == nil {
+			home = h
+		}
+	}
+	cfgPath := VoxiConfigYAMLPath(home)
+	data, err := os.ReadFile(cfgPath)
+	doc := &yaml.Node{Kind: yaml.DocumentNode}
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("read %s: %w", cfgPath, err)
+	}
+	if err == nil {
+		if err := yaml.Unmarshal(data, doc); err != nil {
+			return fmt.Errorf("parse %s: %w", cfgPath, err)
+		}
+	}
+	if len(doc.Content) == 0 {
+		doc.Content = []*yaml.Node{{Kind: yaml.MappingNode, Tag: "!!map"}}
+	}
+	root := doc.Content[0]
+	if root.Kind != yaml.MappingNode {
+		return fmt.Errorf("parse %s: configuration must be a YAML mapping", cfgPath)
+	}
+	for i := 0; i+1 < len(root.Content); i += 2 {
+		if root.Content[i].Value == "tts_serve_reference_wav" {
+			root.Content[i+1].Kind = yaml.ScalarNode
+			root.Content[i+1].Tag = "!!str"
+			root.Content[i+1].Value = path
+			encoded, err := yaml.Marshal(doc)
+			if err != nil {
+				return fmt.Errorf("encode %s: %w", cfgPath, err)
+			}
+			return WriteConfigAtomic(cfgPath, encoded)
+		}
+	}
+	root.Content = append(root.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "tts_serve_reference_wav"},
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: path},
+	)
+	encoded, err := yaml.Marshal(doc)
+	if err != nil {
+		return fmt.Errorf("encode %s: %w", cfgPath, err)
+	}
+	return WriteConfigAtomic(cfgPath, encoded)
 }
 
 // VoxiConfigDir is ~/.config/voxi.
@@ -187,6 +239,9 @@ func LoadUserSettings(home string) (*UserSettings, error) {
 		if v, ok := envMap["VOXI_PIPER_CONFIG"]; ok && v != "" {
 			s.TTSPiperConfig = v
 		}
+		if v, ok := envMap["VOXI_TTS_SERVE_REFERENCE_WAV"]; ok && v != "" {
+			s.TTSServeReferenceWav = v
+		}
 	} else if !os.IsNotExist(err) {
 		return nil, fmt.Errorf("read %s: %w", envPath, err)
 	}
@@ -264,6 +319,9 @@ func FormatEnv(s *UserSettings, existing map[string]string) []byte {
 	merged["VOXI_TTS_BACKEND"] = s.TTSBackend
 	merged["VOXI_PIPER_MODEL"] = s.TTSPiperModel
 	merged["VOXI_PIPER_CONFIG"] = s.TTSPiperConfig
+	if s.TTSServeReferenceWav != "" {
+		merged["VOXI_TTS_SERVE_REFERENCE_WAV"] = s.TTSServeReferenceWav
+	}
 
 	managedOrder := []string{
 		"VOXI_LLM_CLEANER",
@@ -278,6 +336,7 @@ func FormatEnv(s *UserSettings, existing map[string]string) []byte {
 		"VOXI_TTS_BACKEND",
 		"VOXI_PIPER_MODEL",
 		"VOXI_PIPER_CONFIG",
+		"VOXI_TTS_SERVE_REFERENCE_WAV",
 	}
 
 	var buf bytes.Buffer

@@ -292,3 +292,64 @@ func TestFormatEnvIncludesTTSSettings(t *testing.T) {
 		t.Errorf("formatted TTS env = %#v", got)
 	}
 }
+
+func TestSetTTSServeReferenceWavRoundTripsAndPreservesConfig(t *testing.T) {
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, ".config", "voxi")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(configDir, "config.yaml")
+	initial := "# keep this comment\nasr_model: local-model\n"
+	if err := os.WriteFile(path, []byte(initial), 0644); err != nil {
+		t.Fatal(err)
+	}
+	voicePath := filepath.Join(dir, ".local", "share", "voxi", "voices", "cloned.wav")
+	if err := SetTTSServeReferenceWav(dir, voicePath); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadUserSettings(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.TTSServeReferenceWav != voicePath {
+		t.Fatalf("TTSServeReferenceWav = %q, want %q", loaded.TTSServeReferenceWav, voicePath)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "# keep this comment") || !strings.Contains(string(data), "asr_model: local-model") {
+		t.Fatalf("config contents lost settings/comments:\n%s", data)
+	}
+
+	// Setting it again overwrites in place rather than duplicating the key.
+	otherPath := filepath.Join(dir, ".local", "share", "voxi", "voices", "other.wav")
+	if err := SetTTSServeReferenceWav(dir, otherPath); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := LoadUserSettings(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.TTSServeReferenceWav != otherPath {
+		t.Fatalf("TTSServeReferenceWav after update = %q, want %q", reloaded.TTSServeReferenceWav, otherPath)
+	}
+}
+
+func TestLoadUserSettingsReadsTTSServeReferenceWavFromEnv(t *testing.T) {
+	home := t.TempDir()
+	if err := os.MkdirAll(VoxiConfigDir(home), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(VoxiEnvPath(home), []byte("VOXI_TTS_SERVE_REFERENCE_WAV=/env/voice.wav\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := LoadUserSettings(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.TTSServeReferenceWav != "/env/voice.wav" {
+		t.Errorf("TTSServeReferenceWav = %q, want /env/voice.wav", s.TTSServeReferenceWav)
+	}
+}

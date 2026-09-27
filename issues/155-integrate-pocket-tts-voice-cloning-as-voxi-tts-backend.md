@@ -54,6 +54,21 @@ not install or launch the Python server in this ticket. Piper stays the default 
 `tts_serve` spec block, opt-in `tts-serve` backend (auto never picks it), `internal/tts/ttsserve.go`
 client with httptest coverage. Tests green.
 
+### M2 delivered: voice profile + CLI wiring
+Pre-work done: (1) fetched `github.com/scorbo2/tts-serve` source — Chatterbox's `SynthesisRequest`
+(`impl/server_chatterbox.py`) is flat, `extra="forbid"`, no `engine` field, `audio_base64` required
+(`min_length=1`); `internal/tts/ttsserve.go` now sends `text`/`audio_base64` plus `tts_serve.settings`
+merged as flat top-level fields, with no `engine` key or `settings` envelope. (2) `reference_wav` is
+now also settable at runtime via `tts_serve_reference_wav` in `~/.config/voxi/config.yaml` or
+`VOXI_TTS_SERVE_REFERENCE_WAV`, written by the new `voxi voice clone` subcommand; the spec default
+stays empty. (3) `tts_serve.timeout_ms` documented against `SplitText`'s existing sentence chunking,
+with a test (`TestTTSServeEngineSendsOneRequestPerSentenceChunk`) confirming one HTTP request per chunk.
+`voxi voice clone [--sample <id>] [--name <name>]` installs an allowlisted sample WAV (issue 153) to
+`~/.local/share/voxi/voices/<name>.wav` and records it. `voxi say --no-llm` speaks with the cloned voice
+once `tts_backend: tts-serve` is selected. `docs/TTSReading.md` updated. `go test ./...` green; no
+tts-serve server was reachable at `http://127.0.0.1:8000` in this environment, so the live end-to-end
+check was skipped.
+
 ### M2 Pre-Work / Required Refinements (from M1 review)
 1. **Request shape unverified:** issue 157 says engine-specific parameters "vary by engine"; the client
    nests them under a `settings` object and sends an `engine` field. Check the tts-serve source
