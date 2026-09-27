@@ -1,6 +1,6 @@
 # 147 — Research OSS TTS Engines and Open-Weight Models for Modest AMD Hardware
 
-**Status**: Open
+**Status**: Closed — Folded into 155 (Chatterbox via tts-serve)
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Architecture
