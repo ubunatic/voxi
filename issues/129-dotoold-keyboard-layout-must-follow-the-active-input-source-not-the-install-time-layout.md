@@ -105,3 +105,11 @@ next manual change.
   check and `make restart-service`, and measuring the per-injection spawn cost, since
   the fast `dotoold` pipe is no longer used on GNOME. See
   [TypingLayoutArchitecture.md](../docs/TypingLayoutArchitecture.md).
+- 2026-09-27, M2 canary: a disposable user unit started with
+  `DOTOOL_XKB_LAYOUT=de` was given a unit-local drop-in with `us` and `mac-iso`,
+  followed by `systemctl --user daemon-reload` and restart. The new process
+  environment contained both updated variables. `systemctl --user set-property`
+  rejected `Environment=` as an unknown assignment, and noninteractive
+  `systemctl edit` required a TTY; direct drop-in creation worked. The disposable
+  unit and drop-in were removed afterward. This validates per-unit configuration
+  refresh without changing the live `dotoold` service.

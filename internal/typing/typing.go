@@ -4,14 +4,19 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"ubunatic.com/voxi/internal/config"
 	"ubunatic.com/voxi/internal/deps"
+	"ubunatic.com/voxi/internal/inputsource"
 	"ubunatic.com/voxi/internal/modifiers"
 )
+
+var typingMu sync.Mutex
 
 // InjectionAttempt describes one and only one submission to an injector.
 // PID is zero when the test/legacy dependency boundary cannot expose it.
@@ -83,6 +88,8 @@ func TypeTextObserved(ctx context.Context, d deps.Dependencies, text string, obs
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	typingMu.Lock()
+	defer typingMu.Unlock()
 
 	// Gate on active physical modifier keys: wait up to 5s for user to release modifiers
 	if reader := modifiers.NewModifierReader(""); reader != nil {
@@ -101,6 +108,16 @@ func TypeTextObserved(ctx context.Context, d deps.Dependencies, text string, obs
 	commands := BuildDotoolCommands(text, typeDelayMs)
 
 	if dotoolDaemonReady(dotoolPipePath(d.Getenv)) {
+		if active, err := inputsource.DetectActive(ctx, d); err == nil {
+			if current, ok := daemonSource(ctx, d); ok && current != active {
+				if err := restartDotooldForSource(ctx, d, active); err != nil {
+					fmt.Fprintf(d.Stderr, "voxi: warning: update dotoold layout to %s: %v; continuing with current layout %s\n", formatSource(active), err, formatSource(current))
+				}
+			}
+		} else {
+			current, _ := daemonSource(ctx, d)
+			fmt.Fprintf(d.Stderr, "voxi: warning: detect active keyboard layout: %v; continuing with dotoold layout %s\n", err, formatSource(current))
+		}
 		// Once a FIFO submission is attempted its partial-write status is
 		// unknowable. Never retry the whole script through standalone dotool.
 		return runInjector(ctx, d, commands, "dotoolc", observer)
@@ -109,6 +126,59 @@ func TypeTextObserved(ctx context.Context, d deps.Dependencies, text string, obs
 		return fmt.Errorf("dotool not found on PATH: %w", err)
 	}
 	return runInjector(ctx, d, commands, "dotool", observer)
+}
+
+func formatSource(source inputsource.Source) string {
+	if source.Layout == "" {
+		return "unknown"
+	}
+	if source.Variant == "" {
+		return source.Layout
+	}
+	return source.Layout + "+" + source.Variant
+}
+
+func daemonSource(ctx context.Context, d deps.Dependencies) (inputsource.Source, bool) {
+	if d.RunOutput == nil {
+		return inputsource.Source{}, false
+	}
+	value, err := d.RunOutput(ctx, "systemctl", "--user", "show", "dotoold.service", "--property=Environment", "--value")
+	if err != nil {
+		return inputsource.Source{}, false
+	}
+	source := inputsource.Source{}
+	for _, token := range strings.Fields(value) {
+		if strings.HasPrefix(token, "DOTOOL_XKB_LAYOUT=") {
+			source.Layout = strings.TrimPrefix(token, "DOTOOL_XKB_LAYOUT=")
+		}
+		if strings.HasPrefix(token, "DOTOOL_XKB_VARIANT=") {
+			source.Variant = strings.TrimPrefix(token, "DOTOOL_XKB_VARIANT=")
+		}
+	}
+	if source.Layout == "" {
+		return inputsource.Source{}, false
+	}
+	return source, true
+}
+
+func restartDotooldForSource(ctx context.Context, d deps.Dependencies, source inputsource.Source) error {
+	if d.Getenv == nil || d.Getenv("HOME") == "" || d.MkdirAll == nil || d.WriteFile == nil || d.Run == nil {
+		return fmt.Errorf("systemd layout dependencies are unavailable")
+	}
+	dropinDir := filepath.Join(d.Getenv("HOME"), ".config", "systemd", "user", "dotoold.service.d")
+	if err := d.MkdirAll(dropinDir, 0755); err != nil {
+		return err
+	}
+	variant := source.Variant
+	data := fmt.Sprintf("[Service]\nEnvironment=DOTOOL_XKB_LAYOUT=%s\nEnvironment=DOTOOL_XKB_VARIANT=%s\n", source.Layout, variant)
+	path := filepath.Join(dropinDir, "voxi-layout.conf")
+	if err := d.WriteFile(path, []byte(data), 0644); err != nil {
+		return err
+	}
+	if err := d.Run(ctx, "systemctl", "--user", "daemon-reload"); err != nil {
+		return err
+	}
+	return d.Run(ctx, "systemctl", "--user", "restart", "dotoold.service")
 }
 
 func runInjector(ctx context.Context, d deps.Dependencies, commands, name string, observer InjectionObserver) error {

@@ -18,6 +18,8 @@ type Dependencies struct {
 	GOARCH         string
 	Getenv         func(string) string
 	ReadFile       func(string) ([]byte, error)
+	WriteFile      func(string, []byte, os.FileMode) error
+	MkdirAll       func(string, os.FileMode) error
 	Stat           func(string) (os.FileInfo, error)
 	LookPath       func(string) (string, error)
 	Run            func(context.Context, string, ...string) error
@@ -73,12 +75,14 @@ func resolveCommand(name string) string {
 // DefaultDependencies provides production host bindings.
 func DefaultDependencies(in io.Reader, out io.Writer) Dependencies {
 	return Dependencies{
-		GOOS:     runtime.GOOS,
-		GOARCH:   runtime.GOARCH,
-		Getenv:   os.Getenv,
-		ReadFile: os.ReadFile,
-		Stat:     os.Stat,
-		LookPath: lookPathWithFallbacks,
+		GOOS:      runtime.GOOS,
+		GOARCH:    runtime.GOARCH,
+		Getenv:    os.Getenv,
+		ReadFile:  os.ReadFile,
+		WriteFile: os.WriteFile,
+		MkdirAll:  os.MkdirAll,
+		Stat:      os.Stat,
+		LookPath:  lookPathWithFallbacks,
 		Run: func(ctx context.Context, name string, args ...string) error {
 			return exec.CommandContext(ctx, resolveCommand(name), args...).Run()
 		},

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 
@@ -22,6 +23,80 @@ func TestBuildDotoolCommands(t *testing.T) {
 	expected2 := "typedelay 15\ntypehold 15\ntype Line 1\nkey enter\ntype Line 2\n"
 	if cmd2 != expected2 {
 		t.Fatalf("expected %q, got %q", expected2, cmd2)
+	}
+}
+
+func TestTypeTextSynchronizesDotooldLayoutBeforeFIFO(t *testing.T) {
+	for _, tc := range []struct {
+		name, current string
+		wantRestart   bool
+	}{
+		{"unchanged", "DOTOOL_XKB_LAYOUT=us DOTOOL_XKB_VARIANT=mac-iso", false},
+		{"changed", "DOTOOL_XKB_LAYOUT=de DOTOOL_XKB_VARIANT=nodeadkeys", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pipe := filepath.Join(t.TempDir(), "dotool-pipe")
+			if err := syscall.Mkfifo(pipe, 0600); err != nil {
+				t.Fatal(err)
+			}
+			reader, err := os.OpenFile(pipe, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer reader.Close()
+			var restarts atomic.Int32
+			var wrote string
+			d := deps.Dependencies{
+				Getenv: func(key string) string {
+					if key == "HOME" {
+						return t.TempDir()
+					}
+					if key == "DOTOOL_PIPE" {
+						return pipe
+					}
+					return ""
+				},
+				RunOutput: func(_ context.Context, name string, args ...string) (string, error) {
+					if name == "ibus" {
+						return "", errors.New("no ibus")
+					}
+					if name == "gsettings" {
+						if args[len(args)-1] == "sources" {
+							return "[('xkb', 'us+mac-iso')]", nil
+						}
+						return "uint32 0", nil
+					}
+					return tc.current, nil
+				},
+				MkdirAll:  os.MkdirAll,
+				WriteFile: func(_ string, data []byte, _ os.FileMode) error { wrote = string(data); return nil },
+				Run: func(_ context.Context, name string, args ...string) error {
+					if len(args) > 0 && args[len(args)-1] == "dotoold.service" {
+						restarts.Add(1)
+					}
+					return nil
+				},
+				RunStdin: func(_ context.Context, _ string, name string, _ ...string) error {
+					if name != "dotoolc" {
+						t.Fatalf("injector=%q, want dotoolc", name)
+					}
+					return nil
+				},
+			}
+			if err := TypeText(context.Background(), d, "zebra"); err != nil {
+				t.Fatal(err)
+			}
+			want := int32(0)
+			if tc.wantRestart {
+				want = 1
+			}
+			if got := restarts.Load(); got != want {
+				t.Fatalf("restart count=%d, want %d", got, want)
+			}
+			if tc.wantRestart && (!strings.Contains(wrote, "DOTOOL_XKB_LAYOUT=us") || !strings.Contains(wrote, "DOTOOL_XKB_VARIANT=mac-iso")) {
+				t.Fatalf("drop-in=%q", wrote)
+			}
+		})
 	}
 }
 
