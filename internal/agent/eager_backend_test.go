@@ -34,6 +34,7 @@ func TestEagerArgsUseSavedSettings(t *testing.T) {
 		t.Fatalf("eagerArgs() = %v, want %v", got, want)
 	}
 
+	opts := eager.DefaultEagerOptions()
 	cmd := eager.NewCommand(func(cmd *cobra.Command, _ []string) error {
 		historyEnabled, err := cmd.Flags().GetBool("history")
 		if err != nil {
@@ -43,11 +44,11 @@ func TestEagerArgsUseSavedSettings(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if historyEnabled || modifierEnabled {
-			t.Fatalf("parsed history=%v modifier-gating=%v, want both false", historyEnabled, modifierEnabled)
+		if historyEnabled || modifierEnabled || !opts.Daemon {
+			t.Fatalf("parsed history=%v modifier-gating=%v daemon=%v, want false, false, true", historyEnabled, modifierEnabled, opts.Daemon)
 		}
 		return nil
-	}, eager.DefaultEagerOptions())
+	}, &opts)
 	cmd.SetArgs(want[1:])
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("parse eager child args with Cobra: %v", err)

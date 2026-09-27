@@ -149,7 +149,7 @@ func main() {
 		eagerOpts.ModifierGatingSet = cmd.Flags().Changed("modifier-gating")
 		eagerOpts.ModelSet = cmd.Flags().Changed("model")
 		return eager.RunEagerDictation(cmd.Context(), d, eagerOpts)
-	}, eagerOpts)
+	}, &eagerOpts)
 	eagerCmd.Long = "Continuously captures audio from the microphone with a circular pre-roll buffer.\n" +
 		"Segments speech on natural conversational pauses (silence > 800ms) or rolling windows,\n" +
 		"transcribes completed phrases immediately with the selected model's engine (Cohere\n" +

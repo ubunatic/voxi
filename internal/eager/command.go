@@ -4,7 +4,11 @@ import "github.com/spf13/cobra"
 
 // NewCommand builds the eager command and its flags. execute may be nil when
 // a caller only needs the canonical flag parser.
-func NewCommand(execute func(*cobra.Command, []string) error, opts EagerOptions) *cobra.Command {
+func NewCommand(execute func(*cobra.Command, []string) error, opts *EagerOptions) *cobra.Command {
+	if opts == nil {
+		defaults := DefaultEagerOptions()
+		opts = &defaults
+	}
 	cmd := &cobra.Command{
 		Use:   "eager",
 		Short: "Continuous eager sentence streaming dictation into focused window",
