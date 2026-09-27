@@ -101,13 +101,33 @@ func dotoolDaemonReady(path string) bool {
 // TypeText synthesizes keystrokes into the focused window using dotool/dotoold.
 // It gates on active modifier keys (e.g. Ctrl, Alt, Super) to prevent hotkey collisions.
 func TypeText(ctx context.Context, d deps.Dependencies, text string) error {
-	return TypeTextObserved(ctx, d, text, nil)
+	modifierGating := true
+	if d.Getenv != nil {
+		if settings, err := config.LoadUserSettings(d.Getenv("HOME")); err == nil && settings != nil {
+			modifierGating = settings.ModifierGating
+		}
+	}
+	return TypeTextObservedWithGating(ctx, d, text, nil, modifierGating)
 }
 
 // TypeTextObserved is TypeText with an injectable lifecycle observer. The
 // selected path is announced immediately before the single injector attempt;
 // completion includes the child PID when the dependency boundary supports it.
 func TypeTextObserved(ctx context.Context, d deps.Dependencies, text string, observer InjectionObserver) error {
+	return TypeTextObservedWithGating(ctx, d, text, observer, true)
+}
+
+// TypeTextObservedWithGating allows a caller's saved setting to control the
+// physical modifier release wait without changing layout synchronization.
+func TypeTextObservedWithGating(ctx context.Context, d deps.Dependencies, text string, observer InjectionObserver, modifierGating bool) error {
+	return typeTextObserved(ctx, d, text, observer, modifierGating, func(ctx context.Context) {
+		if reader := modifiers.NewModifierReader(""); reader != nil {
+			_ = reader.WaitModifiersReleased(ctx, 5*time.Second)
+		}
+	})
+}
+
+func typeTextObserved(ctx context.Context, d deps.Dependencies, text string, observer InjectionObserver, modifierGating bool, waitForModifiers func(context.Context)) error {
 	if text == "" {
 		return nil
 	}
@@ -118,8 +138,8 @@ func TypeTextObserved(ctx context.Context, d deps.Dependencies, text string, obs
 	defer typingMu.Unlock()
 
 	// Gate on active physical modifier keys: wait up to 5s for user to release modifiers
-	if reader := modifiers.NewModifierReader(""); reader != nil {
-		_ = reader.WaitModifiersReleased(ctx, 5*time.Second)
+	if modifierGating {
+		waitForModifiers(ctx)
 	}
 	if err := ctx.Err(); err != nil {
 		return err

@@ -32,3 +32,5 @@ The findings are from source inspection; the disabled-history behavior has not y
 ## 4. Implementation Progress
 
 - **Milestone 1:** In progress — saved history setting controls accepted eager dictation entries; explicit `--history` wins. Chunk transcript/audio storage remains independent and is called out in diagnostics and settings UI. Behavioral no-entry coverage added.
+- **Milestone 1:** Complete — eager history writes honor saved and explicit CLI settings; chunk storage remains separate.
+- **Milestone 2:** In progress — saved modifier gating controls typing waits and eager buffering/polling; layout synchronization remains in the typing path.

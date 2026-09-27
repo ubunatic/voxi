@@ -28,6 +28,22 @@ func TestBuildDotoolCommands(t *testing.T) {
 	}
 }
 
+func TestTypeTextCanBypassModifierWait(t *testing.T) {
+	var waited bool
+	d := deps.Dependencies{
+		LookPath: func(string) (string, error) { return "/usr/bin/dotool", nil },
+		RunStdin: func(context.Context, string, string, ...string) error { return nil },
+		Getenv:   func(string) string { return "" },
+	}
+	err := typeTextObserved(context.Background(), d, "text", nil, false, func(context.Context) { waited = true })
+	if err != nil {
+		t.Fatalf("typeTextObserved: %v", err)
+	}
+	if waited {
+		t.Fatal("modifier wait called while gating disabled")
+	}
+}
+
 func TestTypeTextSynchronizesDotooldLayoutBeforeFIFO(t *testing.T) {
 	for _, tc := range []struct {
 		name, current string

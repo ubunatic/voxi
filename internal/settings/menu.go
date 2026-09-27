@@ -159,7 +159,7 @@ func NewMenuModel(s *config.UserSettings, availableASRModels []string) *MenuMode
 		{
 			ID:          "dictation_history",
 			Title:       "Dictation History",
-			Description: "Persist transcribed utterances to local sensitive history store",
+			Description: "Persist dictation history entries; chunk transcripts/audio use separate storage",
 			Kind:        ItemBool,
 			BoolValue:   s.DictationHistory,
 		},

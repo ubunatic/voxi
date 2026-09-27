@@ -346,7 +346,8 @@ func checkModifierGating(ctx context.Context, d deps.Dependencies, enabled bool)
 	item := DiagnosticItem{Name: "Modifier Gating"}
 	if !enabled {
 		item.Status = StatusSkip
-		item.Summary = "Disabled"
+		item.Summary = "Disabled (typing and eager modifier gates bypassed)"
+		item.Detail = "Physical modifier state is not consulted before typing."
 		return item
 	}
 
@@ -355,7 +356,7 @@ func checkModifierGating(ctx context.Context, d deps.Dependencies, enabled bool)
 	if _, err := d.Stat(statePath); err == nil {
 		if _, err := d.ReadFile(statePath); err == nil {
 			item.Status = StatusPass
-			item.Summary = "active (system daemon exporting to " + statePath + ")"
+			item.Summary = "Enabled; active (system daemon exporting to " + statePath + ")"
 			return item
 		}
 	}
@@ -365,7 +366,7 @@ func checkModifierGating(ctx context.Context, d deps.Dependencies, enabled bool)
 	trimmed := strings.TrimSpace(out)
 	if err == nil && trimmed == "active" {
 		item.Status = StatusPass
-		item.Summary = "voxi-modifierd.service is active (system daemon)"
+		item.Summary = "Enabled; voxi-modifierd.service is active (system daemon)"
 		return item
 	}
 
@@ -379,7 +380,7 @@ func checkModifierGating(ctx context.Context, d deps.Dependencies, enabled bool)
 	}
 
 	item.Status = StatusWarn
-	item.Summary = fmt.Sprintf("voxi-modifierd at %s, but service is not running", path)
+	item.Summary = fmt.Sprintf("Enabled in typing/eager; voxi-modifierd at %s, but service is not running", path)
 	item.Detail = "Enable system daemon: sudo systemctl enable --now voxi-modifierd.service"
 	return item
 }
@@ -388,7 +389,8 @@ func checkDictationHistory(home string, enabled bool) DiagnosticItem {
 	item := DiagnosticItem{Name: "Dictation History"}
 	if !enabled {
 		item.Status = StatusSkip
-		item.Summary = "Disabled"
+		item.Summary = "Disabled for dictation history entries"
+		item.Detail = "Chunk transcripts and audio remain stored in the separate bounded chunk buffer."
 		return item
 	}
 
@@ -410,7 +412,8 @@ func checkDictationHistory(home string, enabled bool) DiagnosticItem {
 	_ = os.Remove(testFile)
 
 	item.Status = StatusPass
-	item.Summary = fmt.Sprintf("storage writable at %s", histPath)
+	item.Summary = fmt.Sprintf("Enabled for dictation history entries; storage writable at %s", histPath)
+	item.Detail = "Chunk transcripts and audio use the separate bounded chunk buffer."
 	return item
 }
 

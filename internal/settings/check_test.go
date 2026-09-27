@@ -50,6 +50,12 @@ func TestRunDiagnosticsPass(t *testing.T) {
 	if !strings.Contains(text, "ASR Engine:") {
 		t.Errorf("rendered report missing ASR Engine item")
 	}
+	if !strings.Contains(text, "Chunk transcripts and audio use the separate bounded chunk buffer.") {
+		t.Errorf("history diagnostic does not explain separate chunk storage: %s", text)
+	}
+	if !strings.Contains(text, "Disabled (typing and eager modifier gates bypassed)") {
+		t.Errorf("modifier diagnostic does not describe runtime behavior: %s", text)
+	}
 
 	jsonStr, err := RenderDiagnosticJSON(report)
 	if err != nil {
@@ -77,5 +83,16 @@ func TestRunDiagnosticsMissingBinary(t *testing.T) {
 	report := RunDiagnostics(context.Background(), d, home, s)
 	if report.Failed == 0 {
 		t.Errorf("expected failure for missing crispasr, got %d failures", report.Failed)
+	}
+}
+
+func TestHistoryAndModifierDiagnosticsDescribeEffectiveBehavior(t *testing.T) {
+	historyItem := checkDictationHistory(t.TempDir(), false)
+	if !strings.Contains(historyItem.Summary, "Disabled for dictation history entries") || !strings.Contains(historyItem.Detail, "Chunk transcripts and audio remain stored") {
+		t.Fatalf("history diagnostic = %+v", historyItem)
+	}
+	modifierItem := checkModifierGating(context.Background(), deps.DefaultDependencies(strings.NewReader(""), nil), false)
+	if !strings.Contains(modifierItem.Summary, "typing and eager modifier gates bypassed") {
+		t.Fatalf("modifier diagnostic = %+v", modifierItem)
 	}
 }
