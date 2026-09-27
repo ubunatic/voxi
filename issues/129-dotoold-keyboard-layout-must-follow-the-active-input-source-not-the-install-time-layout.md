@@ -113,3 +113,17 @@ next manual change.
   `systemctl edit` required a TTY; direct drop-in creation worked. The disposable
   unit and drop-in were removed afterward. This validates per-unit configuration
   refresh without changing the live `dotoold` service.
+- 2026-09-27, `c833a2a`: M2 delivered (layout sync via drop-in
+  `dotoold.service.d/voxi-layout.conf` + restart on change, serialized with
+  typing; 130 M1 guard test included). Reviewed by terra.
+
+### M3 Pre-Work / Required Refinements
+
+1. After restarting `dotoold`, wait for the new FIFO to be ready (bounded
+   timeout) before `dotoolc` writes; add a test for restart-then-ready sequencing.
+2. Fallback on detection failure must use the install-time layout, not the last
+   persisted drop-in: remove or restore `voxi-layout.conf` accordingly, and
+   test the warning plus fallback.
+3. Cache the daemon source (and ideally the active source) so each chunk does
+   not spawn `systemctl show` and `gsettings` synchronously.
+4. Use conventional commit subjects, e.g. `fix(typing): ...`.
