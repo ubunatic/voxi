@@ -31,9 +31,10 @@ adds `--llm x600` explicitly.
 
 **Audio Arbiter & Recording Mute Gate (Super+X)**:
 When the user begins voice dictation via Super+X, the STT recording engine increments
-an active recording epoch. The daemon's TTS playback queue mutes/halts in-flight
-audio playback immediately to prevent the microphone from capturing its own synthetic
-output, discarding queued spoken audio until the recording session concludes.
+an active recording epoch (`ActionRecordingStart`). The daemon's TTS playback queue mutes
+in-flight audio playback immediately and permanently discards all pending queued chunks
+to prevent acoustic feedback into the microphone and ensure TTS does not unexpectedly
+resume talking over the desktop when dictation concludes (`ActionRecordingEnd`).
 The monitor Stop action stops current playback and clears the queue. Clear removes
 pending chunks while allowing the current chunk to finish.
 
