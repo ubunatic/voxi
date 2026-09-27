@@ -22,3 +22,7 @@ After the canary (154) works, `voxi say` and TTS reading should be able to speak
 - Engine selection via spec/config; `voxi say --no-llm "text"` speaks with the cloned voice.
 - Unit tests for profile creation and command construction; one live end-to-end check.
 - Update `docs/TTSReading.md`.
+
+## Update 2026-09-27
+
+Chatterbox (MIT) via tts-serve on CPU, 10 s calm reference: all 7 demo texts rendered with no dropped words (checked with voxtype). User rated it good. About 10 s compute per 1 s audio on CPU; needs ~8 GB free RAM. Prefer this over Pocket TTS for the backend.
