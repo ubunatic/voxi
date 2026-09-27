@@ -1,6 +1,6 @@
 # 154 — canary: clone voice with Pocket TTS via sherpa-onnx prebuilt binary
 
-**Status**: Open
+**Status**: Closed — Done; see docs/Roadmap.md close/park section
 **Priority**: P1 (High)
 **Severity**: Feature
 **Category**: Canary
