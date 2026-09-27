@@ -90,3 +90,13 @@ Live check skipped (no tts-serve server running).
    tts-serve backend only, split sentences longer than a spec-defined cap (e.g. `tts_serve.max_chunk_runes`)
    at clause/word boundaries, and raise the default timeout so one capped chunk fits with margin.
    Piper chunking unchanged. Test: a long sentence yields several requests, each within the cap.
+
+### M3 delivered (49af619): tts-serve chunk cap
+`tts_serve.max_chunk_runes: 120` (~8 s audio, ~80 s CPU compute), `timeout_ms: 150000`; long sentences
+split at clause then word boundaries; parts joined into one WAV. Tests green, arithmetic checked.
+
+### M4 Pre-Work / Required Refinements (from M3 review)
+1. `concatWAV` falls back to `bytes.Join` on unparsable parts, producing a WAV whose header covers only
+   the first part (silent truncation). Return an error instead, and also error when parts' fmt chunks differ.
+2. Unit tests for `parseWAV`/`concatWAV`: two valid parts -> correct RIFF and data sizes and PCM
+   order; odd-size chunk padding; mismatched fmt -> error; garbage -> error.
