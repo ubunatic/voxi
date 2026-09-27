@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"syscall"
 	"testing"
+	"time"
 
 	"ubunatic.com/voxi/internal/deps"
 )
@@ -69,8 +70,9 @@ func TestTypeTextSynchronizesDotooldLayoutBeforeFIFO(t *testing.T) {
 					}
 					return tc.current, nil
 				},
-				MkdirAll:  os.MkdirAll,
-				WriteFile: func(_ string, data []byte, _ os.FileMode) error { wrote = string(data); return nil },
+				MkdirAll:             os.MkdirAll,
+				WriteFile:            func(_ string, data []byte, _ os.FileMode) error { wrote = string(data); return nil },
+				WaitInputDeviceReady: func(context.Context, []string, time.Duration) bool { return true },
 				Run: func(_ context.Context, name string, args ...string) error {
 					if len(args) > 0 && args[len(args)-1] == "dotoold.service" {
 						restarts.Add(1)
@@ -113,6 +115,9 @@ func TestTypeTextWaitsForRestartedFIFOBeforeWriting(t *testing.T) {
 	defer reader.Close()
 	var restartedReader *os.File
 	var order []string
+	deviceWaiting := make(chan struct{})
+	deviceReady := make(chan struct{})
+	injected := make(chan struct{}, 1)
 	d := deps.Dependencies{
 		Getenv: func(key string) string {
 			if key == "HOME" {
@@ -136,6 +141,20 @@ func TestTypeTextWaitsForRestartedFIFOBeforeWriting(t *testing.T) {
 			return "DOTOOL_XKB_LAYOUT=de", nil
 		},
 		MkdirAll: os.MkdirAll, WriteFile: os.WriteFile,
+		WaitInputDeviceReady: func(ctx context.Context, _ []string, timeout time.Duration) bool {
+			if timeout != dotoolDeviceReadyTimeout {
+				t.Errorf("device wait timeout=%s", timeout)
+			}
+			order = append(order, "wait-device")
+			close(deviceWaiting)
+			select {
+			case <-deviceReady:
+				order = append(order, "device-ready")
+				return true
+			case <-ctx.Done():
+				return false
+			}
+		},
 		Run: func(_ context.Context, _ string, args ...string) error {
 			if args[len(args)-1] == "dotoold.service" {
 				order = append(order, "restart")
@@ -152,17 +171,32 @@ func TestTypeTextWaitsForRestartedFIFOBeforeWriting(t *testing.T) {
 		},
 		RunStdin: func(_ context.Context, _ string, name string, _ ...string) error {
 			order = append(order, name)
+			injected <- struct{}{}
 			return nil
 		},
 	}
-	if err := TypeText(context.Background(), d, "text"); err != nil {
-		t.Fatal(err)
+	type result struct{ err error }
+	done := make(chan result, 1)
+	go func() { done <- result{err: TypeText(context.Background(), d, "text")} }()
+	select {
+	case <-deviceWaiting:
+	case <-time.After(time.Second):
+		t.Fatal("typing did not wait for the GNOME device signal")
+	}
+	select {
+	case <-injected:
+		t.Fatal("dotoolc ran before the device became ready")
+	default:
+	}
+	close(deviceReady)
+	if result := <-done; result.err != nil {
+		t.Fatal(result.err)
 	}
 	if restartedReader == nil {
 		t.Fatal("restart did not create FIFO reader")
 	}
 	defer restartedReader.Close()
-	if got := strings.Join(order, ","); got != "restart,dotoolc" {
+	if got := strings.Join(order, ","); got != "restart,wait-device,device-ready,dotoolc" {
 		t.Fatalf("operation order=%q", got)
 	}
 }
@@ -203,7 +237,9 @@ func TestTypeTextDetectionFailureRestoresInstallLayoutAndWarns(t *testing.T) {
 			}
 			return "DOTOOL_XKB_LAYOUT=" + layout, nil
 		},
-		Remove: os.Remove, Run: func(_ context.Context, _ string, args ...string) error {
+		Remove:               os.Remove,
+		WaitInputDeviceReady: func(context.Context, []string, time.Duration) bool { return true },
+		Run: func(_ context.Context, _ string, args ...string) error {
 			if args[len(args)-1] == "dotoold.service" {
 				layout = "de"
 			}
@@ -307,6 +343,107 @@ func TestTypeTextCachesActiveAndDaemonSourceReads(t *testing.T) {
 	}
 	if ibusCalls != 1 || gsettingsCalls != 2 || systemctlCalls != 1 {
 		t.Fatalf("source command calls: ibus=%d gsettings=%d systemctl=%d", ibusCalls, gsettingsCalls, systemctlCalls)
+	}
+}
+
+func TestWatchInputSourceRestartsWithoutInjection(t *testing.T) {
+	pipe := filepath.Join(t.TempDir(), "dotool-pipe")
+	if err := syscall.Mkfifo(pipe, 0600); err != nil {
+		t.Fatal(err)
+	}
+	reader, err := os.OpenFile(pipe, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	home := t.TempDir()
+	var source, daemonLayout atomic.Value
+	source.Store("de")
+	daemonLayout.Store("de")
+	baselineSeen := make(chan struct{}, 1)
+	restarted := make(chan struct{}, 1)
+	var injected atomic.Bool
+	d := deps.Dependencies{
+		Getenv: func(key string) string {
+			if key == "HOME" {
+				return home
+			}
+			if key == "DOTOOL_PIPE" {
+				return pipe
+			}
+			return ""
+		},
+		RunOutput: func(_ context.Context, name string, args ...string) (string, error) {
+			switch name {
+			case "ibus":
+				return "", errors.New("no ibus")
+			case "gsettings":
+				if args[len(args)-1] == "sources" {
+					return "[('xkb', '" + source.Load().(string) + "')]", nil
+				}
+				select {
+				case baselineSeen <- struct{}{}:
+				default:
+				}
+				return "uint32 0", nil
+			default:
+				layout, variant, _ := strings.Cut(daemonLayout.Load().(string), "+")
+				return "DOTOOL_XKB_LAYOUT=" + layout + " DOTOOL_XKB_VARIANT=" + variant, nil
+			}
+		},
+		MkdirAll:  os.MkdirAll,
+		WriteFile: os.WriteFile,
+		Run: func(_ context.Context, _ string, args ...string) error {
+			if args[len(args)-1] == "dotoold.service" {
+				daemonLayout.Store(source.Load().(string))
+				select {
+				case restarted <- struct{}{}:
+				default:
+				}
+			}
+			return nil
+		},
+		WaitInputDeviceReady: func(_ context.Context, _ []string, timeout time.Duration) bool {
+			if timeout != dotoolDeviceReadyTimeout {
+				t.Errorf("device wait timeout=%s", timeout)
+			}
+			return true
+		},
+		RunStdin: func(context.Context, string, string, ...string) error {
+			injected.Store(true)
+			return nil
+		},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		WatchInputSource(ctx, d, 10*time.Millisecond)
+		close(done)
+	}()
+	select {
+	case <-baselineSeen:
+	case <-time.After(time.Second):
+		cancel()
+		t.Fatal("watcher did not read its initial source")
+	}
+	source.Store("us+mac-iso")
+	select {
+	case <-restarted:
+	case <-time.After(2 * time.Second):
+		cancel()
+		t.Fatal("source switch did not restart dotoold")
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("source watcher did not stop")
+	}
+	if injected.Load() {
+		t.Fatal("source watcher injected text")
+	}
+	if got := daemonLayout.Load().(string); got != "us+mac-iso" {
+		t.Fatalf("daemon layout=%q, want us+mac-iso", got)
 	}
 }
 

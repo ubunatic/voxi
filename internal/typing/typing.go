@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -19,6 +21,7 @@ import (
 var typingMu sync.Mutex
 
 const sourceCacheTTL = 500 * time.Millisecond
+const dotoolDeviceReadyTimeout = 5 * time.Second
 
 var layoutCache struct {
 	activeKey           string
@@ -74,8 +77,10 @@ func BuildDotoolCommands(text string, typeDelayMs int) string {
 }
 
 func dotoolPipePath(getenv func(string) string) string {
-	if p := getenv("DOTOOL_PIPE"); p != "" {
-		return p
+	if getenv != nil {
+		if p := getenv("DOTOOL_PIPE"); p != "" {
+			return p
+		}
 	}
 	return "/tmp/dotool-pipe"
 }
@@ -213,6 +218,10 @@ func detectActiveCached(ctx context.Context, d deps.Dependencies) (inputsource.S
 
 func synchronizeDotoold(ctx context.Context, d deps.Dependencies) (LayoutStatus, error) {
 	active, detectErr := detectActiveCached(ctx, d)
+	return synchronizeDotooldToSource(ctx, d, active, detectErr)
+}
+
+func synchronizeDotooldToSource(ctx context.Context, d deps.Dependencies, active inputsource.Source, detectErr error) (LayoutStatus, error) {
 	current, currentOK := daemonSource(ctx, d)
 	status := LayoutStatus{ActiveSource: formatSource(active), Dotoold: formatSource(current)}
 	if detectErr != nil {
@@ -222,6 +231,9 @@ func synchronizeDotoold(ctx context.Context, d deps.Dependencies) (LayoutStatus,
 		if layoutCache.fallbackRestoredKey != key {
 			if err := restoreInstallLayout(ctx, d); err != nil {
 				status.Warning += fmt.Sprintf(" (restore failed: %v)", err)
+				if strings.Contains(err.Error(), "GNOME did not open") {
+					return status, err
+				}
 			} else {
 				layoutCache.fallbackRestoredKey = key
 			}
@@ -241,13 +253,13 @@ func synchronizeDotoold(ctx context.Context, d deps.Dependencies) (LayoutStatus,
 	}
 	if current != active {
 		if err := restartDotooldForSource(ctx, d, active); err != nil {
+			if strings.Contains(err.Error(), "GNOME did not open") {
+				return status, err
+			}
 			status.Warning = fmt.Sprintf("update dotoold layout to %s: %v; continuing with current layout %s", formatSource(active), err, formatSource(current))
 			return status, nil
 		}
 		layoutCache.daemonKey, layoutCache.daemon, layoutCache.daemonOK = cacheKey(d), active, true
-		if !waitForDotoolDaemon(ctx, d, 1500*time.Millisecond) {
-			return status, fmt.Errorf("dotoold restarted for %s but its FIFO did not become ready", formatSource(active))
-		}
 		current = active
 	}
 	if layoutCache.fallbackRestoredKey == cacheKey(d) {
@@ -255,24 +267,6 @@ func synchronizeDotoold(ctx context.Context, d deps.Dependencies) (LayoutStatus,
 	}
 	status.Dotoold = formatSource(current)
 	return status, nil
-}
-
-func waitForDotoolDaemon(ctx context.Context, d deps.Dependencies, timeout time.Duration) bool {
-	path := dotoolPipePath(d.Getenv)
-	deadline := time.Now().Add(timeout)
-	for {
-		if dotoolDaemonReady(path) {
-			return true
-		}
-		if ctx.Err() != nil || !time.Now().Before(deadline) {
-			return false
-		}
-		if d.Sleep != nil {
-			d.Sleep(20 * time.Millisecond)
-		} else {
-			time.Sleep(20 * time.Millisecond)
-		}
-	}
 }
 
 func restoreInstallLayout(ctx context.Context, d deps.Dependencies) error {
@@ -283,14 +277,15 @@ func restoreInstallLayout(ctx context.Context, d deps.Dependencies) error {
 	if err := d.Remove(path); err != nil && !os.IsNotExist(err) {
 		return err
 	}
+	baseline := snapshotDotoolKeyboardDevices()
 	if err := d.Run(ctx, "systemctl", "--user", "daemon-reload"); err != nil {
 		return err
 	}
 	if err := d.Run(ctx, "systemctl", "--user", "restart", "dotoold.service"); err != nil {
 		return err
 	}
-	if !waitForDotoolDaemon(ctx, d, 1500*time.Millisecond) {
-		return fmt.Errorf("dotoold FIFO did not become ready after restoring install-time layout")
+	if !waitForRestartReadyAfter(ctx, d, baseline, dotoolDeviceReadyTimeout) {
+		return fmt.Errorf("GNOME did not open the restored dotoold keyboard within %s", dotoolDeviceReadyTimeout)
 	}
 	return nil
 }
@@ -310,6 +305,54 @@ func InspectLayout(ctx context.Context, d deps.Dependencies) LayoutStatus {
 	return status
 }
 
+// WatchInputSource prewarms dotoold when the active XKB source changes. It is
+// intended to run for the lifetime of the agent; injection retains its own
+// synchronization check as a safety net.
+func WatchInputSource(ctx context.Context, d deps.Dependencies, interval time.Duration) {
+	if d.Getenv != nil {
+		desktop := strings.ToLower(d.Getenv("XDG_CURRENT_DESKTOP"))
+		if desktop != "" && !strings.Contains(desktop, "gnome") {
+			return
+		}
+	}
+	if interval <= 0 {
+		interval = 150 * time.Millisecond
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	var last inputsource.Source
+	var lastValid bool
+	lastFailed := false
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+		typingMu.Lock()
+		active, detectErr := inputsource.DetectActive(ctx, d)
+		key := cacheKey(d)
+		layoutCache.activeKey, layoutCache.active, layoutCache.activeErr, layoutCache.activeAt = key, active, detectErr, time.Now()
+		changed := !lastValid || (detectErr == nil && active != last)
+		if detectErr != nil && lastFailed {
+			changed = false
+		}
+		if changed || (detectErr != nil && !lastFailed) {
+			status, err := synchronizeDotooldToSource(ctx, d, active, detectErr)
+			if status.Warning != "" && d.Stderr != nil {
+				fmt.Fprintf(d.Stderr, "voxi: warning: %s\n", status.Warning)
+			}
+			if err != nil && d.Stderr != nil {
+				fmt.Fprintf(d.Stderr, "voxi: warning: prewarm dotoold for %s: %v\n", formatSource(active), err)
+			}
+			if err == nil {
+				last, lastValid, lastFailed = active, detectErr == nil, detectErr != nil
+			}
+		}
+		typingMu.Unlock()
+	}
+}
+
 func restartDotooldForSource(ctx context.Context, d deps.Dependencies, source inputsource.Source) error {
 	if d.Getenv == nil || d.Getenv("HOME") == "" || d.MkdirAll == nil || d.WriteFile == nil || d.Run == nil {
 		return fmt.Errorf("systemd layout dependencies are unavailable")
@@ -324,10 +367,153 @@ func restartDotooldForSource(ctx context.Context, d deps.Dependencies, source in
 	if err := d.WriteFile(path, []byte(data), 0644); err != nil {
 		return err
 	}
+	baseline := snapshotDotoolKeyboardDevices()
 	if err := d.Run(ctx, "systemctl", "--user", "daemon-reload"); err != nil {
 		return err
 	}
-	return d.Run(ctx, "systemctl", "--user", "restart", "dotoold.service")
+	if err := d.Run(ctx, "systemctl", "--user", "restart", "dotoold.service"); err != nil {
+		return err
+	}
+	if !waitForRestartReadyAfter(ctx, d, baseline, dotoolDeviceReadyTimeout) {
+		return fmt.Errorf("GNOME did not open the new dotoold keyboard within %s", dotoolDeviceReadyTimeout)
+	}
+	return nil
+}
+
+func waitForRestartReadyAfter(ctx context.Context, d deps.Dependencies, baseline []string, timeout time.Duration) bool {
+	if d.WaitInputDeviceReady != nil {
+		return d.WaitInputDeviceReady(ctx, baseline, timeout) && waitForFIFO(ctx, d, timeout)
+	}
+	if !gnomeShellPresent() {
+		return waitForFIFO(ctx, d, timeout)
+	}
+	return waitForGNOMEInputDevice(ctx, d, baseline, timeout)
+}
+
+func waitForFIFO(ctx context.Context, d deps.Dependencies, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		if dotoolDaemonReady(dotoolPipePath(d.Getenv)) {
+			return true
+		}
+		if ctx.Err() != nil || !time.Now().Before(deadline) {
+			return false
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// snapshotDotoolKeyboardDevices records identities of existing dotool virtual keyboards.
+func snapshotDotoolKeyboardDevices() []string {
+	devices := dotoolKeyboardDevices()
+	baseline := make([]string, 0, len(devices))
+	for event, identity := range devices {
+		baseline = append(baseline, event+"\x00"+identity)
+	}
+	sort.Strings(baseline)
+	return baseline
+}
+
+func dotoolKeyboardDevices() map[string]string {
+	devices := make(map[string]string)
+	entries, err := os.ReadDir("/sys/class/input")
+	if err != nil {
+		return devices
+	}
+	for _, entry := range entries {
+		if !strings.HasPrefix(entry.Name(), "event") {
+			continue
+		}
+		base := filepath.Join("/sys/class/input", entry.Name())
+		name, err := os.ReadFile(filepath.Join(base, "device", "name"))
+		if err != nil || strings.TrimSpace(string(name)) != "dotool keyboard" {
+			continue
+		}
+		deviceLink := filepath.Join(base, "device")
+		identity, err := filepath.EvalSymlinks(deviceLink)
+		if err != nil {
+			identity, _ = os.Readlink(deviceLink)
+		}
+		devices[filepath.Join("/dev/input", entry.Name())] = identity
+	}
+	return devices
+}
+
+func waitForGNOMEInputDevice(ctx context.Context, d deps.Dependencies, baseline []string, timeout time.Duration) bool {
+	old := make(map[string]string, len(baseline))
+	for _, item := range baseline {
+		parts := strings.SplitN(item, "\x00", 2)
+		if len(parts) == 2 {
+			old[parts[0]] = parts[1]
+		}
+	}
+	deadline := time.Now().Add(timeout)
+	for {
+		current := dotoolKeyboardDevices()
+		var added []string
+		for event, identity := range current {
+			if previous, exists := old[event]; !exists || previous != identity {
+				added = append(added, event)
+			}
+		}
+		if len(added) > 0 && gnomeShellHasOpened(added) && dotoolDaemonReady(dotoolPipePath(d.Getenv)) {
+			return true
+		}
+		if ctx.Err() != nil || !time.Now().Before(deadline) {
+			return false
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func gnomeShellPresent() bool {
+	processes, err := os.ReadDir("/proc")
+	if err != nil {
+		return false
+	}
+	for _, process := range processes {
+		if _, err := strconv.Atoi(process.Name()); err != nil {
+			continue
+		}
+		comm, err := os.ReadFile(filepath.Join("/proc", process.Name(), "comm"))
+		if err == nil && strings.TrimSpace(string(comm)) == "gnome-shell" {
+			return true
+		}
+	}
+	return false
+}
+
+func gnomeShellHasOpened(devices []string) bool {
+	wanted := make(map[string]struct{}, len(devices))
+	for _, device := range devices {
+		wanted[device] = struct{}{}
+	}
+	processes, err := os.ReadDir("/proc")
+	if err != nil {
+		return false
+	}
+	for _, process := range processes {
+		if _, err := strconv.Atoi(process.Name()); err != nil {
+			continue
+		}
+		comm, err := os.ReadFile(filepath.Join("/proc", process.Name(), "comm"))
+		if err != nil || strings.TrimSpace(string(comm)) != "gnome-shell" {
+			continue
+		}
+		fds, err := os.ReadDir(filepath.Join("/proc", process.Name(), "fd"))
+		if err != nil {
+			continue
+		}
+		for _, fd := range fds {
+			target, err := os.Readlink(filepath.Join("/proc", process.Name(), "fd", fd.Name()))
+			if err == nil {
+				if _, ok := wanted[target]; ok {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 func runInjector(ctx context.Context, d deps.Dependencies, commands, name string, observer InjectionObserver) error {

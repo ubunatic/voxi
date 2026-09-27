@@ -14,19 +14,22 @@ import (
 
 // Dependencies isolates host reads and subprocesses for tests.
 type Dependencies struct {
-	GOOS           string
-	GOARCH         string
-	Getenv         func(string) string
-	ReadFile       func(string) ([]byte, error)
-	WriteFile      func(string, []byte, os.FileMode) error
-	MkdirAll       func(string, os.FileMode) error
-	Remove         func(string) error
-	Stat           func(string) (os.FileInfo, error)
-	LookPath       func(string) (string, error)
-	Run            func(context.Context, string, ...string) error
-	RunOutput      func(ctx context.Context, name string, args ...string) (string, error)
-	RunStdin       func(ctx context.Context, stdin string, name string, args ...string) error
-	RunStdinOutput func(ctx context.Context, stdin string, name string, args ...string) (string, error)
+	GOOS      string
+	GOARCH    string
+	Getenv    func(string) string
+	ReadFile  func(string) ([]byte, error)
+	WriteFile func(string, []byte, os.FileMode) error
+	MkdirAll  func(string, os.FileMode) error
+	Remove    func(string) error
+	// WaitInputDeviceReady can override the GNOME input-device readiness probe.
+	// The baseline contains dotool keyboard event nodes that existed before a restart.
+	WaitInputDeviceReady func(context.Context, []string, time.Duration) bool
+	Stat                 func(string) (os.FileInfo, error)
+	LookPath             func(string) (string, error)
+	Run                  func(context.Context, string, ...string) error
+	RunOutput            func(ctx context.Context, name string, args ...string) (string, error)
+	RunStdin             func(ctx context.Context, stdin string, name string, args ...string) error
+	RunStdinOutput       func(ctx context.Context, stdin string, name string, args ...string) (string, error)
 	// RunStdinProcess is the lifecycle-aware stdin boundary used by desktop
 	// injection. It returns the child PID after the process has exited. A nil
 	// value falls back to RunStdin for lightweight callers and tests.

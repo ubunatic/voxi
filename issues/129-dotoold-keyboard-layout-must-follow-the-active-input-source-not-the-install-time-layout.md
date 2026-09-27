@@ -157,3 +157,19 @@ next manual change.
    presence) before writing; measure the required settle time with a canary.
 3. Test: source change triggers a restart without any injection; injection right
    after a restart waits for the settle condition.
+
+- 2026-09-27, M5 canary (no key events sent): launched three disposable
+  `dotoold` units on separate FIFOs and watched for each new `dotool keyboard`
+  event node to appear and then for `gnome-shell` to hold that exact
+  `/dev/input/eventN` descriptor. The kernel event node appeared after 95–111 ms;
+  GNOME opened it after 876–1598 ms. The GNOME-owned descriptor is a stronger
+  readiness signal than FIFO presence or a fixed sleep, and avoids typing into
+  any window. It proves Mutter/libinput opened the device, not end-to-end key
+  delivery. Use this signal with a 5 s bound; the observed maximum was about
+  1.6 s.
+- 2026-09-27, M5 implementation: the agent polls active XKB source changes and
+  prewarms `dotoold` before injection. Injection retains its safety check and
+  waits for GNOME to open the newly created keyboard (plus FIFO readiness) before
+  writing. Fakes cover proactive restart without injection and immediate typing
+  blocked until the device readiness signal. `make test-q1` passed with no
+  `FAIL` lines; captured output is `/tmp/voxi-issue129-m5-test.log`.

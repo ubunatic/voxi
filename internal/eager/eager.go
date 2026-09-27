@@ -1750,6 +1750,7 @@ func runEagerDaemon(ctx context.Context, d deps.Dependencies, opts EagerOptions)
 	if err := checkEagerModelReady(ctx, d, opts); err != nil {
 		return err
 	}
+	go typing.WatchInputSource(ctx, d, 150*time.Millisecond)
 
 	tmpDir, err := os.MkdirTemp("", "voxi-eager-daemon-*")
 	if err != nil {
