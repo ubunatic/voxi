@@ -1,6 +1,6 @@
 # 128 — Settings save should restart the daemon or auto-reload changed config
 
-**Status**: Open
+**Status**: Closed — Restart-on-save prompt shipped in a57cf0c; after restart the running engine matches the saved asr_model (r2t2-confucius4)
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: UX / Architecture
