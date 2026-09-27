@@ -79,3 +79,14 @@ check was skipped.
    supply it at runtime; the spec keeps only the default.
 3. **Timeout vs latency:** 60 s covers only ~6 s of audio on CPU. Sentence chunking (M2) must keep each
    request well under the timeout; add a test that long text becomes several requests.
+
+### M2 review (add8ba7)
+Full `go test ./...` green; request shape now matches tts-serve source; `voxi voice clone` installed.
+Live check skipped (no tts-serve server running).
+
+### M3 Pre-Work / Required Refinements (from M2 review)
+1. **Long sentences time out:** `SplitText` chunks by sentence with no length cap. At ~10 s compute per
+   1 s audio, a 25-word sentence (~10 s audio) needs ~100 s, over `timeout_ms: 60000`. For the
+   tts-serve backend only, split sentences longer than a spec-defined cap (e.g. `tts_serve.max_chunk_runes`)
+   at clause/word boundaries, and raise the default timeout so one capped chunk fits with margin.
+   Piper chunking unchanged. Test: a long sentence yields several requests, each within the cap.
