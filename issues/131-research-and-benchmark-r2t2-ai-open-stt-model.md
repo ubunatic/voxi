@@ -1,6 +1,6 @@
 # 131 — Research and benchmark R2T2.ai open STT model
 
-**Status**: Open
+**Status**: Closed — Done; see docs/Roadmap.md close/park section
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Performance
