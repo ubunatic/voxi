@@ -132,3 +132,7 @@ next manual change.
   Fake based tests cover readiness ordering, fallback restoration/warning,
   caching, and status data. `go test ./internal/typing/ ./internal/inputsource/`
   passed; `go build ./cmd/voxi` passed. Live acceptance and service restart remain.
+- 2026-09-27: M4 docs in `3b147f7`. Full `make test-q1` green; `make restart-service`
+  done; `voxi status` reports active `de+nodeadkeys`, dotoold `de`, no fallback.
+  Only open item: human live check (§4 "zebra yellow" us+mac-iso → de+nodeadkeys →
+  us+mac-iso). Issue 130 is covered by this work (FIFO-first guard test in `c833a2a`).
