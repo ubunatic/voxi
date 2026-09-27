@@ -1,6 +1,6 @@
 # 134 — Add R2T2 (Confucius4-R2T2) as a voxi ASR engine
 
-**Status**: Open
+**Status**: Closed — Done; see docs/Roadmap.md close/park section
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Feature
