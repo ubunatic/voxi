@@ -43,7 +43,7 @@
     },
     "tts_serve": {
       "type": "object",
-      "required": ["url", "timeout_ms", "reference_wav", "engine", "settings"],
+      "required": ["url", "timeout_ms", "reference_wav", "engine", "settings", "max_chunk_runes"],
       "properties": {
         "url": {
           "type": "string",
@@ -63,6 +63,12 @@
         "settings": {
           "type": "object",
           "description": "Passed through verbatim as the request's settings object."
+        },
+        "max_chunk_runes": {
+          "type": "integer",
+          "minimum": 20,
+          "maximum": 2000,
+          "description": "tts-serve only: sentences longer than this are re-split at clause/word boundaries before being sent, so one request stays well under timeout_ms. Piper chunking is unaffected."
         }
       },
       "additionalProperties": false

@@ -43,11 +43,12 @@ type TTSPiperSpec struct {
 // TTSServeSpec configures the tts-serve HTTP client backend (issue 155 M1,
 // API in issue 157). It is opt-in only: "auto" never selects it.
 type TTSServeSpec struct {
-	URL          string         `yaml:"url"`
-	TimeoutMs    int            `yaml:"timeout_ms"`
-	ReferenceWav string         `yaml:"reference_wav"`
-	Engine       string         `yaml:"engine"`
-	Settings     map[string]any `yaml:"settings"`
+	URL           string         `yaml:"url"`
+	TimeoutMs     int            `yaml:"timeout_ms"`
+	ReferenceWav  string         `yaml:"reference_wav"`
+	Engine        string         `yaml:"engine"`
+	Settings      map[string]any `yaml:"settings"`
+	MaxChunkRunes int            `yaml:"max_chunk_runes"`
 }
 
 // TTSLLMSpec defines defaults for speech-ready LLM narration.
@@ -94,6 +95,9 @@ func validateTTSSpec(s *TTSSpec) error {
 	}
 	if strings.TrimSpace(s.TTSServe.Engine) == "" {
 		return fmt.Errorf("spec: tts_serve.engine must not be empty")
+	}
+	if s.TTSServe.MaxChunkRunes < 20 || s.TTSServe.MaxChunkRunes > 2000 {
+		return fmt.Errorf("spec: tts_serve.max_chunk_runes must be between 20 and 2000")
 	}
 	return nil
 }

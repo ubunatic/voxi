@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -33,18 +34,20 @@ type ttsServeResponse struct {
 // fields. See github.com/scorbo2/tts-serve impl/server_chatterbox.py and
 // tts-engine-common/src/tts_engine_common/models.py.
 type ttsServeClient struct {
-	url        string
-	timeout    time.Duration
-	settings   map[string]any
-	httpClient *http.Client
-	readFile   func(string) ([]byte, error)
+	url           string
+	timeout       time.Duration
+	settings      map[string]any
+	maxChunkRunes int
+	httpClient    *http.Client
+	readFile      func(string) ([]byte, error)
 }
 
 func newTTSServeClient(s spec.TTSServeSpec) *ttsServeClient {
 	return &ttsServeClient{
-		url:      strings.TrimRight(strings.TrimSpace(s.URL), "/"),
-		timeout:  s.Timeout(),
-		settings: s.Settings,
+		url:           strings.TrimRight(strings.TrimSpace(s.URL), "/"),
+		timeout:       s.Timeout(),
+		settings:      s.Settings,
+		maxChunkRunes: s.MaxChunkRunes,
 	}
 }
 
@@ -52,6 +55,11 @@ func newTTSServeClient(s spec.TTSServeSpec) *ttsServeClient {
 // tts-serve endpoint and returns the decoded WAV bytes. referenceWav is
 // required: the wrapped engine's request schema requires a non-empty
 // audio_base64 clip.
+//
+// text longer than maxChunkRunes is re-split (see splitCapped, issue 155 M3
+// pre-work) and sent as several requests, each within the cap so no single
+// request risks exceeding timeout_ms; the resulting WAVs are concatenated
+// into one clip.
 func (c *ttsServeClient) Synthesize(ctx context.Context, text, referenceWav string) ([]byte, error) {
 	referenceWav = strings.TrimSpace(referenceWav)
 	if referenceWav == "" {
@@ -65,12 +73,27 @@ func (c *ttsServeClient) Synthesize(ctx context.Context, text, referenceWav stri
 	if err != nil {
 		return nil, fmt.Errorf("tts-serve %s: read tts_serve_reference_wav %q: %w", c.url, referenceWav, err)
 	}
+	referenceB64 := base64.StdEncoding.EncodeToString(data)
+
+	chunks := splitCapped(text, c.maxChunkRunes)
+	parts := make([][]byte, 0, len(chunks))
+	for _, chunk := range chunks {
+		audio, err := c.synthesizeChunk(ctx, chunk, referenceB64)
+		if err != nil {
+			return nil, err
+		}
+		parts = append(parts, audio)
+	}
+	return concatWAV(parts), nil
+}
+
+func (c *ttsServeClient) synthesizeChunk(ctx context.Context, text, referenceB64 string) ([]byte, error) {
 	payload := make(map[string]any, len(c.settings)+2)
 	for k, v := range c.settings {
 		payload[k] = v
 	}
 	payload["text"] = text
-	payload["audio_base64"] = base64.StdEncoding.EncodeToString(data)
+	payload["audio_base64"] = referenceB64
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("tts-serve %s: encode request: %w", c.url, err)
@@ -108,4 +131,73 @@ func (c *ttsServeClient) Synthesize(ctx context.Context, text, referenceWav stri
 		return nil, fmt.Errorf("tts-serve %s: decode audio_base64 response field: %w", endpoint, err)
 	}
 	return audio, nil
+}
+
+// concatWAV joins multiple synthesized WAV clips into one. When any part
+// cannot be parsed as a WAV (fmt/data chunks), it falls back to plain byte
+// concatenation rather than failing the request.
+func concatWAV(parts [][]byte) []byte {
+	if len(parts) == 1 {
+		return parts[0]
+	}
+	fmtChunk, pcm, ok := parseWAV(parts[0])
+	if !ok {
+		return bytes.Join(parts, nil)
+	}
+	for _, part := range parts[1:] {
+		_, morePCM, ok := parseWAV(part)
+		if !ok {
+			return bytes.Join(parts, nil)
+		}
+		pcm = append(pcm, morePCM...)
+	}
+	return buildWAV(fmtChunk, pcm)
+}
+
+// parseWAV extracts the fmt and data chunk payloads from a RIFF/WAVE file.
+func parseWAV(wav []byte) (fmtChunk, data []byte, ok bool) {
+	if len(wav) < 12 || string(wav[:4]) != "RIFF" || string(wav[8:12]) != "WAVE" {
+		return nil, nil, false
+	}
+	for offset := 12; offset+8 <= len(wav); {
+		chunkSize := int(binary.LittleEndian.Uint32(wav[offset+4 : offset+8]))
+		chunkStart := offset + 8
+		chunkEnd := chunkStart + chunkSize
+		if chunkSize < 0 || chunkEnd > len(wav) {
+			return nil, nil, false
+		}
+		switch string(wav[offset : offset+4]) {
+		case "fmt ":
+			fmtChunk = append([]byte(nil), wav[chunkStart:chunkEnd]...)
+		case "data":
+			data = append([]byte(nil), wav[chunkStart:chunkEnd]...)
+		}
+		offset = chunkEnd + (chunkSize & 1)
+	}
+	if fmtChunk == nil || data == nil {
+		return nil, nil, false
+	}
+	return fmtChunk, data, true
+}
+
+// buildWAV assembles a RIFF/WAVE file from one fmt chunk and combined PCM data.
+func buildWAV(fmtChunk, data []byte) []byte {
+	buf := new(bytes.Buffer)
+	buf.WriteString("RIFF")
+	riffSize := uint32(4 + 8 + len(fmtChunk) + (len(fmtChunk) & 1) + 8 + len(data) + (len(data) & 1))
+	_ = binary.Write(buf, binary.LittleEndian, riffSize)
+	buf.WriteString("WAVE")
+	buf.WriteString("fmt ")
+	_ = binary.Write(buf, binary.LittleEndian, uint32(len(fmtChunk)))
+	buf.Write(fmtChunk)
+	if len(fmtChunk)&1 == 1 {
+		buf.WriteByte(0)
+	}
+	buf.WriteString("data")
+	_ = binary.Write(buf, binary.LittleEndian, uint32(len(data)))
+	buf.Write(data)
+	if len(data)&1 == 1 {
+		buf.WriteByte(0)
+	}
+	return buf.Bytes()
 }

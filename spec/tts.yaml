@@ -25,9 +25,18 @@ tts_serve:
   # Local tts-serve endpoint; voxi does not install or launch the server.
   url: "http://127.0.0.1:8000"
   # Chatterbox on CPU costs about 10s of compute per 1s of audio. Text is sent
-  # sentence-chunked (see internal/tts.SplitText), so each request only needs
-  # to cover one sentence's audio, well under this ceiling.
-  timeout_ms: 60000
+  # sentence-chunked (see internal/tts.SplitText) and, for this backend only,
+  # re-split at max_chunk_runes (see below), so each request only needs to
+  # cover one capped chunk's audio. At an assumed ~150 words/min speaking rate
+  # (~6 runes/word, so ~15 runes/s of audio), max_chunk_runes: 120 is about 8s
+  # of audio, i.e. ~80s of compute (120 / 15 * 10). 150000 leaves ~1.9x margin
+  # over that (issue 155 M3 pre-work).
+  timeout_ms: 150000
+  # For the tts-serve backend only: sentences longer than this are re-split at
+  # clause (,;:) then word boundaries before being sent, so no single request
+  # risks exceeding timeout_ms. Piper's chunking (internal/tts.SplitText) is
+  # unaffected.
+  max_chunk_runes: 120
   # Default reference WAV; stays empty here. `voxi voice clone` (issue 155 M2)
   # writes the resolved voice profile to tts_serve_reference_wav in
   # ~/.config/voxi/config.yaml (or set VOXI_TTS_SERVE_REFERENCE_WAV) instead of

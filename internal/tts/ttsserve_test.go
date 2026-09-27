@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -164,6 +166,53 @@ func TestTTSServeClientReferenceWavReadError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "/missing/reference.wav") {
 		t.Errorf("error = %v, want it to name the reference WAV path", err)
+	}
+}
+
+func TestTTSServeClientSplitsLongTextIntoCappedChunks(t *testing.T) {
+	const maxChunkRunes = 20
+	referenceWav := []byte("RIFF-fake-wav-bytes")
+	var mu sync.Mutex
+	var gotTexts []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		mu.Lock()
+		gotTexts = append(gotTexts, fmt.Sprint(req["text"]))
+		mu.Unlock()
+		resp := ttsServeResponse{AudioBase64: base64.StdEncoding.EncodeToString([]byte("audio-for-" + fmt.Sprint(req["text"])))}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	s := newTestTTSServeSpec(server.URL)
+	s.MaxChunkRunes = maxChunkRunes
+	client := newTTSServeClient(s)
+	client.readFile = func(path string) ([]byte, error) { return referenceWav, nil }
+
+	longSentence := "This single sentence is deliberately long enough that it must be split into several capped requests."
+	audio, err := client.Synthesize(context.Background(), longSentence, "/fake/reference.wav")
+	if err != nil {
+		t.Fatalf("Synthesize() error = %v", err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(gotTexts) < 2 {
+		t.Fatalf("tts-serve received %d request(s), want several for a long sentence: %v", len(gotTexts), gotTexts)
+	}
+	var wantAudio []byte
+	for _, text := range gotTexts {
+		if n := len([]rune(text)); n > maxChunkRunes {
+			t.Errorf("request text %q has %d runes, want at most %d (max_chunk_runes)", text, n, maxChunkRunes)
+		}
+		wantAudio = append(wantAudio, []byte("audio-for-"+text)...)
+	}
+	if string(audio) != string(wantAudio) {
+		t.Errorf("audio = %q, want concatenation of per-chunk responses %q", audio, wantAudio)
 	}
 }
 
