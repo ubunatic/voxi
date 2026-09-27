@@ -202,7 +202,8 @@ func TestTTSServeEngineSendsOneRequestPerSentenceChunk(t *testing.T) {
 		mu.Lock()
 		gotTexts = append(gotTexts, fmt.Sprint(req["text"]))
 		mu.Unlock()
-		resp := ttsServeResponse{AudioBase64: base64.StdEncoding.EncodeToString([]byte("RIFF-fake-audio"))}
+		fmtChunk := []byte{1, 0, 1, 0, 0x44, 0xac, 0, 0, 0x88, 0x58, 1, 0, 2, 0, 16, 0}
+		resp := ttsServeResponse{AudioBase64: base64.StdEncoding.EncodeToString(buildWAV(fmtChunk, []byte("fake-audio")))}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(resp)
 	}))

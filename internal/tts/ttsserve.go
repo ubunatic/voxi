@@ -84,7 +84,11 @@ func (c *ttsServeClient) Synthesize(ctx context.Context, text, referenceWav stri
 		}
 		parts = append(parts, audio)
 	}
-	return concatWAV(parts), nil
+	audio, err := concatWAV(parts)
+	if err != nil {
+		return nil, fmt.Errorf("tts-serve %s: %w", c.url, err)
+	}
+	return audio, nil
 }
 
 func (c *ttsServeClient) synthesizeChunk(ctx context.Context, text, referenceB64 string) ([]byte, error) {
@@ -133,25 +137,32 @@ func (c *ttsServeClient) synthesizeChunk(ctx context.Context, text, referenceB64
 	return audio, nil
 }
 
-// concatWAV joins multiple synthesized WAV clips into one. When any part
-// cannot be parsed as a WAV (fmt/data chunks), it falls back to plain byte
-// concatenation rather than failing the request.
-func concatWAV(parts [][]byte) []byte {
+// concatWAV joins multiple synthesized WAV clips into one. Every part must
+// parse as a WAV with fmt/data chunks and all parts must share the same fmt
+// chunk (sample rate, channels, bit depth); otherwise concatWAV returns an
+// error instead of silently truncating or byte-joining mismatched clips.
+func concatWAV(parts [][]byte) ([]byte, error) {
 	if len(parts) == 1 {
-		return parts[0]
+		if _, _, ok := parseWAV(parts[0]); !ok {
+			return nil, fmt.Errorf("concat WAV parts: part 0: not a valid WAV")
+		}
+		return parts[0], nil
 	}
 	fmtChunk, pcm, ok := parseWAV(parts[0])
 	if !ok {
-		return bytes.Join(parts, nil)
+		return nil, fmt.Errorf("concat WAV parts: part 0: not a valid WAV")
 	}
-	for _, part := range parts[1:] {
-		_, morePCM, ok := parseWAV(part)
+	for i, part := range parts[1:] {
+		partFmt, morePCM, ok := parseWAV(part)
 		if !ok {
-			return bytes.Join(parts, nil)
+			return nil, fmt.Errorf("concat WAV parts: part %d: not a valid WAV", i+1)
+		}
+		if !bytes.Equal(partFmt, fmtChunk) {
+			return nil, fmt.Errorf("concat WAV parts: part %d: fmt chunk differs from part 0", i+1)
 		}
 		pcm = append(pcm, morePCM...)
 	}
-	return buildWAV(fmtChunk, pcm)
+	return buildWAV(fmtChunk, pcm), nil
 }
 
 // parseWAV extracts the fmt and data chunk payloads from a RIFF/WAVE file.

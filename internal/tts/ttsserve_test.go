@@ -3,6 +3,7 @@ package tts
 import (
 	"context"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -40,7 +41,8 @@ func TestTTSServeClientRequestShape(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&gotRequest); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
-		wav := []byte("RIFF-fake-response-wav")
+		fmtChunk := []byte{1, 0, 1, 0, 0x44, 0xac, 0, 0, 0x88, 0x58, 1, 0, 2, 0, 16, 0}
+		wav := buildWAV(fmtChunk, []byte("fake-response-pcm"))
 		resp := ttsServeResponse{AudioBase64: base64.StdEncoding.EncodeToString(wav)}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(resp)
@@ -55,8 +57,12 @@ func TestTTSServeClientRequestShape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Synthesize() error = %v", err)
 	}
-	if string(audio) != "RIFF-fake-response-wav" {
-		t.Errorf("audio = %q, want decoded response WAV", audio)
+	_, gotPCM, ok := parseWAV(audio)
+	if !ok {
+		t.Fatalf("Synthesize() audio is not a valid WAV: %x", audio)
+	}
+	if string(gotPCM) != "fake-response-pcm" {
+		t.Errorf("audio PCM = %q, want decoded response WAV PCM", gotPCM)
 	}
 	if gotRequest["text"] != "hello world" {
 		t.Errorf("request text = %v, want %q", gotRequest["text"], "hello world")
@@ -174,6 +180,7 @@ func TestTTSServeClientSplitsLongTextIntoCappedChunks(t *testing.T) {
 	referenceWav := []byte("RIFF-fake-wav-bytes")
 	var mu sync.Mutex
 	var gotTexts []string
+	testFmt := []byte{1, 0, 1, 0, 0x44, 0xac, 0, 0, 0x88, 0x58, 1, 0, 2, 0, 16, 0}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -182,7 +189,8 @@ func TestTTSServeClientSplitsLongTextIntoCappedChunks(t *testing.T) {
 		mu.Lock()
 		gotTexts = append(gotTexts, fmt.Sprint(req["text"]))
 		mu.Unlock()
-		resp := ttsServeResponse{AudioBase64: base64.StdEncoding.EncodeToString([]byte("audio-for-" + fmt.Sprint(req["text"])))}
+		wav := buildWAV(testFmt, []byte("audio-for-"+fmt.Sprint(req["text"])))
+		resp := ttsServeResponse{AudioBase64: base64.StdEncoding.EncodeToString(wav)}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(resp)
 	}))
@@ -204,15 +212,103 @@ func TestTTSServeClientSplitsLongTextIntoCappedChunks(t *testing.T) {
 	if len(gotTexts) < 2 {
 		t.Fatalf("tts-serve received %d request(s), want several for a long sentence: %v", len(gotTexts), gotTexts)
 	}
-	var wantAudio []byte
+	var wantPCM []byte
 	for _, text := range gotTexts {
 		if n := len([]rune(text)); n > maxChunkRunes {
 			t.Errorf("request text %q has %d runes, want at most %d (max_chunk_runes)", text, n, maxChunkRunes)
 		}
-		wantAudio = append(wantAudio, []byte("audio-for-"+text)...)
+		wantPCM = append(wantPCM, []byte("audio-for-"+text)...)
 	}
-	if string(audio) != string(wantAudio) {
-		t.Errorf("audio = %q, want concatenation of per-chunk responses %q", audio, wantAudio)
+	_, gotPCM, ok := parseWAV(audio)
+	if !ok {
+		t.Fatalf("Synthesize() audio is not a valid WAV: %x", audio)
+	}
+	if string(gotPCM) != string(wantPCM) {
+		t.Errorf("audio PCM = %q, want concatenation of per-chunk responses %q", gotPCM, wantPCM)
+	}
+}
+
+func TestConcatWAVTwoValidParts(t *testing.T) {
+	fmtChunk := []byte{1, 0, 1, 0, 0x44, 0xac, 0, 0, 0x88, 0x58, 1, 0, 2, 0, 16, 0}
+	part1 := buildWAV(fmtChunk, []byte("abcd"))
+	part2 := buildWAV(fmtChunk, []byte("efgh"))
+
+	got, err := concatWAV([][]byte{part1, part2})
+	if err != nil {
+		t.Fatalf("concatWAV() error = %v", err)
+	}
+
+	riffSize := binary.LittleEndian.Uint32(got[4:8])
+	if int(riffSize) != len(got)-8 {
+		t.Errorf("RIFF size = %d, want %d (len(got)-8)", riffSize, len(got)-8)
+	}
+	gotFmt, gotPCM, ok := parseWAV(got)
+	if !ok {
+		t.Fatalf("concatWAV() result is not a valid WAV: %x", got)
+	}
+	if string(gotFmt) != string(fmtChunk) {
+		t.Errorf("fmt chunk = %x, want %x", gotFmt, fmtChunk)
+	}
+	if string(gotPCM) != "abcdefgh" {
+		t.Errorf("PCM data = %q, want %q (part order preserved)", gotPCM, "abcdefgh")
+	}
+}
+
+func TestConcatWAVOddSizeChunkPadding(t *testing.T) {
+	fmtChunk := []byte{1, 0, 1, 0, 0x44, 0xac, 0, 0, 0x88, 0x58, 1, 0, 2, 0, 16, 0}
+	part1 := buildWAV(fmtChunk, []byte("abc"))
+	part2 := buildWAV(fmtChunk, []byte("de"))
+
+	got, err := concatWAV([][]byte{part1, part2})
+	if err != nil {
+		t.Fatalf("concatWAV() error = %v", err)
+	}
+	gotFmt, gotPCM, ok := parseWAV(got)
+	if !ok {
+		t.Fatalf("concatWAV() result is not a valid WAV: %x", got)
+	}
+	if string(gotFmt) != string(fmtChunk) {
+		t.Errorf("fmt chunk = %x, want %x", gotFmt, fmtChunk)
+	}
+	if string(gotPCM) != "abcde" {
+		t.Errorf("PCM data = %q, want %q", gotPCM, "abcde")
+	}
+	if len(got)%2 != 0 {
+		t.Errorf("concatWAV() result length = %d, want even (data chunk padded to word boundary)", len(got))
+	}
+}
+
+func TestConcatWAVMismatchedFmtErrors(t *testing.T) {
+	fmtChunkA := []byte{1, 0, 1, 0, 0x44, 0xac, 0, 0, 0x88, 0x58, 1, 0, 2, 0, 16, 0}
+	fmtChunkB := []byte{1, 0, 2, 0, 0x44, 0xac, 0, 0, 0x10, 0xb1, 2, 0, 4, 0, 16, 0}
+	part1 := buildWAV(fmtChunkA, []byte("abcd"))
+	part2 := buildWAV(fmtChunkB, []byte("efgh"))
+
+	_, err := concatWAV([][]byte{part1, part2})
+	if err == nil {
+		t.Fatal("concatWAV() error = nil, want error for mismatched fmt chunks")
+	}
+	if !strings.Contains(err.Error(), "fmt chunk differs") {
+		t.Errorf("error = %v, want it to mention the fmt chunk mismatch", err)
+	}
+}
+
+func TestConcatWAVGarbagePartErrors(t *testing.T) {
+	fmtChunk := []byte{1, 0, 1, 0, 0x44, 0xac, 0, 0, 0x88, 0x58, 1, 0, 2, 0, 16, 0}
+	part1 := buildWAV(fmtChunk, []byte("abcd"))
+	garbage := []byte("not a wav at all")
+
+	_, err := concatWAV([][]byte{part1, garbage})
+	if err == nil {
+		t.Fatal("concatWAV() error = nil, want error for an unparsable part")
+	}
+	if !strings.Contains(err.Error(), "part 1") {
+		t.Errorf("error = %v, want it to identify part 1 as the invalid part", err)
+	}
+
+	_, err = concatWAV([][]byte{garbage})
+	if err == nil {
+		t.Fatal("concatWAV() single-part error = nil, want error for an unparsable single part")
 	}
 }
 
