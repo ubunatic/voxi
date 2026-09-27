@@ -1,6 +1,6 @@
 # 113 — Wire saved ASR, history, and modifier settings into runtime
 
-**Status**: Open
+**Status**: Closed — M1-M4 done (137bbe4..d363120), terra reviewed, tests green, service restarted
 **Priority**: P1 (High)
 **Severity**: Major
 **Category**: Bug
