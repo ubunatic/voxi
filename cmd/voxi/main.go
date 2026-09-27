@@ -267,7 +267,11 @@ func main() {
 				return fmt.Errorf("read stdin: %w", err)
 			}
 			text := string(data)
-			if _, err := history.AppendHistory(historyPath(), text, history.DefaultHistoryLimit, time.Now()); err != nil {
+			settings, err := config.LoadUserSettings(d.Getenv("HOME"))
+			if err != nil {
+				return err
+			}
+			if err := recordHistoryEntry(historyPath(), text, settings.DictationHistory); err != nil {
 				return err
 			}
 			_, err = fmt.Fprint(d.Stdout, text)
@@ -416,6 +420,14 @@ func main() {
 		tts.ReportCommandError(d, err)
 		os.Exit(1)
 	}
+}
+
+func recordHistoryEntry(path, text string, enabled bool) error {
+	if !enabled {
+		return nil
+	}
+	_, err := history.AppendHistory(path, text, history.DefaultHistoryLimit, time.Now())
+	return err
 }
 
 // printBenchReport renders a CPU-vs-GPU RTF/speedup table grouped by model.

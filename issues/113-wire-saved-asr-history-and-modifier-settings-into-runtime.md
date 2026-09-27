@@ -48,3 +48,10 @@ The findings are from source inspection; the disabled-history behavior has not y
    unconditionally; honor the disabled history setting there too, with a test.
 2. Add a test that gating off still runs the issue 129 layout sync under
    `typingMu` (public TypeText path, not only the private helper).
+
+### M4 Refinements Complete
+
+1. `voxi history record` now honors the saved dictation history setting: disabled skips persistence while preserving stdin echo; covered by a no-new-entry test.
+2. The public `typing.TypeText` path is covered with modifier gating disabled and verifies issue 129 layout synchronization/restart and injection still occur.
+
+Verification: `make test-q1` passed; output captured at `/tmp/voxi-issue113-m4-test-q1.log` with no `FAIL` matches. `make install` passed. No service restart was run.

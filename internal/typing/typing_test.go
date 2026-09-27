@@ -12,6 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"gopkg.in/yaml.v3"
+	"ubunatic.com/voxi/internal/config"
+
 	"ubunatic.com/voxi/internal/deps"
 )
 
@@ -53,6 +56,18 @@ func TestTypeTextSynchronizesDotooldLayoutBeforeFIFO(t *testing.T) {
 		{"changed", "DOTOOL_XKB_LAYOUT=de DOTOOL_XKB_VARIANT=nodeadkeys", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			configPath := config.VoxiConfigYAMLPath(home)
+			if err := os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {
+				t.Fatal(err)
+			}
+			configData, err := yaml.Marshal(&config.UserSettings{ModifierGating: false})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(configPath, configData, 0600); err != nil {
+				t.Fatal(err)
+			}
 			pipe := filepath.Join(t.TempDir(), "dotool-pipe")
 			if err := syscall.Mkfifo(pipe, 0600); err != nil {
 				t.Fatal(err)
@@ -64,10 +79,11 @@ func TestTypeTextSynchronizesDotooldLayoutBeforeFIFO(t *testing.T) {
 			defer reader.Close()
 			var restarts atomic.Int32
 			var wrote string
+			var injected atomic.Int32
 			d := deps.Dependencies{
 				Getenv: func(key string) string {
 					if key == "HOME" {
-						return t.TempDir()
+						return home
 					}
 					if key == "DOTOOL_PIPE" {
 						return pipe
@@ -99,6 +115,7 @@ func TestTypeTextSynchronizesDotooldLayoutBeforeFIFO(t *testing.T) {
 					if name != "dotoolc" {
 						t.Fatalf("injector=%q, want dotoolc", name)
 					}
+					injected.Add(1)
 					return nil
 				},
 			}
@@ -111,6 +128,9 @@ func TestTypeTextSynchronizesDotooldLayoutBeforeFIFO(t *testing.T) {
 			}
 			if got := restarts.Load(); got != want {
 				t.Fatalf("restart count=%d, want %d", got, want)
+			}
+			if injected.Load() != 1 {
+				t.Fatalf("injection count=%d, want 1", injected.Load())
 			}
 			if tc.wantRestart && (!strings.Contains(wrote, "DOTOOL_XKB_LAYOUT=us") || !strings.Contains(wrote, "DOTOOL_XKB_VARIANT=mac-iso")) {
 				t.Fatalf("drop-in=%q", wrote)
