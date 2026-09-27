@@ -1,6 +1,6 @@
 # 122 — Add Gemini Flash 3.7 support as LLM cleanup model
 
-**Status**: In Progress — subprocess integration implemented; real cleanup blocked by `agy` latency
+**Status**: Blocked — Parked: Gemini cleanup too slow
 **Priority**: P3 (Low)
 **Severity**: Minor
 **Category**: Feature
