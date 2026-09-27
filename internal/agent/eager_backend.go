@@ -82,8 +82,8 @@ func eagerArgs(home string) []string {
 		if settings.ASRModel != "" {
 			args = append(args, "--model", settings.ASRModel)
 		}
-		args = append(args, "--history", strconv.FormatBool(settings.DictationHistory))
-		args = append(args, "--modifier-gating", strconv.FormatBool(settings.ModifierGating))
+		args = append(args, "--history="+strconv.FormatBool(settings.DictationHistory))
+		args = append(args, "--modifier-gating="+strconv.FormatBool(settings.ModifierGating))
 	}
 	return args
 }

@@ -144,36 +144,19 @@ func main() {
 
 	// 3. eager command
 	eagerOpts := eager.DefaultEagerOptions()
-	eagerCmd := &cobra.Command{
-		Use:   "eager",
-		Short: "Continuous eager sentence streaming dictation into focused window",
-		Long: "Continuously captures audio from the microphone with a circular pre-roll buffer.\n" +
-			"Segments speech on natural conversational pauses (silence > 800ms) or rolling windows,\n" +
-			"transcribes completed phrases immediately with the selected model's engine (Cohere\n" +
-			"Transcribe via crispasr by default, or Whisper via voxtype for an explicit --model),\n" +
-			"and types finalized sentences directly into the active application via dotool with zero\n" +
-			"dropped words across pauses. crispasr is required for the default engine; voxtype is only\n" +
-			"required when an explicit Whisper --model is selected.",
-		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			eagerOpts.HistorySet = cmd.Flags().Changed("history")
-			eagerOpts.ModifierGatingSet = cmd.Flags().Changed("modifier-gating")
-			eagerOpts.ModelSet = cmd.Flags().Changed("model")
-			return eager.RunEagerDictation(cmd.Context(), d, eagerOpts)
-		},
-	}
-	eagerCmd.Flags().IntVar(&eagerOpts.ThresholdRMS, "threshold", eagerOpts.ThresholdRMS, "audio RMS energy threshold to trigger speech detection (default: 150)")
-	eagerCmd.Flags().IntVar(&eagerOpts.SilenceMs, "silence", eagerOpts.SilenceMs, "silence duration in ms to finalize an utterance chunk (default: 800)")
-	eagerCmd.Flags().IntVar(&eagerOpts.PreRollMs, "pre-roll", eagerOpts.PreRollMs, "pre-speech circular buffer duration in ms to preserve starting phonemes (default: 500)")
-	eagerCmd.Flags().IntVar(&eagerOpts.MinSpeechMs, "min-speech", eagerOpts.MinSpeechMs, "minimum speech duration in ms to ignore noise (default: 200)")
-	eagerCmd.Flags().IntVar(&eagerOpts.MaxWindowMs, "max-window", eagerOpts.MaxWindowMs, "maximum window length in ms before forcing a phrase chunk (default: 8000)")
-	eagerCmd.Flags().BoolVar(&eagerOpts.TypeOutput, "type", eagerOpts.TypeOutput, "type transcribed sentences directly into the focused window via dotool")
-	eagerCmd.Flags().BoolVar(&eagerOpts.RecordHistory, "history", eagerOpts.RecordHistory, "record transcribed utterances into local dictation history")
-	eagerCmd.Flags().BoolVar(&eagerOpts.ModifierGating, "modifier-gating", eagerOpts.ModifierGating, "wait for physical modifiers before typing output")
-	eagerCmd.Flags().BoolVar(&eagerOpts.Daemon, "daemon", eagerOpts.Daemon, "run as background systemd daemon listening for toggle control")
-	eagerCmd.Flags().StringVar(&eagerOpts.Model, "model", eagerOpts.Model, fmt.Sprintf("model name, see spec/models.yaml (default: %s, engine cohere-transcribe via crispasr; explicit whisper-engine models need voxtype)", eagerOpts.Model))
-	eagerCmd.Flags().BoolVar(&eagerOpts.SpeechContext, "speech-context", eagerOpts.SpeechContext, "bounded local vocabulary hints for Whisper small.en (default: on; ignored by default Cohere; use --speech-context=false to disable)")
-	eagerCmd.Flags().StringSliceVar(&eagerOpts.Vocabulary, "vocabulary", eagerOpts.Vocabulary, "additional comma-separated speech-context terms (requires --speech-context)")
+	eagerCmd := eager.NewCommand(func(cmd *cobra.Command, args []string) error {
+		eagerOpts.HistorySet = cmd.Flags().Changed("history")
+		eagerOpts.ModifierGatingSet = cmd.Flags().Changed("modifier-gating")
+		eagerOpts.ModelSet = cmd.Flags().Changed("model")
+		return eager.RunEagerDictation(cmd.Context(), d, eagerOpts)
+	}, eagerOpts)
+	eagerCmd.Long = "Continuously captures audio from the microphone with a circular pre-roll buffer.\n" +
+		"Segments speech on natural conversational pauses (silence > 800ms) or rolling windows,\n" +
+		"transcribes completed phrases immediately with the selected model's engine (Cohere\n" +
+		"Transcribe via crispasr by default, or Whisper via voxtype for an explicit --model),\n" +
+		"and types finalized sentences directly into the active application via dotool with zero\n" +
+		"dropped words across pauses. crispasr is required for the default engine; voxtype is only\n" +
+		"required when an explicit Whisper --model is selected."
 
 	// 4. monitor / top / resources command
 	var watch bool
