@@ -143,7 +143,7 @@ func drainTestDeps(tmp, transcriber string, stdout io.Writer, typed *[]string, m
 }
 
 func drainTestOptions() EagerOptions {
-	return EagerOptions{ThresholdRMS: 500, SilenceMs: 60, PreRollMs: 40, MinSpeechMs: 40, MaxWindowMs: 1000, TypeOutput: true, Model: "small.en"}
+	return EagerOptions{ThresholdRMS: 500, SilenceMs: 60, PreRollMs: 40, MinSpeechMs: 40, MaxWindowMs: 1000, TypeOutput: true, RecordHistory: true, ModifierGating: true, Model: "small.en"}
 }
 
 type drainScenario struct {

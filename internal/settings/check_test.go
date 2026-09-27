@@ -50,11 +50,13 @@ func TestRunDiagnosticsPass(t *testing.T) {
 	if !strings.Contains(text, "ASR Engine:") {
 		t.Errorf("rendered report missing ASR Engine item")
 	}
-	if !strings.Contains(text, "Chunk transcripts and audio use the separate bounded chunk buffer.") {
-		t.Errorf("history diagnostic does not explain separate chunk storage: %s", text)
-	}
 	if !strings.Contains(text, "Disabled (typing and eager modifier gates bypassed)") {
 		t.Errorf("modifier diagnostic does not describe runtime behavior: %s", text)
+	}
+	for _, item := range report.Items {
+		if item.Name == "Dictation History" && !strings.Contains(item.Detail, "Chunk transcripts and audio use the separate bounded chunk buffer.") {
+			t.Errorf("history diagnostic detail = %q", item.Detail)
+		}
 	}
 
 	jsonStr, err := RenderDiagnosticJSON(report)

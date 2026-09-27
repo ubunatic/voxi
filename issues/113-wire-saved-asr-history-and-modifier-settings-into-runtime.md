@@ -36,3 +36,5 @@ The findings are from source inspection; the disabled-history behavior has not y
 - **Milestone 2:** In progress — saved modifier gating controls typing waits and eager buffering/polling; layout synchronization remains in the typing path.
 - **Milestone 2:** Complete — saved modifier setting controls eager polling/buffering and typing waits, while layout synchronization remains active.
 - **Milestone 3:** In progress — diagnostics describe effective history/modifier behavior and separate chunk storage; saved settings reach fresh daemon child sessions, while explicit CLI model/history/modifier flags take precedence.
+- **Milestone 3:** Complete — diagnostics explain applied gating/history behavior and chunk storage; fresh agent launches pass saved settings; explicit CLI flag precedence is covered.
+- **Verification:** First `make test-q1` found three drain tests that relied on modifier buffering without setting the new option and one diagnostic assertion that expected hidden detail in terminal output. Updated those test fixtures/assertions; rerunning the quota suite once.
