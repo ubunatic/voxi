@@ -1,6 +1,6 @@
 # 130 — Standalone dotool injection exits successfully but produces no visible typing on GNOME
 
-**Status**: Open
+**Status**: Closed — Covered by issue 129: FIFO-first dotoolc path kept, guard test in c833a2a
 
 ---
 
