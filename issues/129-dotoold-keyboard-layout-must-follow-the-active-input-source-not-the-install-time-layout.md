@@ -178,3 +178,5 @@ next manual change.
   if the live retest shows problems: a chunk that times out after the 5 s wait is
   dropped with an error, not retried; the watcher holds typingMu during the wait;
   a readiness timeout may cause repeated restarts every 150 ms tick.
+- 2026-09-27: live retest passed (user): fast EN/DE switching types "Yellow zebra"
+  correctly with no lost first chunk, even while the machine is under CPU load.
