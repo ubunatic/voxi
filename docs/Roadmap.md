@@ -37,6 +37,13 @@ Presentation, distribution, and hygiene rank below all three.
 
 ## Now — correct text at the keyboard, and settings that apply
 
+> **Update 2026-09-27:** shipped and closed: 129 + 130 (layout follows the
+> active input source, prewarmed on switch, live-verified), 113 (history and
+> modifier-gating settings applied at runtime) and 128 (restart on save).
+> The regression that stopped the eager child starting (`004a9f4`, `e5e46af`)
+> is fixed. Proposed next: 125 (pause media during recording) ahead of 100, as a
+> cheap removal of one real background-voice source.
+
 - **[129 dotoold layout must follow the active input source](../issues/129-dotoold-keyboard-layout-must-follow-the-active-input-source-not-the-install-time-layout.md)**
   (Open, P1) together with **[130 standalone dotool types nothing on GNOME](../issues/130-standalone-dotool-injection-exits-successfully-but-produces-no-visible-typing-on-gnome.md)**
   (Open, P1). Head of `Now`. Dictation on the user's own second keyboard
