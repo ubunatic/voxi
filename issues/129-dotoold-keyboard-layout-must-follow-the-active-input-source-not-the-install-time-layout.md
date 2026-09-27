@@ -136,3 +136,24 @@ next manual change.
   done; `voxi status` reports active `de+nodeadkeys`, dotoold `de`, no fallback.
   Only open item: human live check (§4 "zebra yellow" us+mac-iso → de+nodeadkeys →
   us+mac-iso). Issue 130 is covered by this work (FIFO-first guard test in `c833a2a`).
+
+### Live check 2026-09-27 (user) — layout correct, first chunk after a switch lost
+
+- DE and EN both type "Yellow zebra" correctly: y/z mapping follows the source.
+- Failure: the first dictated chunk after switching the input source is dropped
+  (EN after DE, DE after EN); a mid-dictation chunk ("After switching") was also
+  lost. Steady state without switching is instant and correct.
+- Likely cause: the restart happens inside the injection path. The FIFO check
+  passes before GNOME has registered the new uinput virtual keyboard, so the
+  first keystrokes go nowhere.
+
+### M5 Pre-Work / Required Refinements
+
+1. Restart `dotoold` proactively when the input source changes (e.g. watch
+   `gsettings monitor org.gnome.desktop.input-sources current` / `sources` in the
+   agent), not at injection time, so the device is warm before the user speaks.
+2. Keep the injection-time check as a safety net, but after any restart wait
+   until the new virtual keyboard is usable (device settle, not just FIFO
+   presence) before writing; measure the required settle time with a canary.
+3. Test: source change triggers a restart without any injection; injection right
+   after a restart waits for the settle condition.
