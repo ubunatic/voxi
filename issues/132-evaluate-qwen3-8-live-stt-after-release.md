@@ -1,6 +1,6 @@
 # 132 — Evaluate Qwen3.8 live STT after release
 
-**Status**: Open
+**Status**: Blocked — Parked: waiting on public Qwen3.8 release
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Performance
