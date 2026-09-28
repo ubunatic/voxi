@@ -103,3 +103,6 @@ split at clause then word boundaries; parts joined into one WAV. Tests green, ar
 
 ### M4 delivered (7d8184d): strict WAV concat
 Invalid or mismatched WAV parts now return an error; four concat unit tests added. Full suite green.
+
+### User confirmation (2026-09-28)
+User confirmed cloned-voice TTS via tts-serve works end to end on their machine.
