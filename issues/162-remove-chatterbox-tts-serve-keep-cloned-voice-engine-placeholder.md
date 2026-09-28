@@ -1,6 +1,6 @@
 # 162 — remove Chatterbox/tts-serve, keep a cloned-voice engine placeholder
 
-**Status**: Open
+**Status**: Closed
 **Priority**: P2 (Medium)
 **Severity**: Refactor
 **Category**: Refactor
