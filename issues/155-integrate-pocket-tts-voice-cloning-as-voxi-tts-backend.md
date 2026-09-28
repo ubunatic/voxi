@@ -1,6 +1,6 @@
 # 155 — integrate cloned-voice TTS backend (Chatterbox via tts-serve)
 
-**Status**: Closed — tts-serve (Chatterbox) cloned-voice backend shipped in 09fbca9, add8ba7, 49af619, 7d8184d; live check pending a running tts-serve server
+**Status**: Closed — tts-serve (Chatterbox) cloned-voice backend shipped in 09fbca9, add8ba7, 49af619, 7d8184d; live-verified via issue 159 (1b3dd3c)
 **Priority**: P2 (Medium)
 **Severity**: Feature
 **Category**: Feature
