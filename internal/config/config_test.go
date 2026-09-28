@@ -293,22 +293,15 @@ func TestFormatEnvIncludesTTSSettings(t *testing.T) {
 	}
 }
 
-func TestLoadUserSettingsSilentlyIgnoresLegacyTTSServeKeys(t *testing.T) {
+func TestLoadUserSettingsRejectsUnknownTTSBackend(t *testing.T) {
 	home := t.TempDir()
 	if err := os.MkdirAll(VoxiConfigDir(home), 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(VoxiConfigYAMLPath(home), []byte("tts_serve_reference_wav: /old/voice.wav\ntts_serve:\n  url: http://127.0.0.1:8000\n"), 0600); err != nil {
+	if err := os.WriteFile(VoxiConfigYAMLPath(home), []byte("tts_backend: strange-engine\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(VoxiEnvPath(home), []byte("VOXI_TTS_SERVE_REFERENCE_WAV=/old/env.wav\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	settings, err := LoadUserSettings(home)
-	if err != nil {
-		t.Fatalf("LoadUserSettings() error = %v", err)
-	}
-	if settings.TTSVoiceReferenceWav != "" {
-		t.Fatalf("TTSVoiceReferenceWav = %q, want legacy keys ignored", settings.TTSVoiceReferenceWav)
+	if _, err := LoadUserSettings(home); err == nil || !strings.Contains(err.Error(), `unknown TTS backend "strange-engine"`) {
+		t.Fatalf("LoadUserSettings() error = %v, want unknown backend error", err)
 	}
 }

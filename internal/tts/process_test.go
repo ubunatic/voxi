@@ -25,12 +25,21 @@ func TestEngineBackendStatusReportsPreferredFallbackAndMissing(t *testing.T) {
 		{name: "missing", available: map[string]bool{}, want: "missing (Festival / espeak-ng); player missing (pw-play / paplay)"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			engine := NewEngine(deps.Dependencies{LookPath: func(name string) (string, error) {
-				if tc.available[name] {
-					return "/usr/bin/" + name, nil
-				}
-				return "", os.ErrNotExist
-			}}, "/usr/bin/voxi")
+			home := t.TempDir()
+			engine := NewEngine(deps.Dependencies{
+				Getenv: func(key string) string {
+					if key == "HOME" {
+						return home
+					}
+					return ""
+				},
+				LookPath: func(name string) (string, error) {
+					if tc.available[name] {
+						return "/usr/bin/" + name, nil
+					}
+					return "", os.ErrNotExist
+				},
+			}, "/usr/bin/voxi")
 			if got := engine.BackendStatus(); got != tc.want {
 				t.Fatalf("BackendStatus() = %q, want %q", got, tc.want)
 			}
@@ -91,45 +100,6 @@ func TestSelectedBackendUsesAutoByDefaultAndNormalizesValue(t *testing.T) {
 	engine.deps.Getenv = func(string) string { return "" }
 	if got := engine.selectedBackend(); got != "auto" {
 		t.Fatalf("selectedBackend() = %q, want auto", got)
-	}
-}
-
-func TestSynthesizeDeprecatedTTSServeBackendReturnsMigrationError(t *testing.T) {
-	for _, tc := range []struct {
-		name    string
-		backend string
-		fromEnv bool
-	}{
-		{name: "config", backend: "tts-serve"},
-		{name: "environment", backend: "tts-serve", fromEnv: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			home := t.TempDir()
-			t.Setenv("HOME", home)
-			if !tc.fromEnv {
-				configDir := filepath.Join(home, ".config", "voxi")
-				if err := os.MkdirAll(configDir, 0755); err != nil {
-					t.Fatal(err)
-				}
-				data := []byte("tts_backend: tts-serve\ntts_serve_reference_wav: /old/path.wav\n")
-				if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), data, 0600); err != nil {
-					t.Fatal(err)
-				}
-			}
-			engine := NewEngine(deps.Dependencies{Getenv: func(key string) string {
-				if key == "HOME" {
-					return home
-				}
-				if key == "VOXI_TTS_BACKEND" && tc.fromEnv {
-					return tc.backend
-				}
-				return ""
-			}}, "/usr/bin/voxi")
-			_, _, err := engine.Synthesize(t.Context(), "hello")
-			if err == nil || !strings.Contains(err.Error(), "removed") || !strings.Contains(err.Error(), "issue 162/160") {
-				t.Fatalf("Synthesize() error = %v, want removed-backend migration error", err)
-			}
-		})
 	}
 }
 

@@ -31,6 +31,20 @@ func NewSayCommand(d deps.Dependencies) *cobra.Command {
 		Short: "Rewrite text for speech with an LLM, then read it aloud",
 		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			home := ""
+			if d.Getenv != nil {
+				home = d.Getenv("HOME")
+			}
+			if _, err := config.LoadUserSettings(home); err != nil {
+				return fmt.Errorf("load TTS configuration: %w", err)
+			}
+			if d.Getenv != nil {
+				if backend := strings.TrimSpace(d.Getenv("VOXI_TTS_BACKEND")); backend != "" {
+					if err := config.ValidateTTSBackend(backend); err != nil {
+						return err
+					}
+				}
+			}
 			var text string
 			if from != "" {
 				if len(args) > 0 {

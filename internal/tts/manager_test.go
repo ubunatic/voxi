@@ -186,6 +186,32 @@ func TestDisabledManagerReportsConfigOptOutAndRejectsSpeech(t *testing.T) {
 	}
 }
 
+func TestManagerPublishesSynthesisFailure(t *testing.T) {
+	backend := &fakeBackend{synthErr: errors.New("engine unavailable")}
+	manager := NewManager(context.Background(), backend)
+	defer manager.Close()
+	if _, err := manager.Enqueue("spoken text"); err != nil {
+		t.Fatalf("Enqueue() error = %v", err)
+	}
+	waitFor(t, func() bool {
+		snapshot := manager.Snapshot()
+		return snapshot.LastError == "engine unavailable" && len(snapshot.History) == 1 && snapshot.History[0].Status == "failed"
+	})
+}
+
+func TestManagerPublishesPlaybackFailure(t *testing.T) {
+	backend := &fakeBackend{playbackErr: errors.New("player unavailable")}
+	manager := NewManager(context.Background(), backend)
+	defer manager.Close()
+	if _, err := manager.Enqueue("spoken text"); err != nil {
+		t.Fatalf("Enqueue() error = %v", err)
+	}
+	waitFor(t, func() bool {
+		snapshot := manager.Snapshot()
+		return snapshot.LastError == "player unavailable" && len(snapshot.History) == 1 && snapshot.History[0].Status == "failed"
+	})
+}
+
 func TestManagerCloseStopsPlaybackAndDiscardsQueue(t *testing.T) {
 	backend := &fakeBackend{started: make(chan string, 4), players: make(chan *fakePlayback, 4)}
 	manager := NewManager(context.Background(), backend)
@@ -208,12 +234,17 @@ func TestManagerCloseStopsPlaybackAndDiscardsQueue(t *testing.T) {
 }
 
 type fakeBackend struct {
-	mu      sync.Mutex
-	started chan string
-	players chan *fakePlayback
+	mu          sync.Mutex
+	started     chan string
+	players     chan *fakePlayback
+	synthErr    error
+	playbackErr error
 }
 
 func (b *fakeBackend) Synthesize(ctx context.Context, text string) (audioFile, time.Duration, error) {
+	if b.synthErr != nil {
+		return audioFile{}, 0, b.synthErr
+	}
 	select {
 	case <-ctx.Done():
 		return audioFile{}, 0, ctx.Err()
@@ -235,6 +266,9 @@ func (b *fakeBackend) Synthesize(ctx context.Context, text string) (audioFile, t
 }
 
 func (b *fakeBackend) StartPlayback(_ context.Context, _ string) (Playback, error) {
+	if b.playbackErr != nil {
+		return nil, b.playbackErr
+	}
 	p := &fakePlayback{done: make(chan error, 1)}
 	if b.players != nil {
 		b.players <- p

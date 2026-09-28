@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -316,6 +317,8 @@ func (m *Manager) run() {
 		player, err = m.backend.StartPlayback(m.ctx, currentAudio.path)
 		if err != nil {
 			lastErr = err.Error()
+			log.Printf("TTS playback failed: %v", err)
+			m.finishFeed("failed")
 			_ = currentAudio.Close()
 			currentAudio = audioFile{}
 			current = ""
@@ -421,7 +424,8 @@ func (m *Manager) run() {
 			if result.err != nil {
 				if !errors.Is(result.err, context.Canceled) {
 					lastErr = result.err.Error()
-					m.finishFeed("stopped")
+					log.Printf("TTS synthesis failed: %v", result.err)
+					m.finishFeed("failed")
 					cursor++
 					pruneQueueHistory(&items, &cursor)
 				}
@@ -446,6 +450,7 @@ func (m *Manager) run() {
 			if result.err != nil {
 				if !errors.Is(result.err, context.Canceled) {
 					lastErr = result.err.Error()
+					log.Printf("TTS synthesis failed: %v", result.err)
 				}
 			} else {
 				prefetched = &result
@@ -454,7 +459,8 @@ func (m *Manager) run() {
 			if err == nil {
 				m.finishFeed("played")
 			} else {
-				m.finishFeed("stopped")
+				m.finishFeed("failed")
+				log.Printf("TTS playback failed: %v", err)
 			}
 			if err != nil {
 				lastErr = err.Error()

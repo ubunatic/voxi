@@ -94,7 +94,7 @@ TTS backend and voice selection resolve in this order:
 4. **Embedded Spec Defaults (`spec/tts.yaml`)**:
    - `backend.default_backend: auto`
    - `piper.model: ~/.local/share/voxi/voices/en_US-lessac-medium.onnx`
-   - Piper and playback tuning only; old `tts_serve*` keys in user configs are ignored.
+   - Piper and playback tuning only.
 
 ### Multi-Voice & Dialect Library
 
@@ -132,8 +132,9 @@ allowlisted reference WAV and records it as `tts_voice_reference_wav` for a
 future cloned-voice engine. The `voxcpm` backend is reserved for issue 160 and
 currently returns a clear not-yet-implemented error. Select it with
 `tts_backend: voxcpm` or `VOXI_TTS_BACKEND=voxcpm` only when testing that
-placeholder. Existing `tts-serve` backend selections report that the backend
-was removed; old `tts_serve*` config keys are ignored.
+placeholder. Unknown backend names fail during `voxi say` configuration loading.
+Synthesis and playback failures appear in the monitor TTS panel and are logged
+to stderr (the agent service journal when running under systemd).
 
 ## Pause trimming and deployment
 

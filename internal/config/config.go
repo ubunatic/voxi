@@ -243,6 +243,12 @@ func LoadUserSettings(home string) (*UserSettings, error) {
 	} else if !os.IsNotExist(err) {
 		return nil, fmt.Errorf("read %s: %w", envPath, err)
 	}
+	if s.TTSBackend != "" {
+		s.TTSBackend = strings.ToLower(strings.TrimSpace(s.TTSBackend))
+		if err := ValidateTTSBackend(s.TTSBackend); err != nil {
+			return nil, err
+		}
+	}
 
 	tomlPath := VoxtypeConfigPath(home)
 	if ms, ok, err := ReadTypeDelayMs(tomlPath); err == nil && ok {
@@ -250,6 +256,16 @@ func LoadUserSettings(home string) (*UserSettings, error) {
 	}
 
 	return s, nil
+}
+
+// ValidateTTSBackend rejects backend names that cannot be dispatched by Voxi.
+func ValidateTTSBackend(backend string) error {
+	switch strings.ToLower(strings.TrimSpace(backend)) {
+	case "auto", "piper", "festival", "espeak-ng", "voxcpm":
+		return nil
+	default:
+		return fmt.Errorf("unknown TTS backend %q (choose auto, piper, festival, espeak-ng, or voxcpm)", backend)
+	}
 }
 
 // SaveUserSettings writes user settings atomically to:

@@ -62,8 +62,18 @@ func TestSayCommandArgumentsAndStdin(t *testing.T) {
 }
 
 func TestSayCommandReportsNoMonitor(t *testing.T) {
+	home := t.TempDir()
+	runtimeDir := t.TempDir()
 	d := deps.Dependencies{
-		Getenv: func(string) string { return t.TempDir() },
+		Getenv: func(key string) string {
+			switch key {
+			case "HOME":
+				return home
+			case "XDG_RUNTIME_DIR":
+				return runtimeDir
+			}
+			return ""
+		},
 		Stdin:  strings.NewReader("hello"),
 		Stdout: &bytes.Buffer{},
 	}
@@ -283,7 +293,12 @@ func TestSayCommandFallsBackForRemainingTextWhenContinuationFails(t *testing.T) 
 
 func TestSayCommandRejectsEmptyClipboard(t *testing.T) {
 	d := deps.Dependencies{
-		Getenv:    func(string) string { return t.TempDir() },
+		Getenv: func(key string) string {
+			if key == "HOME" {
+				return t.TempDir()
+			}
+			return ""
+		},
 		LookPath:  func(string) (string, error) { return "/usr/bin/wl-paste", nil },
 		RunOutput: func(context.Context, string, ...string) (string, error) { return " \n", nil },
 		Stdin:     strings.NewReader(""), Stdout: &bytes.Buffer{},

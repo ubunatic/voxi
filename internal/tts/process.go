@@ -273,6 +273,7 @@ type Engine struct {
 	trailingSilenceTrim      time.Duration
 	trailingSilenceThreshold float64
 	backend                  string
+	configErr                error
 	piperModel               string
 	piperConfig              string
 	ttsVoiceReferenceWav     string
@@ -310,6 +311,7 @@ func NewEngine(d deps.Dependencies, executable string) *Engine {
 		trailingSilenceTrim:      ttsSpec.TrailingSilenceTrim(),
 		trailingSilenceThreshold: ttsSpec.Playback.TrailingSilenceThresholdDB,
 		backend:                  backend,
+		configErr:                err,
 		piperModel:               model,
 		piperConfig:              piperConfig,
 		ttsVoiceReferenceWav:     settings.TTSVoiceReferenceWav,
@@ -423,10 +425,10 @@ func piperModelAvailable(e *Engine, model string) bool {
 }
 
 func (e *Engine) Synthesize(ctx context.Context, text string) (audioFile, time.Duration, error) {
-	backend := e.selectedBackend()
-	if backend == "tts-serve" {
-		return audioFile{}, 0, errors.New("tts-serve was removed; see issue 162/160 for the replacement")
+	if e.configErr != nil {
+		return audioFile{}, 0, fmt.Errorf("load TTS configuration: %w", e.configErr)
 	}
+	backend := e.selectedBackend()
 	if backend == "voxcpm" {
 		return audioFile{}, 0, errors.New("the VoxCPM cloned-voice backend is not yet implemented; see issue 160")
 	}
