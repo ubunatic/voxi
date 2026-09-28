@@ -67,6 +67,11 @@ is left in place; temporary remote WAVs were removed after copying them locally.
 **Host review (open user decision):** the miss is one first-run clip; weighted 1.85 beats the bar and
 beats local (~3). Remote overhead is per-sentence process start + ssh, not WAV transfer (0.2 s).
 Host recommends M2 anyway; awaiting user "go" (build M2) or "no" (close as NO-GO).
+**User: go (2026-09-28).**
+
+**M2 pre-work:** cut the per-sentence ssh cost (e.g. ssh ControlMaster/ControlPersist reuse);
+measure live end-to-end RTF before/after. Remote paths come from the same spec install layout.
+Reference WAVs must already exist on x600 (no per-call upload). Local stays the default.
 
 ## M2 — remote engine option
 Config selects local vs remote host for the `voxcpm` engine (reuse the `x600` host naming of
