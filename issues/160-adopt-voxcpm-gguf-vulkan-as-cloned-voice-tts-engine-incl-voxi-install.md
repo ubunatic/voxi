@@ -47,4 +47,6 @@ Write results into this ticket; no-go closes the ticket with findings.
 `voxi install --voxcpm` (mirroring `--tts-serve` from 159): fetch/build the pinned runtime release
 with Vulkan, download the pinned GGUF with checksum, install a systemd --user unit if a server is used,
 idempotent re-run, clear errors when Vulkan/`glslc` are missing. Live-verify from a clean state.
-Decide with the user whether Chatterbox/tts-serve stays as an option or is retired.
+User decision (2026-09-28): Chatterbox is too slow and too big, and voxi should avoid PyTorch.
+If M1 passes, retire Chatterbox/tts-serve (155, 159) in favor of `voxcpm`; any replacement engine
+must be PyTorch-free.
