@@ -26,25 +26,26 @@ import (
 // Effects contains host operations used by Install. Tests can inject every
 // operation that changes or interrogates the host.
 type Effects struct {
-	GOOS           string
-	GOARCH         string
-	Home           string
-	Executable     func() (string, error)
-	BuildModifier  func(context.Context, string) (string, error)
-	LookPath       func(string) (string, error)
-	MkdirAll       func(string, os.FileMode) error
-	ReadFile       func(string) ([]byte, error)
-	Stat           func(string) (os.FileInfo, error)
-	WriteFile      func(string, []byte, os.FileMode) error
-	Chmod          func(string, os.FileMode) error
-	Run            func(context.Context, string, ...string) error
-	RunInteractive func(context.Context, string, ...string) error
-	Confirm        func(string) (bool, error)
-	RunOutput      func(context.Context, string, ...string) (string, error)
-	RunStdin       func(context.Context, string, string, ...string) error
-	Symlink        func(string, string) error
-	Remove         func(string) error
-	DownloadHTTP   func(context.Context, string, string) error
+	GOOS              string
+	GOARCH            string
+	Home              string
+	Executable        func() (string, error)
+	BuildModifier     func(context.Context, string) (string, error)
+	LookPath          func(string) (string, error)
+	MkdirAll          func(string, os.FileMode) error
+	ReadFile          func(string) ([]byte, error)
+	Stat              func(string) (os.FileInfo, error)
+	WriteFile         func(string, []byte, os.FileMode) error
+	Chmod             func(string, os.FileMode) error
+	Run               func(context.Context, string, ...string) error
+	RunInteractive    func(context.Context, string, ...string) error
+	Confirm           func(string) (bool, error)
+	RunOutput         func(context.Context, string, ...string) (string, error)
+	RunStdin          func(context.Context, string, string, ...string) error
+	Symlink           func(string, string) error
+	Remove            func(string) error
+	DownloadHTTP      func(context.Context, string, string) error
+	AvailableMemoryMB func() (int, error)
 }
 
 // DefaultEffects binds Install to the current Linux host.
@@ -90,10 +91,30 @@ func DefaultEffects() Effects {
 			cmd.Stdin = strings.NewReader(stdin)
 			return cmd.Run()
 		},
-		Symlink:      os.Symlink,
-		Remove:       os.Remove,
-		DownloadHTTP: downloadResilientHTTP,
+		Symlink:           os.Symlink,
+		Remove:            os.Remove,
+		DownloadHTTP:      downloadResilientHTTP,
+		AvailableMemoryMB: availableMemoryMB,
 	}
+}
+
+// availableMemoryMB reads MemAvailable from /proc/meminfo (Linux only).
+func availableMemoryMB() (int, error) {
+	data, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		return 0, fmt.Errorf("read /proc/meminfo: %w", err)
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) >= 2 && fields[0] == "MemAvailable:" {
+			kb, err := strconv.Atoi(fields[1])
+			if err != nil {
+				return 0, fmt.Errorf("parse MemAvailable: %w", err)
+			}
+			return kb / 1024, nil
+		}
+	}
+	return 0, fmt.Errorf("MemAvailable not found in /proc/meminfo")
 }
 
 func confirmOnTTY(prompt string) (bool, error) {
@@ -125,6 +146,7 @@ func confirmOnTTY(prompt string) (bool, error) {
 type InstallOptions struct {
 	Modifierd  bool
 	DisableTTS bool
+	TTSServe   bool
 }
 
 // Install performs the user installation and, when requested, the privileged
@@ -141,7 +163,7 @@ func InstallWithOptions(ctx context.Context, out io.Writer, e Effects, options I
 	if e.Home == "" {
 		return fmt.Errorf("install: HOME is empty; set HOME to a user home directory")
 	}
-	if e.Executable == nil || e.BuildModifier == nil || e.LookPath == nil || e.MkdirAll == nil || e.ReadFile == nil || e.Stat == nil || e.WriteFile == nil || e.Chmod == nil || e.Run == nil || e.RunInteractive == nil || e.Confirm == nil || e.RunOutput == nil || e.RunStdin == nil || e.Symlink == nil || e.Remove == nil || e.DownloadHTTP == nil {
+	if e.Executable == nil || e.BuildModifier == nil || e.LookPath == nil || e.MkdirAll == nil || e.ReadFile == nil || e.Stat == nil || e.WriteFile == nil || e.Chmod == nil || e.Run == nil || e.RunInteractive == nil || e.Confirm == nil || e.RunOutput == nil || e.RunStdin == nil || e.Symlink == nil || e.Remove == nil || e.DownloadHTTP == nil || e.AvailableMemoryMB == nil {
 		return fmt.Errorf("install: incomplete host effects")
 	}
 	userBin := filepath.Join(e.Home, ".local", "bin")
@@ -313,6 +335,16 @@ func InstallWithOptions(ctx context.Context, out io.Writer, e Effects, options I
 		return nil
 	}); err != nil {
 		return err
+	}
+
+	if options.TTSServe {
+		if err := phase("tts-serve (Chatterbox)", func() error {
+			return installTTSServe(ctx, out, e)
+		}); err != nil {
+			return err
+		}
+	} else {
+		fmt.Fprintln(out, "[tts-serve] skipped (use --tts-serve to set up the Chatterbox tts-serve server)")
 	}
 
 	if !options.Modifierd {
@@ -627,6 +659,91 @@ func installTTSDependencies(ctx context.Context, out io.Writer, e Effects) error
 	return nil
 }
 
+// installTTSServe sets up a restart-safe Chatterbox tts-serve server (issue
+// 159 M1): a pinned tts-serve checkout and Python venv under
+// ~/.cache/voxi/tts-serve, and a voxi-tts-serve.service user unit enabled
+// against the port from spec/tts.yaml's tts_serve.url. Declining the
+// confirmation prompt leaves the host untouched.
+func installTTSServe(ctx context.Context, out io.Writer, e Effects) error {
+	ttsSpec, err := spec.LoadTTS()
+	if err != nil {
+		return fmt.Errorf("load TTS spec: %w", err)
+	}
+	port, validURL := LoopbackEndpointPort(ttsSpec.TTSServe.URL)
+	if !validURL {
+		return fmt.Errorf("tts_serve.url %q must use http://127.0.0.1:<port>", ttsSpec.TTSServe.URL)
+	}
+	pins := ttsSpec.TTSServeInstall
+
+	if memMB, memErr := e.AvailableMemoryMB(); memErr == nil && memMB > 0 && memMB < pins.MinFreeMemoryMB {
+		fmt.Fprintf(out, "\n[tts-serve] warning: %d MB free RAM available; Chatterbox on CPU wants about %d MB\n", memMB, pins.MinFreeMemoryMB)
+	}
+
+	prompt := fmt.Sprintf(
+		"Set up Chatterbox tts-serve under ~/.cache/voxi/tts-serve (clones %s @ %s, pip-installs PyTorch and %s @ %s into a venv; a multi-GB download)?",
+		pins.TTSServeRepo, pins.TTSServeCommit, pins.ChatterboxRepo, pins.ChatterboxCommit,
+	)
+	confirmed, err := e.Confirm(prompt)
+	if err != nil {
+		return fmt.Errorf("tts-serve confirmation: %w", err)
+	}
+	if !confirmed {
+		fmt.Fprintln(out, "tts-serve setup declined; nothing installed")
+		return nil
+	}
+
+	dir := filepath.Join(e.Home, ".cache", "voxi", "tts-serve")
+	if err := e.MkdirAll(filepath.Dir(dir), 0755); err != nil {
+		return fmt.Errorf("create %s: %w", filepath.Dir(dir), err)
+	}
+	if _, err := e.Stat(filepath.Join(dir, ".git")); err != nil {
+		if err := e.Run(ctx, "git", "clone", pins.TTSServeRepo, dir); err != nil {
+			return fmt.Errorf("clone tts-serve: %w", err)
+		}
+	}
+	if err := e.Run(ctx, "git", "-C", dir, "fetch", "origin", pins.TTSServeCommit); err != nil {
+		return fmt.Errorf("fetch tts-serve commit %s: %w", pins.TTSServeCommit, err)
+	}
+	if err := e.Run(ctx, "git", "-C", dir, "checkout", pins.TTSServeCommit); err != nil {
+		return fmt.Errorf("checkout tts-serve commit %s: %w", pins.TTSServeCommit, err)
+	}
+
+	venv := filepath.Join(dir, ".venv")
+	venvPython := filepath.Join(venv, "bin", "python")
+	if _, err := e.Stat(venvPython); err != nil {
+		if err := e.Run(ctx, "python3", "-m", "venv", venv); err != nil {
+			return fmt.Errorf("create tts-serve venv: %w", err)
+		}
+	}
+	pip := filepath.Join(venv, "bin", "pip")
+	if err := e.Run(ctx, pip, "install", fmt.Sprintf("git+%s@%s", pins.ChatterboxRepo, pins.ChatterboxCommit)); err != nil {
+		return fmt.Errorf("pip install chatterbox: %w", err)
+	}
+	if err := e.Run(ctx, pip, "install", filepath.Join(dir, "tts-engine-common"), "fastapi", "uvicorn", "loguru", "soundfile"); err != nil {
+		return fmt.Errorf("pip install tts-serve dependencies: %w", err)
+	}
+
+	serviceDir := filepath.Join(e.Home, ".config", "systemd", "user")
+	if err := e.MkdirAll(serviceDir, 0755); err != nil {
+		return fmt.Errorf("create %s: %w", serviceDir, err)
+	}
+	data, err := voxi.ServiceAsset("voxi-tts-serve.service")
+	if err != nil {
+		return fmt.Errorf("read embedded voxi-tts-serve.service: %w", err)
+	}
+	data = bytes.ReplaceAll(data, []byte("@TTS_SERVE_PORT@"), []byte(port))
+	if err := e.WriteFile(filepath.Join(serviceDir, "voxi-tts-serve.service"), data, 0644); err != nil {
+		return fmt.Errorf("write voxi-tts-serve.service: %w", err)
+	}
+	if err := e.Run(ctx, "systemctl", "--user", "daemon-reload"); err != nil {
+		return fmt.Errorf("reload user manager: %w", err)
+	}
+	if err := e.Run(ctx, "systemctl", "--user", "enable", "--now", "voxi-tts-serve.service"); err != nil {
+		return fmt.Errorf("enable/start voxi-tts-serve.service: %w", err)
+	}
+	return nil
+}
+
 func missingTTSTools(lookPath func(string) (string, error)) []string {
 	var missing []string
 	if _, err := lookPath("text2wave"); err != nil {
@@ -841,18 +958,21 @@ func buildModifier(ctx context.Context, dir string) (string, error) {
 func NewCommand(e Effects, out io.Writer) *cobra.Command {
 	var modifierd bool
 	var noTTS bool
+	var ttsServe bool
 	cmd := &cobra.Command{
 		Use:   "install",
 		Short: "Install Voxi for this user (optional: --modifierd needs sudo)",
 		Long: "Install the CLI and systemd user services under your home directory, then enable and start voxi-agent.service.\n" +
 			"When TTS tools are missing, Voxi asks before using sudo and the system package manager.\n\n" +
-			"Use --no-tts to persistently opt out of TTS packages. Use --modifierd for the optional system-wide physical modifier daemon; it also requires sudo and Linux systemd.",
+			"Use --no-tts to persistently opt out of TTS packages. Use --modifierd for the optional system-wide physical modifier daemon; it also requires sudo and Linux systemd.\n" +
+			"Use --tts-serve to set up and enable a Chatterbox tts-serve server (multi-GB download, asks first).",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return InstallWithOptions(cmd.Context(), out, e, InstallOptions{Modifierd: modifierd, DisableTTS: noTTS})
+			return InstallWithOptions(cmd.Context(), out, e, InstallOptions{Modifierd: modifierd, DisableTTS: noTTS, TTSServe: ttsServe})
 		},
 	}
 	cmd.Flags().BoolVar(&modifierd, "modifierd", false, "also install the optional system-wide modifier daemon (requires sudo)")
 	cmd.Flags().BoolVar(&noTTS, "no-tts", false, "disable TTS and skip Festival/espeak-ng system packages")
+	cmd.Flags().BoolVar(&ttsServe, "tts-serve", false, "set up and enable a Chatterbox tts-serve server (multi-GB download, asks first)")
 	return cmd
 }

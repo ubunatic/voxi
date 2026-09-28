@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -22,11 +23,12 @@ type TTSPlaybackSpec struct {
 
 // TTSSpec is the parsed contents of spec/tts.yaml.
 type TTSSpec struct {
-	Backend  TTSBackendSpec  `yaml:"backend"`
-	Piper    TTSPiperSpec    `yaml:"piper"`
-	Playback TTSPlaybackSpec `yaml:"playback"`
-	TTSServe TTSServeSpec    `yaml:"tts_serve"`
-	LLM      TTSLLMSpec      `yaml:"llm"`
+	Backend         TTSBackendSpec      `yaml:"backend"`
+	Piper           TTSPiperSpec        `yaml:"piper"`
+	Playback        TTSPlaybackSpec     `yaml:"playback"`
+	TTSServe        TTSServeSpec        `yaml:"tts_serve"`
+	TTSServeInstall TTSServeInstallSpec `yaml:"tts_serve_install"`
+	LLM             TTSLLMSpec          `yaml:"llm"`
 }
 
 // TTSBackendSpec defines the default synthesis backend.
@@ -49,6 +51,17 @@ type TTSServeSpec struct {
 	Engine        string         `yaml:"engine"`
 	Settings      map[string]any `yaml:"settings"`
 	MaxChunkRunes int            `yaml:"max_chunk_runes"`
+}
+
+// TTSServeInstallSpec pins the source commits `voxi install --tts-serve`
+// (issue 159 M1) checks out and builds. It is installer-only; the tts-serve
+// HTTP client (TTSServeSpec) never reads it.
+type TTSServeInstallSpec struct {
+	TTSServeRepo     string `yaml:"tts_serve_repo"`
+	TTSServeCommit   string `yaml:"tts_serve_commit"`
+	ChatterboxRepo   string `yaml:"chatterbox_repo"`
+	ChatterboxCommit string `yaml:"chatterbox_commit"`
+	MinFreeMemoryMB  int    `yaml:"min_free_memory_mb"`
 }
 
 // TTSLLMSpec defines defaults for speech-ready LLM narration.
@@ -98,6 +111,27 @@ func validateTTSSpec(s *TTSSpec) error {
 	}
 	if s.TTSServe.MaxChunkRunes < 20 || s.TTSServe.MaxChunkRunes > 2000 {
 		return fmt.Errorf("spec: tts_serve.max_chunk_runes must be between 20 and 2000")
+	}
+	if err := validateRepoCommit("tts_serve_install.tts_serve", s.TTSServeInstall.TTSServeRepo, s.TTSServeInstall.TTSServeCommit); err != nil {
+		return err
+	}
+	if err := validateRepoCommit("tts_serve_install.chatterbox", s.TTSServeInstall.ChatterboxRepo, s.TTSServeInstall.ChatterboxCommit); err != nil {
+		return err
+	}
+	if s.TTSServeInstall.MinFreeMemoryMB < 1024 || s.TTSServeInstall.MinFreeMemoryMB > 131072 {
+		return fmt.Errorf("spec: tts_serve_install.min_free_memory_mb must be between 1024 and 131072")
+	}
+	return nil
+}
+
+var commitHashPattern = regexp.MustCompile(`^[0-9a-f]{40}$`)
+
+func validateRepoCommit(label, repo, commit string) error {
+	if parsed, err := url.Parse(repo); err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return fmt.Errorf("spec: %s_repo must be an absolute URL", label)
+	}
+	if !commitHashPattern.MatchString(commit) {
+		return fmt.Errorf("spec: %s_commit must be a full 40-character hex commit hash", label)
 	}
 	return nil
 }

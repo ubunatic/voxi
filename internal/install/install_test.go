@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"ubunatic.com/voxi/internal/config"
+	"ubunatic.com/voxi/spec"
 )
 
 func testEffects(t *testing.T) (*Effects, *[]string) {
@@ -628,5 +629,175 @@ func TestInstallDownloadFailureProvidesActionableRemediation(t *testing.T) {
 	msg := err.Error()
 	if !strings.Contains(msg, "download CrispASR failed") || !strings.Contains(msg, "exit status 56") || !strings.Contains(msg, "To resolve manually:") || !strings.Contains(msg, "voxi install") {
 		t.Fatalf("expected detailed actionable error message, got: %s", msg)
+	}
+}
+
+func ttsServeTestEffects(t *testing.T) (*Effects, *[]string) {
+	t.Helper()
+	e, commands := testEffects(t)
+	e.LookPath = func(name string) (string, error) { return "", errors.New("not found") } // skip R2T2/TTS package phases
+	e.Confirm = func(string) (bool, error) { return true, nil }
+	e.AvailableMemoryMB = func() (int, error) { return 16384, nil }
+	// The command mock only records invocations; simulate the two commands
+	// installTTSServe's idempotency checks (git .git dir, venv python binary)
+	// depend on actually existing on disk, so re-runs can observe them.
+	e.Run = func(ctx context.Context, name string, args ...string) error {
+		*commands = append(*commands, strings.Join(append([]string{name}, args...), " "))
+		switch {
+		case name == "git" && len(args) > 1 && args[0] == "clone":
+			return os.MkdirAll(filepath.Join(args[2], ".git"), 0755)
+		case name == "python3" && len(args) == 3 && args[0] == "-m" && args[1] == "venv":
+			if err := os.MkdirAll(filepath.Join(args[2], "bin"), 0755); err != nil {
+				return err
+			}
+			return os.WriteFile(filepath.Join(args[2], "bin", "python"), []byte("python"), 0755)
+		}
+		return nil
+	}
+	return e, commands
+}
+
+func TestInstallTTSServeSkippedWithoutFlag(t *testing.T) {
+	e, commands := ttsServeTestEffects(t)
+	var out strings.Builder
+	if err := InstallWithOptions(context.Background(), &out, *e, InstallOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "[tts-serve] skipped") {
+		t.Fatalf("missing skip report: %s", out.String())
+	}
+	if strings.Contains(strings.Join(*commands, "\n"), "tts-serve") {
+		t.Fatalf("tts-serve commands ran without --tts-serve: %v", *commands)
+	}
+	if _, err := os.Stat(filepath.Join(e.Home, ".config/systemd/user/voxi-tts-serve.service")); !os.IsNotExist(err) {
+		t.Fatalf("voxi-tts-serve.service should not be written without --tts-serve, stat err = %v", err)
+	}
+}
+
+func TestInstallTTSServeDeclinedDoesNothing(t *testing.T) {
+	e, commands := ttsServeTestEffects(t)
+	e.Confirm = func(string) (bool, error) { return false, nil }
+	var out strings.Builder
+	if err := InstallWithOptions(context.Background(), &out, *e, InstallOptions{TTSServe: true}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "tts-serve setup declined; nothing installed") {
+		t.Fatalf("missing decline report: %s", out.String())
+	}
+	if strings.Contains(strings.Join(*commands, "\n"), "git clone") {
+		t.Fatalf("declined tts-serve setup ran git clone: %v", *commands)
+	}
+	if _, err := os.Stat(filepath.Join(e.Home, ".cache/voxi/tts-serve")); !os.IsNotExist(err) {
+		t.Fatalf("declined tts-serve setup should not create a checkout, stat err = %v", err)
+	}
+}
+
+func TestInstallTTSServeRunsPinnedSequenceAndWritesUnit(t *testing.T) {
+	e, commands := ttsServeTestEffects(t)
+	var out strings.Builder
+	if err := InstallWithOptions(context.Background(), &out, *e, InstallOptions{TTSServe: true}); err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(*commands, "\n")
+	ttsSpec, err := spec.LoadTTS()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(e.Home, ".cache/voxi/tts-serve")
+	for _, want := range []string{
+		"git clone " + ttsSpec.TTSServeInstall.TTSServeRepo + " " + dir,
+		"git -C " + dir + " fetch origin " + ttsSpec.TTSServeInstall.TTSServeCommit,
+		"git -C " + dir + " checkout " + ttsSpec.TTSServeInstall.TTSServeCommit,
+		"python3 -m venv " + filepath.Join(dir, ".venv"),
+		filepath.Join(dir, ".venv/bin/pip") + " install git+" + ttsSpec.TTSServeInstall.ChatterboxRepo + "@" + ttsSpec.TTSServeInstall.ChatterboxCommit,
+		filepath.Join(dir, ".venv/bin/pip") + " install " + filepath.Join(dir, "tts-engine-common") + " fastapi uvicorn loguru soundfile",
+		"systemctl --user daemon-reload",
+		"systemctl --user enable --now voxi-tts-serve.service",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("missing command %q in sequence: %v", want, *commands)
+		}
+	}
+	unit, err := os.ReadFile(filepath.Join(e.Home, ".config/systemd/user/voxi-tts-serve.service"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"CHATTERBOX_HOST=127.0.0.1",
+		"CHATTERBOX_PORT=8000",
+		"CHATTERBOX_DEVICE=cpu",
+		"ExecStart=%h/.cache/voxi/tts-serve/.venv/bin/python impl/server_chatterbox.py",
+		"WorkingDirectory=%h/.cache/voxi/tts-serve",
+	} {
+		if !strings.Contains(string(unit), want) {
+			t.Fatalf("tts-serve unit missing %q: %s", want, unit)
+		}
+	}
+	if strings.Contains(string(unit), "@TTS_SERVE_PORT@") {
+		t.Fatalf("tts-serve unit retains an unsubstituted placeholder: %s", unit)
+	}
+}
+
+func TestInstallTTSServeIsIdempotentOnReruns(t *testing.T) {
+	e, commands := ttsServeTestEffects(t)
+	var out strings.Builder
+	if err := InstallWithOptions(context.Background(), &out, *e, InstallOptions{TTSServe: true}); err != nil {
+		t.Fatal(err)
+	}
+	*commands = nil
+	if err := InstallWithOptions(context.Background(), &out, *e, InstallOptions{TTSServe: true}); err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(*commands, "\n")
+	if strings.Contains(joined, "git clone") {
+		t.Fatalf("re-run should reuse the existing checkout instead of cloning again: %v", *commands)
+	}
+	if strings.Contains(joined, "python3 -m venv") {
+		t.Fatalf("re-run should reuse the existing venv instead of recreating it: %v", *commands)
+	}
+	dir := filepath.Join(e.Home, ".cache/voxi/tts-serve")
+	for _, want := range []string{
+		"git -C " + dir + " fetch origin",
+		"git -C " + dir + " checkout",
+		filepath.Join(dir, ".venv/bin/pip") + " install git+",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("re-run should still fetch/checkout/install, missing %q: %v", want, *commands)
+		}
+	}
+}
+
+func TestInstallTTSServeWarnsOnLowRAM(t *testing.T) {
+	e, _ := ttsServeTestEffects(t)
+	e.AvailableMemoryMB = func() (int, error) { return 2048, nil }
+	var out strings.Builder
+	if err := InstallWithOptions(context.Background(), &out, *e, InstallOptions{TTSServe: true}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "warning: 2048 MB free RAM") {
+		t.Fatalf("missing low-RAM warning: %s", out.String())
+	}
+}
+
+func TestInstallTTSServePinsMatchSpec(t *testing.T) {
+	ttsSpec, err := spec.LoadTTS()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pins := ttsSpec.TTSServeInstall
+	if pins.TTSServeRepo != "https://github.com/scorbo2/tts-serve" {
+		t.Fatalf("tts_serve_repo = %q", pins.TTSServeRepo)
+	}
+	if pins.TTSServeCommit != "6ca92b20e22bfb30eee61e1d96f731ff6a4da4aa" {
+		t.Fatalf("tts_serve_commit = %q", pins.TTSServeCommit)
+	}
+	if pins.ChatterboxRepo != "https://github.com/resemble-ai/chatterbox" {
+		t.Fatalf("chatterbox_repo = %q", pins.ChatterboxRepo)
+	}
+	if pins.ChatterboxCommit != "5de7a54aa4e5e2baadb0182dde554908b48b85c2" {
+		t.Fatalf("chatterbox_commit = %q", pins.ChatterboxCommit)
+	}
+	if pins.MinFreeMemoryMB != 8192 {
+		t.Fatalf("min_free_memory_mb = %d, want 8192", pins.MinFreeMemoryMB)
 	}
 }

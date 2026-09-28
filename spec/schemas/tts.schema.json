@@ -3,7 +3,7 @@
   "title": "Voxi TTS Playback Tuning",
   "description": "Playback tuning for monitor-gated text to speech.",
   "type": "object",
-  "required": ["backend", "piper", "playback", "tts_serve", "llm"],
+  "required": ["backend", "piper", "playback", "tts_serve", "tts_serve_install", "llm"],
   "properties": {
     "backend": {
       "type": "object",
@@ -69,6 +69,23 @@
           "minimum": 20,
           "maximum": 2000,
           "description": "tts-serve only: sentences longer than this are re-split at clause/word boundaries before being sent, so one request stays well under timeout_ms. Piper chunking is unaffected."
+        }
+      },
+      "additionalProperties": false
+    },
+    "tts_serve_install": {
+      "type": "object",
+      "required": ["tts_serve_repo", "tts_serve_commit", "chatterbox_repo", "chatterbox_commit", "min_free_memory_mb"],
+      "properties": {
+        "tts_serve_repo": { "type": "string", "description": "github.com/scorbo2/tts-serve clone URL used by `voxi install --tts-serve`." },
+        "tts_serve_commit": { "type": "string", "description": "Pinned tts-serve commit checked out under ~/.cache/voxi/tts-serve." },
+        "chatterbox_repo": { "type": "string", "description": "github.com/resemble-ai/chatterbox clone URL for the pinned pip install." },
+        "chatterbox_commit": { "type": "string", "description": "Pinned Chatterbox commit; PyPI's chatterbox-tts 0.1.7 predates the multilingual T3 API the server needs." },
+        "min_free_memory_mb": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 131072,
+          "description": "Free RAM Chatterbox on CPU needs; the installer warns below this threshold."
         }
       },
       "additionalProperties": false

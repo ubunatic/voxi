@@ -50,6 +50,25 @@ tts_serve:
   # and rejects unknown top-level keys (issue 155 M2 pre-work).
   settings: {}
 
+# Pins for `voxi install --tts-serve` (issue 159 M1), which clones tts-serve
+# and builds its Chatterbox venv under ~/.cache/voxi/tts-serve. Not read by
+# the tts-serve HTTP client above (tts_serve.*); installer-only.
+tts_serve_install:
+  # github.com/scorbo2/tts-serve, pinned to master HEAD as of 2026-09-28
+  # (git ls-remote), since upstream ships no tagged releases to pin instead.
+  tts_serve_repo: "https://github.com/scorbo2/tts-serve"
+  tts_serve_commit: "6ca92b20e22bfb30eee61e1d96f731ff6a4da4aa"
+  # github.com/resemble-ai/chatterbox. PyPI's chatterbox-tts 0.1.7 predates
+  # the multilingual T3 API impl/server_chatterbox.py needs (both report
+  # 0.1.7, so pinning to a commit, not a version, is the only reliable way to
+  # get the right build); this commit was also upstream's master HEAD as of
+  # 2026-09-28.
+  chatterbox_repo: "https://github.com/resemble-ai/chatterbox"
+  chatterbox_commit: "5de7a54aa4e5e2baadb0182dde554908b48b85c2"
+  # Chatterbox on CPU needs about this much free RAM; the installer warns
+  # (but still proceeds if confirmed) below this threshold.
+  min_free_memory_mb: 8192
+
 # Speech-ready narration through lmcoder.
 llm:
   # Used when ~/.config/voxi/config.yaml and --llm do not select a host.

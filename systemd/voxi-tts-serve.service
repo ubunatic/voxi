@@ -1,0 +1,19 @@
+[Unit]
+Description=Voxi tts-serve local Chatterbox TTS server
+Documentation=https://codeberg.org/ubunatic/voxi
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.cache/voxi/tts-serve
+Environment=CHATTERBOX_HOST=127.0.0.1
+Environment=CHATTERBOX_PORT=@TTS_SERVE_PORT@
+Environment=CHATTERBOX_DEVICE=cpu
+ExecStart=%h/.cache/voxi/tts-serve/.venv/bin/python impl/server_chatterbox.py
+Restart=on-failure
+RestartSec=3
+MemoryMax=8G
+
+[Install]
+WantedBy=graphical-session.target
