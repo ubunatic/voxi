@@ -1,6 +1,6 @@
 # 163 — Run VoxCPM TTS remotely on x600 (Radeon 780M)
 
-**Status**: Open
+**Status**: Closed — M2 remote VoxCPM engine implemented, tested, and live-validated on x600
 **Priority**: P2 (Medium)
 **Severity**: Feature
 **Category**: Feature
@@ -77,3 +77,30 @@ Reference WAVs must already exist on x600 (no per-call upload). Local stays the 
 Config selects local vs remote host for the `voxcpm` engine (reuse the `x600` host naming of
 `tts_llm_host`); remote runs the same CLI over ssh and fetches the WAV. Clear error and no silent
 fallback when x600 is unreachable. Unit tests for command construction; live `voxi say --no-llm`.
+
+### M2 results (2026-09-28)
+
+- Added `tts_voxcpm_host` (empty/unset means local), validated as a safe SSH destination. Remote
+  synthesis uses the spec's installed binary, model, and preset WAV paths on x600; it does not
+  upload reference audio. SSH failures are returned without local fallback.
+- SSH uses a unique ControlPath under `XDG_RUNTIME_DIR`, with ControlMaster/ControlPersist reuse.
+  Unit tests cover shell-safe command construction and both multiplexed and non-multiplexed SSH
+  arguments; they do not invoke a real SSH client.
+- `make test` passed (`go vet ./...` and `go test ./...`); the captured log had no `--- FAIL` lines.
+  `make restart-service` succeeded.
+- Live `voxi say --no-llm` queued one chunk through the daemon with `tts_voxcpm_host: x600`; the
+  daemon log reported the remote AMD Radeon 780M (RADV PHOENIX). The user's config was restored to
+  its local default and the service restarted.
+- Three identical samples were synthesized with `voxi say --no-llm --output`, timing CLI startup,
+  SSH setup, synthesis, WAV return, and output write. Audio duration was the same in both modes.
+
+| Demo | Audio | Without reuse | With reuse |
+|---:|---:|---:|---:|
+| 1 | 7.031 s | 10.229 s / 1.455 RTF | 10.380 s / 1.476 RTF |
+| 2 | 4.382 s | 8.944 s / 2.041 RTF | 7.738 s / 1.766 RTF |
+| 3 | 3.770 s | 8.518 s / 2.259 RTF | 6.215 s / 1.649 RTF |
+| **Weighted** | **15.183 s** | **27.691 s / 1.824 RTF** | **24.333 s / 1.603 RTF** |
+
+Connection reuse reduced total elapsed time by 3.358 s (12.1%) and weighted RTF by 0.221. One
+short sample remained above RTF 2 without reuse; all three were at or below 2 with reuse. The M2
+acceptance checks passed; local remains the default.
