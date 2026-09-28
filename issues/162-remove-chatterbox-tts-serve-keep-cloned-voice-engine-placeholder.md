@@ -1,6 +1,6 @@
 # 162 — remove Chatterbox/tts-serve, keep a cloned-voice engine placeholder
 
-**Status**: Closed
+**Status**: Open
 **Priority**: P2 (Medium)
 **Severity**: Refactor
 **Category**: Refactor
@@ -41,3 +41,16 @@ M1 (remove and placeholder) delivered in ecc35b2: tts-serve client, `voxi instal
 systemd unit and spec/schema keys removed (-1586 lines); `voxcpm` backend is a stub erroring "not yet
 implemented; see issue 160"; explicit `tts-serve` selection errors "removed"; legacy `tts_serve*` keys
 ignored; clone profile now `tts_voice_reference_wav`. `make test` green, service restarted.
+
+## M2 — surface TTS failures, drop compatibility shims
+Found live after M1: user config still had `tts_backend: tts-serve`; `voxi monitor` (which runs TTS and
+reads config once at start) failed every chunk silently — `voxi say` printed "queued", nothing played,
+nothing logged. Config fixed by hand; host machine cleaned of Chatterbox files.
+
+Pre-Work / Required Refinements:
+- No compatibility: voxi has one user. Remove the special "tts-serve was removed" branch and any
+  legacy `tts_serve*` handling/tests; an unknown backend is just a normal clear error.
+- Synthesis/playback errors in the monitor's TTS path must be visible: show in the monitor UI and log
+  to stderr/journal. Unit test that a failing backend surfaces an error instead of being dropped.
+- Invalid `tts_backend` values should be rejected at config load / `voxi say` time where cheap.
+- `make test` green; `make install`.
