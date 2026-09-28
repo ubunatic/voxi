@@ -178,6 +178,20 @@ hotfix-tuned renders remains **pending**; no quality rating for M1b is assigned.
   profile (voxi voice prepare), transcribe via voxi's own ASR if missing.
 - Unit tests for command/request construction; live `voxi say --no-llm` check; update `docs/TTSReading.md`.
 
+Pre-Work / Required Refinements (host, 2026-09-28, after M1b):
+- User decision: connect despite RTF ~3 (speed bar waived); quality is the priority.
+- Runtime: audio.cpp `v0.8.2-audio8-perf-hotfix` (`ac16661`) Vulkan CLI, default steps (10) and CFG
+  (2.0) — never the 2/4-step variants (they drop words). Subprocess per sentence (server crashed).
+- Two selectable voice presets, switchable by config, default `full`:
+  - `full`: original 18.6 s `cloned.wav` + its transcript, session option
+    `voxcpm1.audiovae_encoder_sample_capacity=320000` (M1; user prefers its end-of-phrase tone;
+    ~0.5–1 GB more memory, same speed).
+  - `short`: 8.7 s `reference-8s.wav` + its transcript (M1b; ~2.5–2.9 GB total).
+  Both transcripts are verbatim in the M1/M1b results above.
+- Paths may point into `~/.cache/voxi/voxcpm-canary/` for now; M3 moves install to a pinned location.
+- Live check: `voxi say --no-llm` with each preset after `make restart-service`; the user restarts
+  `voxi monitor` (it reads config once at start).
+
 ## M3 — `voxi install`
 `voxi install --voxcpm`: fetch/build the pinned runtime release
 with Vulkan, download the pinned GGUF with checksum, install a systemd --user unit if a server is used,
