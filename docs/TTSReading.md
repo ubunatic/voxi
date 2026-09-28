@@ -135,16 +135,86 @@ with `tts_backend: tts-serve` in `~/.config/voxi/config.yaml` or
 **What it is.** [tts-serve](https://github.com/scorbo2/tts-serve) is a
 separately installed local Python/FastAPI server that wraps one voice-cloning
 TTS engine (Chatterbox, MIT license) behind a small HTTP API
-(`GET /capabilities`, `POST /synthesize`). Voxi is only an HTTP client
-(Go `net/http`, no new dependencies); Voxi does not install, launch, or manage
-that server. It must already be running at `tts_serve.url` in the embedded
-`spec/tts.yaml` (default `http://127.0.0.1:8000`).
+(`GET /capabilities`, `POST /synthesize`). Voxi's `internal/tts/ttsserve.go`
+is only an HTTP client (Go `net/http`, no new dependencies) that expects the
+server already running at `tts_serve.url` in the embedded `spec/tts.yaml`
+(default `http://127.0.0.1:8000`); `voxi install --tts-serve` (issue 159)
+handles installing, starting, and stopping that server, described next.
 
 **Consent: only clone your own voice.** The voice profile is a private,
 local, unencrypted WAV file. Do not clone anyone else's voice without their
 permission.
 
-**Setup**
+### Installing and managing the tts-serve server (issue 159)
+
+`voxi install --tts-serve` sets up a restart-safe Chatterbox tts-serve server
+as a systemd user service, `voxi-tts-serve.service`. It is opt-in: plain
+`voxi install` (and `make install`) skips it.
+
+**Install.** Run `voxi install --tts-serve` directly (there is no separate
+Make target for it):
+
+1. Confirms first — the download is multi-GB (a CPU-only PyTorch build plus
+   Chatterbox and its model dependencies) — and warns if free RAM is below
+   `tts_serve_install.min_free_memory_mb` (8192 MB) in `spec/tts.yaml`.
+2. Clones [tts-serve](https://github.com/scorbo2/tts-serve) and checks out the
+   commit pinned in `spec/tts.yaml`'s `tts_serve_install` under
+   `~/.cache/voxi/tts-serve`. Refuses to run if that checkout has local
+   changes (`git status --porcelain`), so a re-run never discards them.
+3. Creates a Python venv there with `tts_serve_install.python_interpreter`
+   (`python3.12`, chosen because Chatterbox's pinned commit requires
+   `torch==2.6.0`/`torchaudio==2.6.0` only for Python < 3.14, and 3.12 has a
+   published CPU wheel for that exact version).
+4. Installs `torch`/`torchaudio` from the CPU-only wheel index
+   (`tts_serve_install.torch_cpu_index_url`,
+   `https://download.pytorch.org/whl/cpu`) **before** Chatterbox, so pip never
+   reaches for the default CUDA build (several GB of useless `nvidia-*`
+   wheels on a CPU-only host).
+5. `pip install`s the pinned Chatterbox commit and tts-serve's own
+   `tts-engine-common`/`fastapi`/`uvicorn`/`loguru`/`soundfile` dependencies.
+6. Writes `~/.config/systemd/user/voxi-tts-serve.service` (from
+   `systemd/voxi-tts-serve.service`, embedded in the binary) with
+   `CHATTERBOX_HOST`/`CHATTERBOX_PORT` derived from `tts_serve.url` and
+   `CHATTERBOX_DEVICE=cpu`, then `systemctl --user enable --now` it.
+
+Re-running `voxi install --tts-serve` is idempotent: an existing checkout and
+venv are reused, and only the fetch/checkout, pip installs, and unit
+(re)write happen again.
+
+**Start / stop / status.** Once installed, `voxi-tts-serve.service` starts at
+login (`WantedBy=graphical-session.target`) and restarts on failure. Manage it
+like any other systemd user service:
+
+```
+systemctl --user status  voxi-tts-serve.service
+systemctl --user stop    voxi-tts-serve.service
+systemctl --user start   voxi-tts-serve.service
+systemctl --user restart voxi-tts-serve.service
+curl http://127.0.0.1:8000/capabilities   # confirm it is actually serving
+```
+
+**Memory.** Loading the multilingual Chatterbox model and serving one request
+peaked at roughly 7.3 GiB RSS in testing (`systemctl --user show -p
+MemoryPeak voxi-tts-serve.service`); the unit's `MemoryMax=12G` leaves margin
+above that so `Restart=on-failure` does not loop on an OOM kill during model
+load. Re-measure and adjust `systemd/voxi-tts-serve.service` if a future
+Chatterbox/tts-serve pin changes memory use materially.
+
+**Uninstall.** There is no dedicated uninstall subcommand; remove the pieces
+`voxi install --tts-serve` created:
+
+```
+systemctl --user disable --now voxi-tts-serve.service
+rm ~/.config/systemd/user/voxi-tts-serve.service
+systemctl --user daemon-reload
+rm -rf ~/.cache/voxi/tts-serve          # checkout, venv, downloaded weights
+rm -rf ~/.cache/huggingface             # only if nothing else on the host uses it
+```
+
+Also unset `tts_backend: tts-serve` in `~/.config/voxi/config.yaml` (or
+`VOXI_TTS_BACKEND`) so `voxi say` falls back to Piper/Festival/`espeak-ng`.
+
+**Cloning a voice and selecting the backend**
 
 1. Record and transcribe a calm ~10 s sample the normal way
    (`voxi feedback sample record`), then allowlist it for training in
@@ -157,6 +227,8 @@ permission.
 3. Set `tts_backend: tts-serve` (or `VOXI_TTS_BACKEND=tts-serve`) and run
    `make restart-service` so the running `voxi-agent.service` picks up the new
    backend and voice profile — `make install` alone does not hot-reload it.
+   (This only restarts `voxi-agent.service`; `voxi-tts-serve.service` keeps
+   running with its already-loaded model.)
 4. `voxi say --no-llm "text"` now speaks with the cloned voice.
 
 `tts_serve_reference_wav` (and its `VOXI_TTS_SERVE_REFERENCE_WAV` environment
