@@ -275,8 +275,7 @@ type Engine struct {
 	backend                  string
 	piperModel               string
 	piperConfig              string
-	ttsServeClient           *ttsServeClient
-	ttsServeReferenceWav     string
+	ttsVoiceReferenceWav     string
 }
 
 // NewEngine creates a Festival-first engine with espeak-ng fallback.
@@ -305,10 +304,6 @@ func NewEngine(d deps.Dependencies, executable string) *Engine {
 	if piperConfig == "" {
 		piperConfig = ttsSpec.Piper.Config
 	}
-	referenceWav := settings.TTSServeReferenceWav
-	if referenceWav == "" {
-		referenceWav = ttsSpec.TTSServe.ReferenceWav
-	}
 	return &Engine{
 		deps:                     d,
 		executable:               executable,
@@ -317,8 +312,7 @@ func NewEngine(d deps.Dependencies, executable string) *Engine {
 		backend:                  backend,
 		piperModel:               model,
 		piperConfig:              piperConfig,
-		ttsServeClient:           newTTSServeClient(ttsSpec.TTSServe),
-		ttsServeReferenceWav:     referenceWav,
+		ttsVoiceReferenceWav:     settings.TTSVoiceReferenceWav,
 	}
 }
 
@@ -393,14 +387,13 @@ func (e *Engine) piperConfigPath() string {
 	return expandUserHome(strings.TrimSpace(e.piperConfig), e.deps.Getenv)
 }
 
-// ttsServeReferenceWavPath resolves the voice profile WAV for the tts-serve
-// backend: VOXI_TTS_SERVE_REFERENCE_WAV, then tts_serve_reference_wav in user
-// config (set by `voxi voice clone`), then the embedded spec default (empty).
-func (e *Engine) ttsServeReferenceWavPath() string {
-	if e.deps.Getenv != nil && strings.TrimSpace(e.deps.Getenv("VOXI_TTS_SERVE_REFERENCE_WAV")) != "" {
-		return strings.TrimSpace(e.deps.Getenv("VOXI_TTS_SERVE_REFERENCE_WAV"))
+// ttsVoiceReferenceWavPath resolves the cloned-voice profile configured by
+// `voxi voice clone`.
+func (e *Engine) ttsVoiceReferenceWavPath() string {
+	if e.deps.Getenv != nil && strings.TrimSpace(e.deps.Getenv("VOXI_TTS_VOICE_REFERENCE_WAV")) != "" {
+		return strings.TrimSpace(e.deps.Getenv("VOXI_TTS_VOICE_REFERENCE_WAV"))
 	}
-	return expandUserHome(strings.TrimSpace(e.ttsServeReferenceWav), e.deps.Getenv)
+	return expandUserHome(strings.TrimSpace(e.ttsVoiceReferenceWav), e.deps.Getenv)
 }
 
 func expandUserHome(path string, getenv func(string) string) string {
@@ -430,26 +423,20 @@ func piperModelAvailable(e *Engine, model string) bool {
 }
 
 func (e *Engine) Synthesize(ctx context.Context, text string) (audioFile, time.Duration, error) {
+	backend := e.selectedBackend()
+	if backend == "tts-serve" {
+		return audioFile{}, 0, errors.New("tts-serve was removed; see issue 162/160 for the replacement")
+	}
+	if backend == "voxcpm" {
+		return audioFile{}, 0, errors.New("the VoxCPM cloned-voice backend is not yet implemented; see issue 160")
+	}
 	dir, err := os.MkdirTemp("", "voxi-tts-")
 	if err != nil {
 		return audioFile{}, 0, err
 	}
 	wavPath := filepath.Join(dir, "chunk.wav")
 	started := time.Now()
-	backend := e.selectedBackend()
 	model := e.piperModelPath()
-	if backend == "tts-serve" {
-		audio, synthErr := e.ttsServeClient.Synthesize(ctx, text, e.ttsServeReferenceWavPath())
-		if synthErr != nil {
-			_ = os.RemoveAll(dir)
-			return audioFile{}, 0, synthErr
-		}
-		if writeErr := os.WriteFile(wavPath, audio, 0o600); writeErr != nil {
-			_ = os.RemoveAll(dir)
-			return audioFile{}, 0, fmt.Errorf("write tts-serve WAV: %w", writeErr)
-		}
-		return e.finishSynthesis(wavPath, dir, started)
-	}
 	if backend == "piper" || (backend == "auto" && model != "") {
 		piper, lookErr := e.deps.LookPath("piper")
 		if !piperModelAvailable(e, model) || lookErr != nil {
@@ -495,7 +482,7 @@ func (e *Engine) Synthesize(ctx context.Context, text string) (audioFile, time.D
 	}
 	if backend != "auto" && backend != "festival" && backend != "espeak-ng" && backend != "piper" {
 		_ = os.RemoveAll(dir)
-		return audioFile{}, 0, fmt.Errorf("unknown TTS backend %q (choose auto, piper, festival, espeak-ng, or tts-serve)", backend)
+		return audioFile{}, 0, fmt.Errorf("unknown TTS backend %q (choose auto, piper, festival, espeak-ng, or voxcpm)", backend)
 	}
 	if festival, lookErr := e.deps.LookPath("text2wave"); lookErr == nil && backend != "espeak-ng" {
 		stdin, err := writeTextFile(dir, text)

@@ -56,8 +56,8 @@ func TestVoiceCloneInstallsSingleAllowlistedSample(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if settings.TTSServeReferenceWav != target {
-		t.Errorf("tts_serve_reference_wav = %q, want %q", settings.TTSServeReferenceWav, target)
+	if settings.TTSVoiceReferenceWav != target {
+		t.Errorf("tts_voice_reference_wav = %q, want %q", settings.TTSVoiceReferenceWav, target)
 	}
 }
 

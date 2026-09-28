@@ -20,24 +20,22 @@ var (
 
 // UserSettings defines user-configurable Voxi settings across config.yaml, env, and config.toml.
 type UserSettings struct {
-	LLMCleaner       bool   `json:"llm_cleaner" yaml:"llm_cleaner"`
-	CleanupBackend   string `json:"cleanup_backend" yaml:"cleanup_backend"`
-	CleanupModel     string `json:"cleanup_model" yaml:"cleanup_model"`
-	OpenAIBaseURL    string `json:"openai_base_url" yaml:"openai_base_url"`
-	ASRModel         string `json:"asr_model" yaml:"asr_model"`
-	OpenAIASRBaseURL string `json:"openai_asr_base_url" yaml:"openai_asr_base_url"`
-	LlamaServerPath  string `json:"llama_server_path" yaml:"llama_server_path"`
-	TypeDelayMs      int    `json:"type_delay_ms" yaml:"type_delay_ms"`
-	DictationHistory bool   `json:"dictation_history" yaml:"dictation_history"`
-	ModifierGating   bool   `json:"modifier_gating" yaml:"modifier_gating"`
-	TTSEnabled       bool   `json:"tts_enabled" yaml:"tts_enabled"`
-	TTSLLMHost       string `json:"tts_llm_host,omitempty" yaml:"tts_llm_host,omitempty"`
-	TTSBackend       string `json:"tts_backend,omitempty" yaml:"tts_backend,omitempty"`
-	TTSPiperModel    string `json:"tts_piper_model,omitempty" yaml:"tts_piper_model,omitempty"`
-	TTSPiperConfig   string `json:"tts_piper_config,omitempty" yaml:"tts_piper_config,omitempty"`
-	// TTSServeReferenceWav overrides spec/tts.yaml's tts_serve.reference_wav
-	// (which stays empty). Set by `voxi voice clone` (issue 155 M2) or by hand.
-	TTSServeReferenceWav string `json:"tts_serve_reference_wav,omitempty" yaml:"tts_serve_reference_wav,omitempty"`
+	LLMCleaner           bool   `json:"llm_cleaner" yaml:"llm_cleaner"`
+	CleanupBackend       string `json:"cleanup_backend" yaml:"cleanup_backend"`
+	CleanupModel         string `json:"cleanup_model" yaml:"cleanup_model"`
+	OpenAIBaseURL        string `json:"openai_base_url" yaml:"openai_base_url"`
+	ASRModel             string `json:"asr_model" yaml:"asr_model"`
+	OpenAIASRBaseURL     string `json:"openai_asr_base_url" yaml:"openai_asr_base_url"`
+	LlamaServerPath      string `json:"llama_server_path" yaml:"llama_server_path"`
+	TypeDelayMs          int    `json:"type_delay_ms" yaml:"type_delay_ms"`
+	DictationHistory     bool   `json:"dictation_history" yaml:"dictation_history"`
+	ModifierGating       bool   `json:"modifier_gating" yaml:"modifier_gating"`
+	TTSEnabled           bool   `json:"tts_enabled" yaml:"tts_enabled"`
+	TTSLLMHost           string `json:"tts_llm_host,omitempty" yaml:"tts_llm_host,omitempty"`
+	TTSBackend           string `json:"tts_backend,omitempty" yaml:"tts_backend,omitempty"`
+	TTSPiperModel        string `json:"tts_piper_model,omitempty" yaml:"tts_piper_model,omitempty"`
+	TTSPiperConfig       string `json:"tts_piper_config,omitempty" yaml:"tts_piper_config,omitempty"`
+	TTSVoiceReferenceWav string `json:"tts_voice_reference_wav,omitempty" yaml:"tts_voice_reference_wav,omitempty"`
 }
 
 // DefaultUserSettings returns standard user settings.
@@ -106,9 +104,9 @@ func SetTTSEnabled(home string, enabled bool) error {
 	return WriteConfigAtomic(path, encoded)
 }
 
-// SetTTSServeReferenceWav updates only tts_serve_reference_wav in config.yaml,
-// preserving other keys and their comments, for `voxi voice clone` (issue 155 M2).
-func SetTTSServeReferenceWav(home, path string) error {
+// SetTTSVoiceReferenceWav updates only tts_voice_reference_wav in config.yaml,
+// preserving other keys and their comments, for `voxi voice clone`.
+func SetTTSVoiceReferenceWav(home, path string) error {
 	if home == "" {
 		if h, err := os.UserHomeDir(); err == nil {
 			home = h
@@ -133,7 +131,7 @@ func SetTTSServeReferenceWav(home, path string) error {
 		return fmt.Errorf("parse %s: configuration must be a YAML mapping", cfgPath)
 	}
 	for i := 0; i+1 < len(root.Content); i += 2 {
-		if root.Content[i].Value == "tts_serve_reference_wav" {
+		if root.Content[i].Value == "tts_voice_reference_wav" {
 			root.Content[i+1].Kind = yaml.ScalarNode
 			root.Content[i+1].Tag = "!!str"
 			root.Content[i+1].Value = path
@@ -145,7 +143,7 @@ func SetTTSServeReferenceWav(home, path string) error {
 		}
 	}
 	root.Content = append(root.Content,
-		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "tts_serve_reference_wav"},
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "tts_voice_reference_wav"},
 		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: path},
 	)
 	encoded, err := yaml.Marshal(doc)
@@ -239,8 +237,8 @@ func LoadUserSettings(home string) (*UserSettings, error) {
 		if v, ok := envMap["VOXI_PIPER_CONFIG"]; ok && v != "" {
 			s.TTSPiperConfig = v
 		}
-		if v, ok := envMap["VOXI_TTS_SERVE_REFERENCE_WAV"]; ok && v != "" {
-			s.TTSServeReferenceWav = v
+		if v, ok := envMap["VOXI_TTS_VOICE_REFERENCE_WAV"]; ok && v != "" {
+			s.TTSVoiceReferenceWav = v
 		}
 	} else if !os.IsNotExist(err) {
 		return nil, fmt.Errorf("read %s: %w", envPath, err)
@@ -319,8 +317,8 @@ func FormatEnv(s *UserSettings, existing map[string]string) []byte {
 	merged["VOXI_TTS_BACKEND"] = s.TTSBackend
 	merged["VOXI_PIPER_MODEL"] = s.TTSPiperModel
 	merged["VOXI_PIPER_CONFIG"] = s.TTSPiperConfig
-	if s.TTSServeReferenceWav != "" {
-		merged["VOXI_TTS_SERVE_REFERENCE_WAV"] = s.TTSServeReferenceWav
+	if s.TTSVoiceReferenceWav != "" {
+		merged["VOXI_TTS_VOICE_REFERENCE_WAV"] = s.TTSVoiceReferenceWav
 	}
 
 	managedOrder := []string{
@@ -336,7 +334,7 @@ func FormatEnv(s *UserSettings, existing map[string]string) []byte {
 		"VOXI_TTS_BACKEND",
 		"VOXI_PIPER_MODEL",
 		"VOXI_PIPER_CONFIG",
-		"VOXI_TTS_SERVE_REFERENCE_WAV",
+		"VOXI_TTS_VOICE_REFERENCE_WAV",
 	}
 
 	var buf bytes.Buffer

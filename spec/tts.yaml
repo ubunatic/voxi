@@ -17,68 +17,6 @@ playback:
   # A sample is considered quiet below this full-scale amplitude level.
   trailing_silence_threshold_db: -42
 
-# Cloned-voice synthesis via a separately installed tts-serve HTTP server
-# (issue 155 M1, API in issue 157). Opt-in only: "auto" never selects this
-# backend even when it is reachable; set backend.default_backend or
-# VOXI_TTS_BACKEND to "tts-serve" explicitly.
-tts_serve:
-  # Local tts-serve endpoint; voxi does not install or launch the server.
-  url: "http://127.0.0.1:8000"
-  # Chatterbox on CPU costs about 10s of compute per 1s of audio. Text is sent
-  # sentence-chunked (see internal/tts.SplitText) and, for this backend only,
-  # re-split at max_chunk_runes (see below), so each request only needs to
-  # cover one capped chunk's audio. At an assumed ~150 words/min speaking rate
-  # (~6 runes/word, so ~15 runes/s of audio), max_chunk_runes: 120 is about 8s
-  # of audio, i.e. ~80s of compute (120 / 15 * 10). 150000 leaves ~1.9x margin
-  # over that (issue 155 M3 pre-work).
-  timeout_ms: 150000
-  # For the tts-serve backend only: sentences longer than this are re-split at
-  # clause (,;:) then word boundaries before being sent, so no single request
-  # risks exceeding timeout_ms. Piper's chunking (internal/tts.SplitText) is
-  # unaffected.
-  max_chunk_runes: 120
-  # Default reference WAV; stays empty here. `voxi voice clone` (issue 155 M2)
-  # writes the resolved voice profile to tts_serve_reference_wav in
-  # ~/.config/voxi/config.yaml (or set VOXI_TTS_SERVE_REFERENCE_WAV) instead of
-  # rebuilding, because the wrapped engine requires a non-empty reference clip.
-  reference_wav: ""
-  # Each tts-serve instance wraps one engine; "chatterbox" is descriptive only
-  # (used in error messages) and is not sent in the request.
-  engine: "chatterbox"
-  # Merged as flat top-level request fields (e.g. seed, exaggeration,
-  # cfg_weight) -- the wrapped engine's schema has no nested "settings" object
-  # and rejects unknown top-level keys (issue 155 M2 pre-work).
-  settings: {}
-
-# Pins for `voxi install --tts-serve` (issue 159 M1), which clones tts-serve
-# and builds its Chatterbox venv under ~/.cache/voxi/tts-serve. Not read by
-# the tts-serve HTTP client above (tts_serve.*); installer-only.
-tts_serve_install:
-  # github.com/scorbo2/tts-serve, pinned to master HEAD as of 2026-09-28
-  # (git ls-remote), since upstream ships no tagged releases to pin instead.
-  tts_serve_repo: "https://github.com/scorbo2/tts-serve"
-  tts_serve_commit: "6ca92b20e22bfb30eee61e1d96f731ff6a4da4aa"
-  # github.com/resemble-ai/chatterbox. PyPI's chatterbox-tts 0.1.7 predates
-  # the multilingual T3 API impl/server_chatterbox.py needs (both report
-  # 0.1.7, so pinning to a commit, not a version, is the only reliable way to
-  # get the right build); this commit was also upstream's master HEAD as of
-  # 2026-09-28.
-  chatterbox_repo: "https://github.com/resemble-ai/chatterbox"
-  chatterbox_commit: "5de7a54aa4e5e2baadb0182dde554908b48b85c2"
-  # Chatterbox on CPU needs about this much free RAM; the installer warns
-  # (but still proceeds if confirmed) below this threshold.
-  min_free_memory_mb: 8192
-  # chatterbox_commit's pyproject.toml pins torch==2.6.0/torchaudio==2.6.0 for
-  # python_version < 3.14 (no exact pin above 3.14 yet); python3.12 has a
-  # published torch 2.6.0+cpu wheel, so the venv uses it instead of the host's
-  # default python3 (which may be newer).
-  python_interpreter: "python3.12"
-  torch_version: "2.6.0"
-  # CPU-only wheel index (issue 159 M2 pre-work #1): a plain `pip install`
-  # resolves CUDA torch plus nvidia wheels, several GB of useless downloads
-  # on this AMD CPU host.
-  torch_cpu_index_url: "https://download.pytorch.org/whl/cpu"
-
 # Speech-ready narration through lmcoder.
 llm:
   # Used when ~/.config/voxi/config.yaml and --llm do not select a host.

@@ -20,7 +20,7 @@ func VoicesDir(home string) string {
 }
 
 // NewCloneCommand creates `voxi voice clone`, which installs a reference WAV
-// from the issue 153 allowlist as a cloned-voice profile for the tts-serve
+// from the issue 153 allowlist as a cloned-voice profile for a future engine
 // backend and records it in ~/.config/voxi/config.yaml.
 //
 // Consent: the voice profile is local and private, and is intended to hold
@@ -36,11 +36,11 @@ func NewCloneCommand(d deps.Dependencies) *cobra.Command {
 	name := "cloned"
 	cmd := &cobra.Command{
 		Use:   "clone",
-		Short: "Install an allowlisted speech sample as a cloned-voice profile for tts-serve",
+		Short: "Install an allowlisted speech sample as a cloned-voice profile",
 		Long: "Copies one allowlisted sample WAV (see voice-training.txt, issue 153) to " +
-			"~/.local/share/voxi/voices/<name>.wav and records it as tts_serve_reference_wav " +
-			"in ~/.config/voxi/config.yaml, so `voxi say --no-llm` can speak with the cloned " +
-			"voice once the tts-serve backend is selected. Only clone your own voice.",
+			"~/.local/share/voxi/voices/<name>.wav and records it as " +
+			"tts_voice_reference_wav in ~/.config/voxi/config.yaml for a cloned-voice engine. " +
+			"Only clone your own voice.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if !safeID.MatchString(name) {
@@ -85,8 +85,8 @@ func NewCloneCommand(d deps.Dependencies) *cobra.Command {
 			if err := copyReplacing(resolvedInput, target); err != nil {
 				return fmt.Errorf("install voice profile: %w", err)
 			}
-			if err := config.SetTTSServeReferenceWav(home, target); err != nil {
-				return fmt.Errorf("record tts_serve_reference_wav: %w", err)
+			if err := config.SetTTSVoiceReferenceWav(home, target); err != nil {
+				return fmt.Errorf("record tts_voice_reference_wav: %w", err)
 			}
 			fmt.Fprintf(d.Stdout, "installed cloned-voice profile %s from sample %q at %s\n", name, sample.Name, target)
 			return nil

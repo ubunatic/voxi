@@ -36,7 +36,8 @@ Write results into this ticket; no-go closes the ticket with findings.
 
 ## M2 — engine onboarding
 - Integration shape chosen from M1: subprocess (Piper pattern) if the CLI loads fast enough per
-  sentence, otherwise a long-lived local server behind the existing tts-serve HTTP client/API.
+  sentence, otherwise a dedicated VoxCPM local server/client. Issue 162 removes the tts-serve
+  client; build on the preserved TTS synthesis interface and cloned-voice WAV profile.
 - `spec/tts.yaml`: engine `voxcpm` (binary/URL, model path, reference WAV + transcript, backend,
   timesteps, chunk cap); Go reads from spec, no duplicated values. Piper stays default.
 - Reference transcript: VoxCPM needs the exact text of the reference clip; store it with the voice
@@ -44,9 +45,9 @@ Write results into this ticket; no-go closes the ticket with findings.
 - Unit tests for command/request construction; live `voxi say --no-llm` check; update `docs/TTSReading.md`.
 
 ## M3 — `voxi install`
-`voxi install --voxcpm` (mirroring `--tts-serve` from 159): fetch/build the pinned runtime release
+`voxi install --voxcpm`: fetch/build the pinned runtime release
 with Vulkan, download the pinned GGUF with checksum, install a systemd --user unit if a server is used,
 idempotent re-run, clear errors when Vulkan/`glslc` are missing. Live-verify from a clean state.
 User decision (2026-09-28): Chatterbox is too slow and too big, and voxi should avoid PyTorch.
-If M1 passes, retire Chatterbox/tts-serve (155, 159) in favor of `voxcpm`; any replacement engine
-must be PyTorch-free.
+Issue 162 retires Chatterbox/tts-serve (155, 159) and leaves a `voxcpm` placeholder. If M1 passes,
+fill that placeholder; any replacement engine must be PyTorch-free.

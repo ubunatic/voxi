@@ -109,14 +109,10 @@ Reading aloud (TTS):
   rot. 143 is the feature that makes TTS usable on arbitrary text.
 - **[145 Markdown normalization for TTS](../issues/145-improve-markdown-text-normalization-for-tts-reading.md)**
   (Open, P2). Small, unit-testable, and applies to every read-aloud path.
-- **[155 cloned-voice TTS backend](../issues/155-integrate-pocket-tts-voice-cloning-as-voxi-tts-backend.md)**
-  (Open, P2). **Re-scoped**: the ticket title still says Pocket TTS, but its
-  2026-09-27 update recommends **Chatterbox via tts-serve** (MIT, CPU): the
-  user's own cloned voice, no dropped words on the demo texts, rated good.
-  Costs: about 8 GB free RAM and roughly 10 s of compute per 1 s of audio on
-  CPU, so it is a pre-rendered / opt-in voice, not an interactive default.
-  Sequence it *after* 140's resource guard, because an 8 GB service on this
-  shared-RAM iGPU machine is exactly the hazard 140 describes.
+- **[162 remove Chatterbox and keep the cloned-voice seam](../issues/162-remove-chatterbox-tts-serve-keep-cloned-voice-engine-placeholder.md)**
+  (Open, P2). Removes the slow, memory-heavy Chatterbox/tts-serve implementation
+  while preserving the reference-WAV profile and engine dispatch. The `voxcpm`
+  selection is a clear-error placeholder for **[160 VoxCPM](../issues/160-adopt-voxcpm-gguf-vulkan-as-cloned-voice-tts-engine-incl-voxi-install.md)**.
 - **[140 harden the harness against hazardous local inference](../issues/140-harden-the-agent-harness-against-resource-hazardous-local-inference-runs.md)**
   (Open, P2). Promoted from unranked into `Next` as 155's prerequisite: a
   prior uncapped `llama-server` made the machine unusable.
@@ -158,11 +154,12 @@ Reading aloud (TTS):
 - **131 (R2T2 research)** — close; its only open item (WER vs Cohere) is 133.
 - **154 (Pocket TTS canary)** — close as a completed canary with a negative
   result: it works end to end but drops words on longer texts.
-- **157 (TalkWithMe / tts-serve research)** — close; research done, and its
-  finding (tts-serve) is what 155 now builds on.
-- **156 (Piper fine-tuning bugs)** — park, and decide toward *removing*
-  `voxi voice train`: the "decide after 154" condition is met, and the
-  cloning path is Chatterbox, not Piper training.
+- **157 (TalkWithMe / tts-serve research)** — research history only; its
+  implementation recommendation was retired by 162. Issue 160 owns the next
+  cloned-voice engine evaluation.
+- **156 (Piper fine-tuning bugs)** — park and decide whether to remove
+  `voxi voice train`; the prior cloned-voice implementation was retired, and
+  issue 160 is evaluating a replacement engine.
 - **149 (personalized voice umbrella)** and **147 (TTS engine research)** —
   close or fold into 155: Piper stock voices shipped, and the my-voice goal
   now has a concrete path.
@@ -200,6 +197,7 @@ Reading aloud (TTS):
   mostly waiting on a check.
 - **Demoted: 083 to `Next`, 075 to `Later`** — with reasons given in place.
 - **New theme: reading aloud (TTS).** Placed in `Next` below dictation
-  accuracy; 155 re-scoped from Pocket TTS to Chatterbox and gated on 140.
+  accuracy; issue 162 leaves a cloned-voice placeholder for the VoxCPM work in
+  issue 160.
 - **New Close/Park entries:** 131, 134, 147, 149, 154, 157 (done or
   superseded), 132 and 122 (externally blocked), 156 (decide to remove).

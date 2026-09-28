@@ -73,28 +73,28 @@ Voxi provides a pluggable text-to-speech engine seam with automatic fallback:
 1. **Piper (Neural)**: High-quality, local ONNX neural text-to-speech. Installed as a self-contained, pip-free prebuilt binary under `~/.local/lib/voxi/piper/` and symlinked to `~/.local/bin/piper`. Voice models reside in `~/.local/share/voxi/voices/`.
 2. **Festival (`text2wave`)**: Packaged standard synthesizer fallback.
 3. **`espeak-ng`**: Lightweight, instant synthetic fallback.
-4. **`tts-serve` (cloned voice, opt-in)**: HTTP client to a separately running tts-serve/Chatterbox server; see "Cloned-voice reading via tts-serve" below.
+4. **VoxCPM (cloned voice, placeholder)**: reserved cloned-voice backend for issue 160; selecting it currently returns a not-yet-implemented error.
 
 ### Configuration & Precedence
 
 TTS backend and voice selection resolve in this order:
 
 1. **Process Environment Overrides**:
-   - `VOXI_TTS_BACKEND`: `auto`, `piper`, `festival`, `espeak-ng`, or `tts-serve`.
+   - `VOXI_TTS_BACKEND`: `auto`, `piper`, `festival`, `espeak-ng`, or `voxcpm`.
    - `VOXI_PIPER_MODEL`: Absolute path to a `.onnx` voice model file.
    - `VOXI_PIPER_CONFIG`: Optional path to a `.onnx.json` voice config file.
-   - `VOXI_TTS_SERVE_REFERENCE_WAV`: Absolute path to the cloned-voice reference WAV.
+   - `VOXI_TTS_VOICE_REFERENCE_WAV`: Absolute path to the cloned-voice reference WAV.
 2. **Environment File (`~/.config/voxi/env`)**:
-   - `VOXI_TTS_BACKEND`, `VOXI_PIPER_MODEL`, `VOXI_PIPER_CONFIG`, `VOXI_TTS_SERVE_REFERENCE_WAV`.
+   - `VOXI_TTS_BACKEND`, `VOXI_PIPER_MODEL`, `VOXI_PIPER_CONFIG`, `VOXI_TTS_VOICE_REFERENCE_WAV`.
 3. **User Configuration (`~/.config/voxi/config.yaml`)**:
    - `tts_backend`: Default `"auto"` (prefers Piper if model and binary are present).
    - `tts_piper_model`: E.g. `/home/uwe/.local/share/voxi/voices/en_US-lessac-medium.onnx`.
    - `tts_piper_config`: Optional custom model JSON.
-   - `tts_serve_reference_wav`: Set by `voxi voice clone`; the cloned-voice reference WAV path.
+   - `tts_voice_reference_wav`: Set by `voxi voice clone`; the cloned-voice reference WAV path.
 4. **Embedded Spec Defaults (`spec/tts.yaml`)**:
    - `backend.default_backend: auto`
    - `piper.model: ~/.local/share/voxi/voices/en_US-lessac-medium.onnx`
-   - `tts_serve.reference_wav: ""` (always empty; see below)
+   - Piper and playback tuning only; old `tts_serve*` keys in user configs are ignored.
 
 ### Multi-Voice & Dialect Library
 
@@ -124,133 +124,16 @@ Local CPU canary measurements on AMD Ryzen 5 PRO 5650U (Cezanne APU, 12 threads,
 
 Piper synthesizes ~4x faster than Festival with less than half the memory footprint, achieving sub-second first-chunk audio playback.
 
-## Cloned-voice reading via tts-serve (issue 155)
+## Cloned-voice engine placeholder
 
-A fourth backend, `tts-serve`, speaks in a cloned voice built from the user's
-own recorded speech. It is opt-in only: `backend.default_backend: auto` never
-selects it, even when a tts-serve server is reachable. Select it explicitly
-with `tts_backend: tts-serve` in `~/.config/voxi/config.yaml` or
-`VOXI_TTS_BACKEND=tts-serve`.
-
-**What it is.** [tts-serve](https://github.com/scorbo2/tts-serve) is a
-separately installed local Python/FastAPI server that wraps one voice-cloning
-TTS engine (Chatterbox, MIT license) behind a small HTTP API
-(`GET /capabilities`, `POST /synthesize`). Voxi's `internal/tts/ttsserve.go`
-is only an HTTP client (Go `net/http`, no new dependencies) that expects the
-server already running at `tts_serve.url` in the embedded `spec/tts.yaml`
-(default `http://127.0.0.1:8000`); `voxi install --tts-serve` (issue 159)
-handles installing, starting, and stopping that server, described next.
-
-**Consent: only clone your own voice.** The voice profile is a private,
-local, unencrypted WAV file. Do not clone anyone else's voice without their
-permission.
-
-### Installing and managing the tts-serve server (issue 159)
-
-`voxi install --tts-serve` sets up a restart-safe Chatterbox tts-serve server
-as a systemd user service, `voxi-tts-serve.service`. It is opt-in: plain
-`voxi install` (and `make install`) skips it.
-
-**Install.** Run `voxi install --tts-serve` directly (there is no separate
-Make target for it):
-
-1. Confirms first — the download is multi-GB (a CPU-only PyTorch build plus
-   Chatterbox and its model dependencies) — and warns if free RAM is below
-   `tts_serve_install.min_free_memory_mb` (8192 MB) in `spec/tts.yaml`.
-2. Clones [tts-serve](https://github.com/scorbo2/tts-serve) and checks out the
-   commit pinned in `spec/tts.yaml`'s `tts_serve_install` under
-   `~/.cache/voxi/tts-serve`. Refuses to run if that checkout has local
-   changes (`git status --porcelain`), so a re-run never discards them.
-3. Creates a Python venv there with `tts_serve_install.python_interpreter`
-   (`python3.12`, chosen because Chatterbox's pinned commit requires
-   `torch==2.6.0`/`torchaudio==2.6.0` only for Python < 3.14, and 3.12 has a
-   published CPU wheel for that exact version).
-4. Installs `torch`/`torchaudio` from the CPU-only wheel index
-   (`tts_serve_install.torch_cpu_index_url`,
-   `https://download.pytorch.org/whl/cpu`) **before** Chatterbox, so pip never
-   reaches for the default CUDA build (several GB of useless `nvidia-*`
-   wheels on a CPU-only host).
-5. `pip install`s the pinned Chatterbox commit and tts-serve's own
-   `tts-engine-common`/`fastapi`/`uvicorn`/`loguru`/`soundfile` dependencies.
-6. Writes `~/.config/systemd/user/voxi-tts-serve.service` (from
-   `systemd/voxi-tts-serve.service`, embedded in the binary) with
-   `CHATTERBOX_HOST`/`CHATTERBOX_PORT` derived from `tts_serve.url` and
-   `CHATTERBOX_DEVICE=cpu`, then `systemctl --user enable --now` it.
-
-Re-running `voxi install --tts-serve` is idempotent: an existing checkout and
-venv are reused, and only the fetch/checkout, pip installs, and unit
-(re)write happen again.
-
-**Start / stop / status.** Once installed, `voxi-tts-serve.service` starts at
-login (`WantedBy=graphical-session.target`) and restarts on failure. Manage it
-like any other systemd user service:
-
-```
-systemctl --user status  voxi-tts-serve.service
-systemctl --user stop    voxi-tts-serve.service
-systemctl --user start   voxi-tts-serve.service
-systemctl --user restart voxi-tts-serve.service
-curl http://127.0.0.1:8000/capabilities   # confirm it is actually serving
-```
-
-**Memory.** Loading the multilingual Chatterbox model and serving one request
-peaked at roughly 7.3 GiB RSS in testing (`systemctl --user show -p
-MemoryPeak voxi-tts-serve.service`); the unit's `MemoryMax=12G` leaves margin
-above that so `Restart=on-failure` does not loop on an OOM kill during model
-load. Re-measure and adjust `systemd/voxi-tts-serve.service` if a future
-Chatterbox/tts-serve pin changes memory use materially.
-
-**Uninstall.** There is no dedicated uninstall subcommand; remove the pieces
-`voxi install --tts-serve` created:
-
-```
-systemctl --user disable --now voxi-tts-serve.service
-rm ~/.config/systemd/user/voxi-tts-serve.service
-systemctl --user daemon-reload
-rm -rf ~/.cache/voxi/tts-serve          # checkout, venv, downloaded weights
-rm -rf ~/.cache/huggingface             # only if nothing else on the host uses it
-```
-
-Also unset `tts_backend: tts-serve` in `~/.config/voxi/config.yaml` (or
-`VOXI_TTS_BACKEND`) so `voxi say` falls back to Piper/Festival/`espeak-ng`.
-
-**Cloning a voice and selecting the backend**
-
-1. Record and transcribe a calm ~10 s sample the normal way
-   (`voxi feedback sample record`), then allowlist it for training in
-   `~/.config/voxi/samples/voice-training.txt` (issue 153).
-2. `voxi voice clone --sample <id>` copies that sample's WAV to
-   `~/.local/share/voxi/voices/<name>.wav` (default name `cloned`) and records
-   its path as `tts_serve_reference_wav` in `~/.config/voxi/config.yaml`. If
-   more than one sample is allowlisted, `--sample` is required; `--name`
-   installs multiple named profiles side by side.
-3. Set `tts_backend: tts-serve` (or `VOXI_TTS_BACKEND=tts-serve`) and run
-   `make restart-service` so the running `voxi-agent.service` picks up the new
-   backend and voice profile — `make install` alone does not hot-reload it.
-   (This only restarts `voxi-agent.service`; `voxi-tts-serve.service` keeps
-   running with its already-loaded model.)
-4. `voxi say --no-llm "text"` now speaks with the cloned voice.
-
-`tts_serve_reference_wav` (and its `VOXI_TTS_SERVE_REFERENCE_WAV` environment
-override) exist because `spec/tts.yaml`'s `tts_serve.reference_wav` is
-embedded in the binary and stays empty by default: the wrapped engine's
-request schema requires a non-empty reference clip, so a real path must come
-from runtime configuration, not a rebuild.
-
-**Latency.** Chatterbox on CPU costs roughly 10 s of compute per 1 s of
-synthesized audio and needs about 8 GB of free RAM. `SplitText` already
-breaks queued text into sentence-sized chunks for every backend (see
-"Playback path" above); for `tts-serve` this keeps each HTTP request's
-synthesis time far under `tts_serve.timeout_ms` (60 s covers only ~6 s of
-audio) and lets playback start on the first sentence while later sentences
-are still requested and prefetched.
-
-**Request shape.** Each tts-serve server instance wraps exactly one engine
-and exposes that engine's own flat request schema (no envelope, no `engine`
-selector field, unknown fields rejected). `spec/tts_serve.settings` is merged
-as flat top-level request fields (e.g. `seed`, `exaggeration`, `cfg_weight`
-for Chatterbox); see the source comment in `internal/tts/ttsserve.go` for the
-schema reference.
+Chatterbox and the `tts-serve` integration were removed because the CPU path
+was too slow and resource hungry. `voxi voice clone` still installs an
+allowlisted reference WAV and records it as `tts_voice_reference_wav` for a
+future cloned-voice engine. The `voxcpm` backend is reserved for issue 160 and
+currently returns a clear not-yet-implemented error. Select it with
+`tts_backend: voxcpm` or `VOXI_TTS_BACKEND=voxcpm` only when testing that
+placeholder. Existing `tts-serve` backend selections report that the backend
+was removed; old `tts_serve*` config keys are ignored.
 
 ## Pause trimming and deployment
 
@@ -267,4 +150,3 @@ activate engine or spec changes in the running daemon. `make install` alone does
 not hot-reload the running background service. If gaps remain after a fresh
 daemon starts, inspect the WAV tail and player transition separately; increasing
 the trim limit cannot remove startup delay.
-

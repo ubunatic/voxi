@@ -1,24 +1,17 @@
 package tts
 
 import (
-	"context"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 	"testing"
 	"time"
 
 	"ubunatic.com/voxi/internal/deps"
-	"ubunatic.com/voxi/spec"
 )
 
 func TestEngineBackendStatusReportsPreferredFallbackAndMissing(t *testing.T) {
@@ -98,6 +91,67 @@ func TestSelectedBackendUsesAutoByDefaultAndNormalizesValue(t *testing.T) {
 	engine.deps.Getenv = func(string) string { return "" }
 	if got := engine.selectedBackend(); got != "auto" {
 		t.Fatalf("selectedBackend() = %q, want auto", got)
+	}
+}
+
+func TestSynthesizeDeprecatedTTSServeBackendReturnsMigrationError(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		backend string
+		fromEnv bool
+	}{
+		{name: "config", backend: "tts-serve"},
+		{name: "environment", backend: "tts-serve", fromEnv: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			if !tc.fromEnv {
+				configDir := filepath.Join(home, ".config", "voxi")
+				if err := os.MkdirAll(configDir, 0755); err != nil {
+					t.Fatal(err)
+				}
+				data := []byte("tts_backend: tts-serve\ntts_serve_reference_wav: /old/path.wav\n")
+				if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), data, 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			engine := NewEngine(deps.Dependencies{Getenv: func(key string) string {
+				if key == "HOME" {
+					return home
+				}
+				if key == "VOXI_TTS_BACKEND" && tc.fromEnv {
+					return tc.backend
+				}
+				return ""
+			}}, "/usr/bin/voxi")
+			_, _, err := engine.Synthesize(t.Context(), "hello")
+			if err == nil || !strings.Contains(err.Error(), "removed") || !strings.Contains(err.Error(), "issue 162/160") {
+				t.Fatalf("Synthesize() error = %v, want removed-backend migration error", err)
+			}
+		})
+	}
+}
+
+func TestSynthesizeVoxCPMPlaceholderReturnsIssue160Error(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	configDir := filepath.Join(home, ".config", "voxi")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte("tts_backend: voxcpm\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	engine := NewEngine(deps.Dependencies{Getenv: func(key string) string {
+		if key == "HOME" {
+			return home
+		}
+		return ""
+	}}, "/usr/bin/voxi")
+	_, _, err := engine.Synthesize(t.Context(), "hello")
+	if err == nil || !strings.Contains(err.Error(), "not yet implemented") || !strings.Contains(err.Error(), "issue 160") {
+		t.Fatalf("Synthesize() error = %v, want placeholder issue 160 error", err)
 	}
 }
 
@@ -184,64 +238,6 @@ func TestSynthesizeExplicitPiperFailsWhenExecutableOrModelMissing(t *testing.T) 
 	}, "/usr/bin/voxi")
 	if _, _, err := engine.Synthesize(ctx, "hello"); err == nil || !strings.Contains(err.Error(), "piper executable not found") {
 		t.Fatalf("expected piper not found error, got: %v", err)
-	}
-}
-
-func TestTTSServeEngineSendsOneRequestPerSentenceChunk(t *testing.T) {
-	referenceWav := filepath.Join(t.TempDir(), "reference.wav")
-	if err := os.WriteFile(referenceWav, []byte("RIFF-fake-reference-wav"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	var mu sync.Mutex
-	var gotTexts []string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req map[string]any
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			t.Errorf("decode request: %v", err)
-		}
-		mu.Lock()
-		gotTexts = append(gotTexts, fmt.Sprint(req["text"]))
-		mu.Unlock()
-		fmtChunk := []byte{1, 0, 1, 0, 0x44, 0xac, 0, 0, 0x88, 0x58, 1, 0, 2, 0, 16, 0}
-		resp := ttsServeResponse{AudioBase64: base64.StdEncoding.EncodeToString(buildWAV(fmtChunk, []byte("fake-audio")))}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(resp)
-	}))
-	defer server.Close()
-
-	engine := &Engine{
-		deps:                 deps.Dependencies{},
-		backend:              "tts-serve",
-		ttsServeReferenceWav: referenceWav,
-		ttsServeClient: newTTSServeClient(spec.TTSServeSpec{
-			URL:       server.URL,
-			TimeoutMs: 1000, // far below the ~10s/1s-audio latency a whole long text would need
-			Engine:    "chatterbox",
-		}),
-	}
-
-	longText := "First sentence here. Second sentence follows. A third one wraps it up."
-	chunks := SplitText(longText)
-	if len(chunks) < 2 {
-		t.Fatalf("SplitText(longText) = %d chunk(s), want at least 2 to exercise chunked requests", len(chunks))
-	}
-	for _, chunk := range chunks {
-		audio, _, err := engine.Synthesize(context.Background(), chunk)
-		if err != nil {
-			t.Fatalf("Synthesize(%q) error = %v", chunk, err)
-		}
-		_ = audio.Close()
-	}
-
-	mu.Lock()
-	defer mu.Unlock()
-	if len(gotTexts) != len(chunks) {
-		t.Fatalf("tts-serve received %d request(s), want one per chunk (%d): %v", len(gotTexts), len(chunks), gotTexts)
-	}
-	for i, chunk := range chunks {
-		if gotTexts[i] != chunk {
-			t.Errorf("request %d text = %q, want chunk %q", i, gotTexts[i], chunk)
-		}
 	}
 }
 
