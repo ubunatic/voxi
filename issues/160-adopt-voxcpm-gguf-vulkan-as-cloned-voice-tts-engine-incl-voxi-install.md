@@ -96,6 +96,72 @@ Pre-Work / Required Refinements:
 - Same demo 1–3 texts; outputs to `voice-demo/voxcpm/tuned/<variant>/`; table per variant; flag the
   best variant and whether it meets RTF ≤ 2 and ≤ 3 GB. The user re-listens to the best variant.
 
+M1b results (2026-09-28):
+
+- Pre-Work: built hotfix `v0.8.2-audio8-perf-hotfix` at
+  `ac16661d144f00f84ea0483f3574c374c9868e2d` in scratch. Stable baseline is
+  `v0.8.2` at `4d88768fbcae4e6eb3352c6ab1422dabb7d90b58`. Reused the already-cached
+  847,888,032-byte GGUF; no model download in M1b.
+- Reference: original `cloned.wav` was not modified. Cropped a clean 8.669063 s
+  sentence to `~/.cache/voxi/voxcpm-canary/prework/reference-8s.wav` with ffmpeg.
+  Voxi `voxtype transcribe` transcript, verbatim: “I speak clearly, take a breath
+  between sentences and let each word finish before the next one starts.”
+- Rendered the three exact texts from `scripts/canary_voiceclone/run.sh` with
+  seed 42. Stable and hotfix defaults use 6 threads, 10 inference steps, CFG 2.0.
+  Tuned hotfix uses 12 threads, 4 steps, CFG 1.0 and
+  `voxcpm1.mem_saver=true`; 2-step hotfix uses 12 threads, 2 steps, CFG 1.0.
+  Lower steps/CFG risk voice and text fidelity. Outputs are under
+  `~/.local/share/voxi/voice-demo/voxcpm/tuned/{stable-default,hotfix-default,hotfix-tuned,hotfix-2step}/`.
+- RTF is audio.cpp CLI `--metrics` wall time / output duration. `/usr/bin/time -v`
+  measured peak RSS. `radeontop` sampled GTT once per second; idle GTT mean was
+  889.9 MiB. Combined memory per render is peak process RSS + (render peak GTT -
+  idle mean). GTT remains system-wide on this integrated GPU, so this is an
+  approximate upper bound. `voxtype transcribe` checked every WAV;
+  dropped count is the expected word count minus the longest ordered sequence
+  retained in the transcript (substitutions are counted as missing words).
+- Persistent mode was attempted with the hotfix `audiocpp_server`, 12 threads,
+  4 steps and CFG 1.0. It started, then aborted on the first Vulkan request with
+  `GGML_ASSERT(tensor) failed`; no server renders or metrics were produced.
+
+| Variant | Demo | Output | RTF | Peak RSS | GTT delta over idle | RSS + GTT delta | ASR transcript / dropped words |
+|---|---:|---:|---:|---:|---:|---:|---|
+| stable-default | 1 | 5.28 s | 3.112 | 665 MiB | 1,922 MiB | 2,586 MiB | exact / 0 |
+| stable-default | 2 | 2.96 s | 3.546 | 665 MiB | 2,149 MiB | 2,813 MiB | exact / 0 |
+| stable-default | 3 | 4.48 s | 2.929 | 665 MiB | 2,162 MiB | 2,826 MiB | exact / 0 |
+| hotfix-default | 1 | 5.28 s | 3.025 | 664 MiB | 1,888 MiB | 2,551 MiB | exact / 0 |
+| hotfix-default | 2 | 2.96 s | 3.587 | 664 MiB | 1,888 MiB | 2,551 MiB | exact / 0 |
+| hotfix-default | 3 | 4.48 s | 3.177 | 664 MiB | 2,221 MiB | 2,885 MiB | exact / 0 |
+| hotfix-tuned | 1 | 7.28 s | 3.035 | 664 MiB | 1,859 MiB | 2,523 MiB | “Good morning.” / 12 |
+| hotfix-tuned | 2 | 5.28 s | 2.035 | 663 MiB | 1,861 MiB | 2,524 MiB | “Please send me the latest notes when you have more.” / 2 |
+| hotfix-tuned | 3 | 3.76 s | 2.355 | 664 MiB | 1,891 MiB | 2,555 MiB | “I will be back shortly, so I will be back shortly.” / 6 |
+| hotfix-2step | 1 | 8.48 s | 2.347 | 663 MiB | 1,889 MiB | 2,552 MiB | “I thought you guy!” / 13 |
+| hotfix-2step | 2 | 6.56 s | 2.436 | 664 MiB | 2,151 MiB | 2,815 MiB | “Oh no!” / 11 |
+| hotfix-2step | 3 | 7.52 s | 2.338 | 663 MiB | 2,164 MiB | 2,827 MiB | “Oh?” / 12 |
+| hotfix-server | 1–3 | — | — | — | — | — | server aborted before rendering |
+
+**Best candidate for user re-listen:** `hotfix-tuned` is the practical speed/fidelity
+compromise; 2-step has lower mean RTF but lost nearly all words in ASR. Reusable
+demo 1 command (replace text and output for demos 2–3):
+
+```sh
+/home/uwe/.cache/voxi/voxcpm-canary/build-hotfix-vulkan/bin/audiocpp_cli \
+  --task tts --family voxcpm1 \
+  --model /home/uwe/.cache/voxi/voxcpm-canary/model/voxcpm-0.5b-q8_0-audiovae-f16.gguf \
+  --backend vulkan --threads 12 --seed 42 \
+  --voice-ref /home/uwe/.cache/voxi/voxcpm-canary/prework/reference-8s.wav \
+  --reference-text 'I speak clearly, take a breath between sentences and let each word finish before the next one starts.' \
+  --num-inference-steps 4 --guidance-scale 1.0 \
+  --session-option voxcpm1.mem_saver=true \
+  --text 'Good morning. I hope your day is off to a calm and pleasant start.' \
+  --out /home/uwe/.local/share/voxi/voice-demo/voxcpm/tuned/hotfix-tuned/demo-1.wav --metrics
+```
+
+**Decision: NO-GO for M2.** All tested variants exceed RTF ≤ 2 on at least one
+demo; none meets the speed bar across all three, while each successful variant
+stays under 3 GiB by the refined combined-memory estimate. Hotfix-tuned also has
+ASR omissions, and 2-step is substantially worse. User re-listen to the
+hotfix-tuned renders remains **pending**; no quality rating for M1b is assigned.
+
 ## M2 — engine onboarding
 - Integration shape chosen from M1: subprocess (Piper pattern) if the CLI loads fast enough per
   sentence, otherwise a dedicated VoxCPM local server/client. Issue 162 removes the tts-serve
