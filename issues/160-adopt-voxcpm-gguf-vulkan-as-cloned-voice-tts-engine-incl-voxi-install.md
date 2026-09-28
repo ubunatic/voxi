@@ -156,6 +156,12 @@ demo 1 command (replace text and output for demos 2–3):
   --out /home/uwe/.local/share/voxi/voice-demo/voxcpm/tuned/hotfix-tuned/demo-1.wav --metrics
 ```
 
+**Host review (2026-09-28):** `hotfix-tuned` is not a usable candidate — ASR drops 2–12 words per
+demo. The real best is `hotfix-default` / `stable-default` with the 8 s reference: 0 dropped words,
+memory ~2.5–2.9 GiB (memory bar now met), RTF 2.9–3.6 (speed bar missed). Speed looks capped by
+this iGPU; the persistent server (which would drop per-call model load) crashed on Vulkan. Open user
+decision: accept RTF ~3 and proceed to M2 with `hotfix-default`, or keep the no-go.
+
 **Decision: NO-GO for M2.** All tested variants exceed RTF ≤ 2 on at least one
 demo; none meets the speed bar across all three, while each successful variant
 stays under 3 GiB by the refined combined-memory estimate. Hotfix-tuned also has
