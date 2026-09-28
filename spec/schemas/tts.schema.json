@@ -75,7 +75,7 @@
     },
     "tts_serve_install": {
       "type": "object",
-      "required": ["tts_serve_repo", "tts_serve_commit", "chatterbox_repo", "chatterbox_commit", "min_free_memory_mb"],
+      "required": ["tts_serve_repo", "tts_serve_commit", "chatterbox_repo", "chatterbox_commit", "min_free_memory_mb", "python_interpreter", "torch_version", "torch_cpu_index_url"],
       "properties": {
         "tts_serve_repo": { "type": "string", "description": "github.com/scorbo2/tts-serve clone URL used by `voxi install --tts-serve`." },
         "tts_serve_commit": { "type": "string", "description": "Pinned tts-serve commit checked out under ~/.cache/voxi/tts-serve." },
@@ -86,7 +86,10 @@
           "minimum": 1024,
           "maximum": 131072,
           "description": "Free RAM Chatterbox on CPU needs; the installer warns below this threshold."
-        }
+        },
+        "python_interpreter": { "type": "string", "description": "Interpreter used to create the tts-serve venv; must have a published torch_version CPU wheel." },
+        "torch_version": { "type": "string", "description": "torch/torchaudio version pinned to match chatterbox_commit's pyproject.toml requirement." },
+        "torch_cpu_index_url": { "type": "string", "description": "PyTorch CPU-only wheel index; installed before chatterbox so pip never reaches for CUDA wheels." }
       },
       "additionalProperties": false
     },

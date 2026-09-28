@@ -638,6 +638,13 @@ func ttsServeTestEffects(t *testing.T) (*Effects, *[]string) {
 	e.LookPath = func(name string) (string, error) { return "", errors.New("not found") } // skip R2T2/TTS package phases
 	e.Confirm = func(string) (bool, error) { return true, nil }
 	e.AvailableMemoryMB = func() (int, error) { return 16384, nil }
+	baseRunOutput := e.RunOutput
+	e.RunOutput = func(ctx context.Context, name string, args ...string) (string, error) {
+		if name == "git" && len(args) > 2 && args[2] == "status" {
+			return "", nil
+		}
+		return baseRunOutput(ctx, name, args...)
+	}
 	// The command mock only records invocations; simulate the two commands
 	// installTTSServe's idempotency checks (git .git dir, venv python binary)
 	// depend on actually existing on disk, so re-runs can observe them.
@@ -646,7 +653,7 @@ func ttsServeTestEffects(t *testing.T) (*Effects, *[]string) {
 		switch {
 		case name == "git" && len(args) > 1 && args[0] == "clone":
 			return os.MkdirAll(filepath.Join(args[2], ".git"), 0755)
-		case name == "python3" && len(args) == 3 && args[0] == "-m" && args[1] == "venv":
+		case name == "python3.12" && len(args) == 3 && args[0] == "-m" && args[1] == "venv":
 			if err := os.MkdirAll(filepath.Join(args[2], "bin"), 0755); err != nil {
 				return err
 			}
@@ -708,7 +715,9 @@ func TestInstallTTSServeRunsPinnedSequenceAndWritesUnit(t *testing.T) {
 		"git clone " + ttsSpec.TTSServeInstall.TTSServeRepo + " " + dir,
 		"git -C " + dir + " fetch origin " + ttsSpec.TTSServeInstall.TTSServeCommit,
 		"git -C " + dir + " checkout " + ttsSpec.TTSServeInstall.TTSServeCommit,
-		"python3 -m venv " + filepath.Join(dir, ".venv"),
+		ttsSpec.TTSServeInstall.PythonInterpreter + " -m venv " + filepath.Join(dir, ".venv"),
+		filepath.Join(dir, ".venv/bin/pip") + " install --index-url " + ttsSpec.TTSServeInstall.TorchCPUIndexURL +
+			" torch==" + ttsSpec.TTSServeInstall.TorchVersion + " torchaudio==" + ttsSpec.TTSServeInstall.TorchVersion,
 		filepath.Join(dir, ".venv/bin/pip") + " install git+" + ttsSpec.TTSServeInstall.ChatterboxRepo + "@" + ttsSpec.TTSServeInstall.ChatterboxCommit,
 		filepath.Join(dir, ".venv/bin/pip") + " install " + filepath.Join(dir, "tts-engine-common") + " fastapi uvicorn loguru soundfile",
 		"systemctl --user daemon-reload",
@@ -767,6 +776,74 @@ func TestInstallTTSServeIsIdempotentOnReruns(t *testing.T) {
 	}
 }
 
+func TestInstallTTSServePipInstallsCPUOnlyTorchBeforeChatterbox(t *testing.T) {
+	e, commands := ttsServeTestEffects(t)
+	var out strings.Builder
+	if err := InstallWithOptions(context.Background(), &out, *e, InstallOptions{TTSServe: true}); err != nil {
+		t.Fatal(err)
+	}
+	ttsSpec, err := spec.LoadTTS()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pins := ttsSpec.TTSServeInstall
+	dir := filepath.Join(e.Home, ".cache/voxi/tts-serve")
+	pip := filepath.Join(dir, ".venv/bin/pip")
+	torchIdx := -1
+	chatterboxIdx := -1
+	for i, cmd := range *commands {
+		if cmd == pip+" install --index-url "+pins.TorchCPUIndexURL+" torch=="+pins.TorchVersion+" torchaudio=="+pins.TorchVersion {
+			torchIdx = i
+		}
+		if strings.HasPrefix(cmd, pip+" install git+"+pins.ChatterboxRepo) {
+			chatterboxIdx = i
+		}
+	}
+	if torchIdx == -1 {
+		t.Fatalf("missing CPU-only torch pip install in sequence: %v", *commands)
+	}
+	if chatterboxIdx == -1 {
+		t.Fatalf("missing chatterbox pip install in sequence: %v", *commands)
+	}
+	if torchIdx > chatterboxIdx {
+		t.Fatalf("torch must install before chatterbox, got torch at %d, chatterbox at %d: %v", torchIdx, chatterboxIdx, *commands)
+	}
+	for _, cmd := range *commands {
+		if strings.Contains(cmd, "nvidia") || strings.Contains(cmd, "cu1") {
+			t.Fatalf("unexpected CUDA-related install command: %q", cmd)
+		}
+	}
+}
+
+func TestInstallTTSServeRefusesToOverwriteLocalChanges(t *testing.T) {
+	e, commands := ttsServeTestEffects(t)
+	var out strings.Builder
+	if err := InstallWithOptions(context.Background(), &out, *e, InstallOptions{TTSServe: true}); err != nil {
+		t.Fatal(err)
+	}
+	*commands = nil
+	baseRunOutput := e.RunOutput
+	e.RunOutput = func(ctx context.Context, name string, args ...string) (string, error) {
+		if name == "git" && len(args) > 2 && args[2] == "status" {
+			return " M impl/server_chatterbox.py\n", nil
+		}
+		return baseRunOutput(ctx, name, args...)
+	}
+	err := InstallWithOptions(context.Background(), &out, *e, InstallOptions{TTSServe: true})
+	if err == nil {
+		t.Fatal("expected install to refuse a dirty tts-serve checkout")
+	}
+	if !strings.Contains(err.Error(), "local changes") {
+		t.Fatalf("expected local-changes error, got: %v", err)
+	}
+	if strings.Contains(strings.Join(*commands, "\n"), "checkout "+func() string {
+		ttsSpec, _ := spec.LoadTTS()
+		return ttsSpec.TTSServeInstall.TTSServeCommit
+	}()) {
+		t.Fatalf("checkout must not run over a dirty tree: %v", *commands)
+	}
+}
+
 func TestInstallTTSServeWarnsOnLowRAM(t *testing.T) {
 	e, _ := ttsServeTestEffects(t)
 	e.AvailableMemoryMB = func() (int, error) { return 2048, nil }
@@ -799,5 +876,14 @@ func TestInstallTTSServePinsMatchSpec(t *testing.T) {
 	}
 	if pins.MinFreeMemoryMB != 8192 {
 		t.Fatalf("min_free_memory_mb = %d, want 8192", pins.MinFreeMemoryMB)
+	}
+	if pins.PythonInterpreter != "python3.12" {
+		t.Fatalf("python_interpreter = %q, want python3.12", pins.PythonInterpreter)
+	}
+	if pins.TorchVersion != "2.6.0" {
+		t.Fatalf("torch_version = %q, want 2.6.0", pins.TorchVersion)
+	}
+	if pins.TorchCPUIndexURL != "https://download.pytorch.org/whl/cpu" {
+		t.Fatalf("torch_cpu_index_url = %q", pins.TorchCPUIndexURL)
 	}
 }

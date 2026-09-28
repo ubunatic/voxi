@@ -57,11 +57,14 @@ type TTSServeSpec struct {
 // (issue 159 M1) checks out and builds. It is installer-only; the tts-serve
 // HTTP client (TTSServeSpec) never reads it.
 type TTSServeInstallSpec struct {
-	TTSServeRepo     string `yaml:"tts_serve_repo"`
-	TTSServeCommit   string `yaml:"tts_serve_commit"`
-	ChatterboxRepo   string `yaml:"chatterbox_repo"`
-	ChatterboxCommit string `yaml:"chatterbox_commit"`
-	MinFreeMemoryMB  int    `yaml:"min_free_memory_mb"`
+	TTSServeRepo      string `yaml:"tts_serve_repo"`
+	TTSServeCommit    string `yaml:"tts_serve_commit"`
+	ChatterboxRepo    string `yaml:"chatterbox_repo"`
+	ChatterboxCommit  string `yaml:"chatterbox_commit"`
+	MinFreeMemoryMB   int    `yaml:"min_free_memory_mb"`
+	PythonInterpreter string `yaml:"python_interpreter"`
+	TorchVersion      string `yaml:"torch_version"`
+	TorchCPUIndexURL  string `yaml:"torch_cpu_index_url"`
 }
 
 // TTSLLMSpec defines defaults for speech-ready LLM narration.
@@ -120,6 +123,15 @@ func validateTTSSpec(s *TTSSpec) error {
 	}
 	if s.TTSServeInstall.MinFreeMemoryMB < 1024 || s.TTSServeInstall.MinFreeMemoryMB > 131072 {
 		return fmt.Errorf("spec: tts_serve_install.min_free_memory_mb must be between 1024 and 131072")
+	}
+	if strings.TrimSpace(s.TTSServeInstall.PythonInterpreter) == "" {
+		return fmt.Errorf("spec: tts_serve_install.python_interpreter must not be empty")
+	}
+	if strings.TrimSpace(s.TTSServeInstall.TorchVersion) == "" {
+		return fmt.Errorf("spec: tts_serve_install.torch_version must not be empty")
+	}
+	if parsed, err := url.Parse(s.TTSServeInstall.TorchCPUIndexURL); err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return fmt.Errorf("spec: tts_serve_install.torch_cpu_index_url must be an absolute URL")
 	}
 	return nil
 }

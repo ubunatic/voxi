@@ -680,8 +680,8 @@ func installTTSServe(ctx context.Context, out io.Writer, e Effects) error {
 	}
 
 	prompt := fmt.Sprintf(
-		"Set up Chatterbox tts-serve under ~/.cache/voxi/tts-serve (clones %s @ %s, pip-installs PyTorch and %s @ %s into a venv; a multi-GB download)?",
-		pins.TTSServeRepo, pins.TTSServeCommit, pins.ChatterboxRepo, pins.ChatterboxCommit,
+		"Set up Chatterbox tts-serve under ~/.cache/voxi/tts-serve (clones %s @ %s, pip-installs CPU-only PyTorch %s and %s @ %s into a venv; a multi-GB download)?",
+		pins.TTSServeRepo, pins.TTSServeCommit, pins.TorchVersion, pins.ChatterboxRepo, pins.ChatterboxCommit,
 	)
 	confirmed, err := e.Confirm(prompt)
 	if err != nil {
@@ -700,6 +700,16 @@ func installTTSServe(ctx context.Context, out io.Writer, e Effects) error {
 		if err := e.Run(ctx, "git", "clone", pins.TTSServeRepo, dir); err != nil {
 			return fmt.Errorf("clone tts-serve: %w", err)
 		}
+	} else {
+		// M2 pre-work #3: the pinned checkout below discards local edits via
+		// `git checkout`; refuse to run over an unclean tree instead.
+		status, err := e.RunOutput(ctx, "git", "-C", dir, "status", "--porcelain")
+		if err != nil {
+			return fmt.Errorf("check tts-serve checkout status: %w", err)
+		}
+		if strings.TrimSpace(status) != "" {
+			return fmt.Errorf("tts-serve checkout at %s has local changes; commit, stash, or remove them before re-running install:\n%s", dir, status)
+		}
 	}
 	if err := e.Run(ctx, "git", "-C", dir, "fetch", "origin", pins.TTSServeCommit); err != nil {
 		return fmt.Errorf("fetch tts-serve commit %s: %w", pins.TTSServeCommit, err)
@@ -711,11 +721,25 @@ func installTTSServe(ctx context.Context, out io.Writer, e Effects) error {
 	venv := filepath.Join(dir, ".venv")
 	venvPython := filepath.Join(venv, "bin", "python")
 	if _, err := e.Stat(venvPython); err != nil {
-		if err := e.Run(ctx, "python3", "-m", "venv", venv); err != nil {
+		pythonInterpreter := pins.PythonInterpreter
+		if pythonInterpreter == "" {
+			pythonInterpreter = "python3"
+		}
+		if err := e.Run(ctx, pythonInterpreter, "-m", "venv", venv); err != nil {
 			return fmt.Errorf("create tts-serve venv: %w", err)
 		}
 	}
 	pip := filepath.Join(venv, "bin", "pip")
+	// M2 pre-work #1: install CPU-only torch/torchaudio first, from PyTorch's
+	// CPU wheel index, so chatterbox's own `torch==...` requirement is
+	// already satisfied and pip never reaches for the default CUDA wheels.
+	if err := e.Run(ctx, pip, "install",
+		"--index-url", pins.TorchCPUIndexURL,
+		"torch=="+pins.TorchVersion,
+		"torchaudio=="+pins.TorchVersion,
+	); err != nil {
+		return fmt.Errorf("pip install CPU-only torch: %w", err)
+	}
 	if err := e.Run(ctx, pip, "install", fmt.Sprintf("git+%s@%s", pins.ChatterboxRepo, pins.ChatterboxCommit)); err != nil {
 		return fmt.Errorf("pip install chatterbox: %w", err)
 	}

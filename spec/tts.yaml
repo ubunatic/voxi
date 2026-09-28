@@ -68,6 +68,16 @@ tts_serve_install:
   # Chatterbox on CPU needs about this much free RAM; the installer warns
   # (but still proceeds if confirmed) below this threshold.
   min_free_memory_mb: 8192
+  # chatterbox_commit's pyproject.toml pins torch==2.6.0/torchaudio==2.6.0 for
+  # python_version < 3.14 (no exact pin above 3.14 yet); python3.12 has a
+  # published torch 2.6.0+cpu wheel, so the venv uses it instead of the host's
+  # default python3 (which may be newer).
+  python_interpreter: "python3.12"
+  torch_version: "2.6.0"
+  # CPU-only wheel index (issue 159 M2 pre-work #1): a plain `pip install`
+  # resolves CUDA torch plus nvidia wheels, several GB of useless downloads
+  # on this AMD CPU host.
+  torch_cpu_index_url: "https://download.pytorch.org/whl/cpu"
 
 # Speech-ready narration through lmcoder.
 llm:
