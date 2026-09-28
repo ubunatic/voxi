@@ -24,8 +24,10 @@ Local VoxCPM on the 5650U iGPU runs at RTF ~3 (issue 160 M1/M1b). x600 has a muc
   building; build on x600 only if copying fails or is slow.
 
 ## M1 — canary on x600 (no voxi code changes)
-Copy `audiocpp_cli`, the GGUF and both preset references (`full`/`short` from issue 160) to a scratch
-dir on x600; render demo 1–3 with the issue 160 M2 settings (hotfix, 10 steps, CFG 2.0, Vulkan).
+Copy only the runtime pieces to x600 — never the audio.cpp repo, build tree or voxi repo — into an
+XDG location: `~/.local/share/voxi/voxcpm/{bin/audiocpp_cli, model/<gguf>, voices/<preset wav>}`
+(user addendum 2026-09-28). The same layout should become the local install target in 160 M3.
+Then render demo 1–3 with the issue 160 M2 settings (hotfix, 10 steps, CFG 2.0, Vulkan).
 Record RTF, peak RSS + GTT delta, dropped words, and ssh round-trip overhead per sentence
 (copy text in, WAV back). Go bar: end-to-end RTF ≤ 2 including transfer, x600 stays within free RAM.
 
