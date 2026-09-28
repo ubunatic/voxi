@@ -110,7 +110,7 @@ Reading aloud (TTS):
 - **[145 Markdown normalization for TTS](../issues/145-improve-markdown-text-normalization-for-tts-reading.md)**
   (Open, P2). Small, unit-testable, and applies to every read-aloud path.
 - **[162 remove Chatterbox and keep the cloned-voice seam](../issues/162-remove-chatterbox-tts-serve-keep-cloned-voice-engine-placeholder.md)**
-  (Open, P2). Removes the slow, memory-heavy Chatterbox/tts-serve implementation
+  (Closed, P2). Removes the slow, memory-heavy Chatterbox/tts-serve implementation
   while preserving the reference-WAV profile and engine dispatch. The `voxcpm`
   selection is a clear-error placeholder for **[160 VoxCPM](../issues/160-adopt-voxcpm-gguf-vulkan-as-cloned-voice-tts-engine-incl-voxi-install.md)**.
 - **[140 harden the harness against hazardous local inference](../issues/140-harden-the-agent-harness-against-resource-hazardous-local-inference-runs.md)**
