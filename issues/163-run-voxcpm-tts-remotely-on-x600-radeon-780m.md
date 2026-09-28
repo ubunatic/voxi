@@ -64,6 +64,10 @@ transfer-inclusive RTF is 2.185, above the ≤2 bar, even though demos 2 and 3 m
 memory estimate fits within the available RAM, and all ASR checks passed. The x600 runtime install
 is left in place; temporary remote WAVs were removed after copying them locally. Stop at M1.
 
+**Host review (open user decision):** the miss is one first-run clip; weighted 1.85 beats the bar and
+beats local (~3). Remote overhead is per-sentence process start + ssh, not WAV transfer (0.2 s).
+Host recommends M2 anyway; awaiting user "go" (build M2) or "no" (close as NO-GO).
+
 ## M2 — remote engine option
 Config selects local vs remote host for the `voxcpm` engine (reuse the `x600` host naming of
 `tts_llm_host`); remote runs the same CLI over ssh and fetches the WAV. Clear error and no silent
