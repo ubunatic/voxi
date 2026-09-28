@@ -36,3 +36,20 @@ Python venv from the 2026-09-27 test was gone.
 - Unit tests for command/unit-file construction; live: fresh install, `curl <url>/capabilities`,
   `voxi say --no-llm` in the cloned voice.
 - Document setup in `docs/TTSReading.md`.
+
+## Sprint Plan (2026-09-28)
+
+### M1 — `--tts-serve` flag, setup steps and systemd unit (no live download)
+- `voxi install --tts-serve`: checkout/venv under `~/.cache/voxi/tts-serve`, pinned installs, a
+  `voxi-tts-serve.service` user unit with `CHATTERBOX_HOST/PORT` derived from `tts_serve.url` and
+  `CHATTERBOX_DEVICE=cpu`; confirmation prompt before the multi-GB install; low-RAM warning.
+  Pins (tts-serve commit, chatterbox commit) live in spec, not Go.
+- Decide the open questions in the ticket (default: pin tts-serve; start on boot via the unit) and
+  record the decision here.
+- Unit tests with injected command runner / file system: command sequence, unit-file content,
+  port derivation, prompt declined -> nothing installed. No network in tests.
+- Acceptance: `go test ./...` green; `make install`.
+
+### M2 — live install and end-to-end check (needs the user's go for the download)
+- Run `voxi install --tts-serve` for real, `curl <url>/capabilities`, `voxi voice clone`,
+  `voxi say --no-llm` in the cloned voice. Document setup in `docs/TTSReading.md`.
