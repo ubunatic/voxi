@@ -27,6 +27,10 @@ Local VoxCPM on the 5650U iGPU runs at RTF ~3 (issue 160 M1/M1b). x600 has a muc
 Copy only the runtime pieces to x600 — never the audio.cpp repo, build tree or voxi repo — into an
 XDG location: `~/.local/share/voxi/voxcpm/{bin/audiocpp_cli, model/<gguf>, voices/<preset wav>}`
 (user addendum 2026-09-28). The same layout should become the local install target in 160 M3.
+**Pre-work (host, after 160 M3):** `voxi install --voxcpm` now exists and installs exactly this
+layout locally (source-built 64 MB CLI; the Ubuntu prebuilt SIGILLs on the laptop's Zen 3). On x600
+first try the pinned prebuilt from `spec/tts.yaml` (Zen 4 may run it); if it fails, copy the local
+`~/.local/share/voxi/voxcpm/` tree. Do not deploy the voxi binary to x600 in M1.
 Then render demo 1–3 with the issue 160 M2 settings (hotfix, 10 steps, CFG 2.0, Vulkan).
 Record RTF, peak RSS + GTT delta, dropped words, and ssh round-trip overhead per sentence
 (copy text in, WAV back). Go bar: end-to-end RTF ≤ 2 including transfer, x600 stays within free RAM.
