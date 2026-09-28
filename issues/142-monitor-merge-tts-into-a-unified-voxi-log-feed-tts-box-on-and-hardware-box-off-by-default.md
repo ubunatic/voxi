@@ -1,6 +1,6 @@
 # 142 — Monitor: merge TTS into a unified voxi log feed, TTS box on and hardware box off by default
 
-**Status**: Open
+**Status**: Closed — done per user review 2026-09-28
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: UX / Monitor
