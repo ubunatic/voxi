@@ -81,17 +81,20 @@ TTS backend and voice selection resolve in this order:
 
 1. **Process Environment Overrides**:
    - `VOXI_TTS_BACKEND`: `auto`, `piper`, `festival`, `espeak-ng`, or `voxcpm`.
+   - `VOXI_TTS_VOXCPM_HOST`: optional SSH alias used for remote VoxCPM synthesis.
+   - `VOXI_TTS_VOXCPM_SSH_REUSE=0`: diagnostic override that disables SSH connection reuse.
    - `VOXI_PIPER_MODEL`: Absolute path to a `.onnx` voice model file.
    - `VOXI_PIPER_CONFIG`: Optional path to a `.onnx.json` voice config file.
    - `VOXI_TTS_VOICE_REFERENCE_WAV`: Absolute path to the cloned-voice reference WAV.
 2. **Environment File (`~/.config/voxi/env`)**:
-   - `VOXI_TTS_BACKEND`, `VOXI_PIPER_MODEL`, `VOXI_PIPER_CONFIG`, `VOXI_TTS_VOICE_REFERENCE_WAV`.
+   - `VOXI_TTS_BACKEND`, `VOXI_TTS_VOXCPM_HOST`, `VOXI_PIPER_MODEL`, `VOXI_PIPER_CONFIG`, `VOXI_TTS_VOICE_REFERENCE_WAV`.
 3. **User Configuration (`~/.config/voxi/config.yaml`)**:
    - `tts_backend`: Default `"auto"` (prefers Piper if model and binary are present).
    - `tts_piper_model`: E.g. `/home/uwe/.local/share/voxi/voices/en_US-lessac-medium.onnx`.
    - `tts_piper_config`: Optional custom model JSON.
    - `tts_voice_reference_wav`: Set by `voxi voice clone`; the cloned-voice reference WAV path.
    - `tts_voxcpm_preset`: `full` or `short`; defaults to the embedded spec's `full` preset.
+   - `tts_voxcpm_host`: SSH alias such as `x600`; empty or unset keeps VoxCPM local. Host values are validated as safe SSH destinations.
 4. **Embedded Spec Defaults (`spec/tts.yaml`)**:
    - `backend.default_backend: auto`
    - `piper.model: ~/.local/share/voxi/voices/en_US-lessac-medium.onnx`

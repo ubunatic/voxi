@@ -330,3 +330,33 @@ func TestLoadUserSettingsVoxCPMPresetDefaultsAndSelection(t *testing.T) {
 		t.Fatalf("tts_voxcpm_preset = %q, want short", settings.TTSVoxCPMPreset)
 	}
 }
+
+func TestLoadUserSettingsVoxCPMHostDefaultsAndValidation(t *testing.T) {
+	home := t.TempDir()
+	settings, err := LoadUserSettings(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.TTSVoxCPMHost != "" {
+		t.Fatalf("unset tts_voxcpm_host = %q, want local default", settings.TTSVoxCPMHost)
+	}
+	if err := os.MkdirAll(VoxiConfigDir(home), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(VoxiConfigYAMLPath(home), []byte("tts_voxcpm_host: x600\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	settings, err = LoadUserSettings(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.TTSVoxCPMHost != "x600" {
+		t.Fatalf("tts_voxcpm_host = %q, want x600", settings.TTSVoxCPMHost)
+	}
+	if err := os.WriteFile(VoxiConfigYAMLPath(home), []byte("tts_voxcpm_host: 'x600; touch /tmp/pwned'\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadUserSettings(home); err == nil || !strings.Contains(err.Error(), "invalid tts_voxcpm_host") {
+		t.Fatalf("LoadUserSettings() error = %v, want invalid host error", err)
+	}
+}

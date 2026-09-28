@@ -278,7 +278,10 @@ type Engine struct {
 	piperConfig              string
 	ttsVoiceReferenceWav     string
 	ttsVoxCPMPreset          string
+	ttsVoxCPMHost            string
 	voxcpm                   spec.TTSVoxCPMSpec
+	controlPathMu            sync.Mutex
+	controlPathDir           string
 }
 
 // NewEngine creates a Festival-first engine with espeak-ng fallback.
@@ -319,6 +322,7 @@ func NewEngine(d deps.Dependencies, executable string) *Engine {
 		piperConfig:              piperConfig,
 		ttsVoiceReferenceWav:     settings.TTSVoiceReferenceWav,
 		ttsVoxCPMPreset:          settings.TTSVoxCPMPreset,
+		ttsVoxCPMHost:            settings.TTSVoxCPMHost,
 		voxcpm:                   voxcpmSpec,
 	}
 }
@@ -572,6 +576,18 @@ func voxCPMArgs(cfg spec.TTSVoxCPMSpec, preset spec.TTSVoicePreset, wavPath, tex
 }
 
 func (e *Engine) synthesizeVoxCPM(ctx context.Context, text string) (audioFile, time.Duration, error) {
+	host := strings.TrimSpace(e.ttsVoxCPMHost)
+	if e.deps.Getenv != nil {
+		if override := strings.TrimSpace(e.deps.Getenv("VOXI_TTS_VOXCPM_HOST")); override != "" {
+			host = override
+		}
+	}
+	if err := config.ValidateTTSVoxCPMHost(host); err != nil {
+		return audioFile{}, 0, err
+	}
+	if host != "" {
+		return e.synthesizeRemoteVoxCPM(ctx, host, text)
+	}
 	cfg := e.voxcpm
 	presetName := strings.TrimSpace(e.ttsVoxCPMPreset)
 	if presetName == "" {
@@ -614,6 +630,147 @@ func (e *Engine) synthesizeVoxCPM(ctx context.Context, text string) (audioFile, 
 		return audioFile{}, 0, fmt.Errorf("VoxCPM synthesis: %w", err)
 	}
 	return e.finishSynthesis(wavPath, dir, started)
+}
+
+func (e *Engine) sshControlPath() (string, error) {
+	e.controlPathMu.Lock()
+	defer e.controlPathMu.Unlock()
+	if e.controlPathDir != "" {
+		return filepath.Join(e.controlPathDir, "c-%C"), nil
+	}
+	runtimeDir := ""
+	if e.deps.Getenv != nil {
+		runtimeDir = e.deps.Getenv("XDG_RUNTIME_DIR")
+	}
+	if runtimeDir == "" {
+		return "", errors.New("remote VoxCPM requires XDG_RUNTIME_DIR for its SSH control socket")
+	}
+	dir, err := os.MkdirTemp(runtimeDir, "vtx-")
+	if err != nil {
+		return "", fmt.Errorf("create remote VoxCPM SSH runtime directory: %w", err)
+	}
+	e.controlPathDir = dir
+	return filepath.Join(dir, "c-%C"), nil
+}
+
+func sshControlOptions(controlPath string, reuse bool) []string {
+	if !reuse {
+		return nil
+	}
+	return []string{"-o", "ControlMaster=auto", "-o", "ControlPersist=600", "-o", "ControlPath=" + controlPath}
+}
+
+func shellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
+}
+
+func remoteHomePath(path string) string {
+	if strings.HasPrefix(path, "~/") {
+		return "./" + strings.TrimPrefix(path, "~/")
+	}
+	return path
+}
+
+func remoteVoxCPMCommand(binary string, args []string) string {
+	parts := make([]string, 1, len(args)+1)
+	parts[0] = shellQuote(remoteHomePath(binary))
+	for i, arg := range args {
+		if i > 0 && (args[i-1] == "--model" || args[i-1] == "--voice-ref") {
+			arg = remoteHomePath(arg)
+		}
+		parts = append(parts, shellQuote(arg))
+	}
+	return `cd "$HOME" && ` + strings.Join(parts, " ")
+}
+
+func buildRemoteVoxCPMSSHArgs(host, controlPath, remoteCommand string, reuse bool) []string {
+	args := append([]string{}, sshControlOptions(controlPath, reuse)...)
+	return append(args, host, remoteCommand)
+}
+
+func (e *Engine) synthesizeRemoteVoxCPM(ctx context.Context, host, text string) (audioFile, time.Duration, error) {
+	lookPath := e.deps.LookPath
+	if lookPath == nil {
+		lookPath = exec.LookPath
+	}
+	ssh, err := lookPath("ssh")
+	if err != nil {
+		return audioFile{}, 0, fmt.Errorf("remote VoxCPM: ssh executable not found: %w", err)
+	}
+	reuse := true
+	if e.deps.Getenv != nil && strings.TrimSpace(e.deps.Getenv("VOXI_TTS_VOXCPM_SSH_REUSE")) == "0" {
+		reuse = false
+	}
+	controlPath := ""
+	if reuse {
+		controlPath, err = e.sshControlPath()
+		if err != nil {
+			return audioFile{}, 0, err
+		}
+	}
+	cfg := e.voxcpm
+	presetName := strings.TrimSpace(e.ttsVoxCPMPreset)
+	if presetName == "" {
+		presetName = cfg.DefaultPreset
+	}
+	preset, ok := cfg.Presets[presetName]
+	if !ok {
+		return audioFile{}, 0, fmt.Errorf("unknown VoxCPM voice preset %q (choose full or short)", presetName)
+	}
+	args, err := voxCPMArgs(cfg, preset, "", text)
+	if err != nil {
+		return audioFile{}, 0, err
+	}
+	dir, err := os.MkdirTemp("", "voxi-tts-voxcpm-remote-")
+	if err != nil {
+		return audioFile{}, 0, err
+	}
+	keepDir := false
+	defer func() {
+		if !keepDir {
+			_ = os.RemoveAll(dir)
+		}
+	}()
+	wavPath := filepath.Join(dir, "chunk.wav")
+	started := time.Now()
+	sshRun := func(remote string, stdout io.Writer) error {
+		cmd := exec.CommandContext(ctx, ssh, buildRemoteVoxCPMSSHArgs(host, controlPath, remote, reuse)...)
+		cmd.Stdout, cmd.Stderr = stdout, os.Stderr
+		return cmd.Run()
+	}
+	remoteDirOutput, err := exec.CommandContext(ctx, ssh, buildRemoteVoxCPMSSHArgs(host, controlPath, "mktemp -d /tmp/voxi-tts.XXXXXX", reuse)...).Output()
+	if err != nil {
+		return audioFile{}, 0, fmt.Errorf("remote VoxCPM synthesis on %s: cannot create remote work directory: %w", host, err)
+	}
+	remoteDir := strings.TrimSpace(string(remoteDirOutput))
+	if remoteDir == "" || !filepath.IsAbs(remoteDir) || strings.ContainsAny(remoteDir, "\r\n\x00") {
+		return audioFile{}, 0, fmt.Errorf("remote VoxCPM synthesis on %s: invalid remote work directory %q", host, remoteDir)
+	}
+	defer func() {
+		_ = sshRun("rm -rf -- "+shellQuote(remoteDir), io.Discard)
+	}()
+	remoteWav := filepath.Join(remoteDir, "chunk.wav")
+	args[len(args)-1] = remoteWav
+	if err := sshRun(remoteVoxCPMCommand(cfg.Binary, args), io.Discard); err != nil {
+		return audioFile{}, 0, fmt.Errorf("remote VoxCPM synthesis on %s: %w", host, err)
+	}
+	output, err := os.Create(wavPath)
+	if err != nil {
+		return audioFile{}, 0, err
+	}
+	if err := sshRun("cat -- "+shellQuote(remoteWav), output); err != nil {
+		_ = output.Close()
+		return audioFile{}, 0, fmt.Errorf("remote VoxCPM synthesis on %s: fetch WAV: %w", host, err)
+	}
+	if err := output.Close(); err != nil {
+		return audioFile{}, 0, err
+	}
+	result, elapsed, err := e.finishSynthesis(wavPath, dir, started)
+	if err != nil {
+		return audioFile{}, 0, fmt.Errorf("remote VoxCPM synthesis on %s: %w", host, err)
+	}
+	keepDir = true
+	return result, elapsed, nil
 }
 
 func (e *Engine) finishSynthesis(wavPath, dir string, started time.Time) (audioFile, time.Duration, error) {

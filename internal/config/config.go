@@ -16,6 +16,7 @@ import (
 var (
 	typeDelayActiveRe = regexp.MustCompile(`(?m)^([ \t]*)type_delay_ms([ \t]*=[ \t]*)([0-9]+)[ \t]*$`)
 	outputHeaderRe    = regexp.MustCompile(`(?m)^\[output\][ \t]*$`)
+	ttsVoxCPMHostRe   = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.@:-]*$`)
 )
 
 // UserSettings defines user-configurable Voxi settings across config.yaml, env, and config.toml.
@@ -32,6 +33,7 @@ type UserSettings struct {
 	ModifierGating       bool   `json:"modifier_gating" yaml:"modifier_gating"`
 	TTSEnabled           bool   `json:"tts_enabled" yaml:"tts_enabled"`
 	TTSLLMHost           string `json:"tts_llm_host,omitempty" yaml:"tts_llm_host,omitempty"`
+	TTSVoxCPMHost        string `json:"tts_voxcpm_host,omitempty" yaml:"tts_voxcpm_host,omitempty"`
 	TTSBackend           string `json:"tts_backend,omitempty" yaml:"tts_backend,omitempty"`
 	TTSPiperModel        string `json:"tts_piper_model,omitempty" yaml:"tts_piper_model,omitempty"`
 	TTSPiperConfig       string `json:"tts_piper_config,omitempty" yaml:"tts_piper_config,omitempty"`
@@ -232,6 +234,9 @@ func LoadUserSettings(home string) (*UserSettings, error) {
 		if v, ok := envMap["VOXI_TTS_BACKEND"]; ok && v != "" {
 			s.TTSBackend = v
 		}
+		if v, ok := envMap["VOXI_TTS_VOXCPM_HOST"]; ok {
+			s.TTSVoxCPMHost = v
+		}
 		if v, ok := envMap["VOXI_PIPER_MODEL"]; ok && v != "" {
 			s.TTSPiperModel = v
 		}
@@ -250,6 +255,10 @@ func LoadUserSettings(home string) (*UserSettings, error) {
 			return nil, err
 		}
 	}
+	s.TTSVoxCPMHost = strings.TrimSpace(s.TTSVoxCPMHost)
+	if err := ValidateTTSVoxCPMHost(s.TTSVoxCPMHost); err != nil {
+		return nil, err
+	}
 
 	tomlPath := VoxtypeConfigPath(home)
 	if ms, ok, err := ReadTypeDelayMs(tomlPath); err == nil && ok {
@@ -257,6 +266,18 @@ func LoadUserSettings(home string) (*UserSettings, error) {
 	}
 
 	return s, nil
+}
+
+// ValidateTTSVoxCPMHost permits a simple SSH destination or alias. An empty
+// value selects the local VoxCPM runtime.
+func ValidateTTSVoxCPMHost(host string) error {
+	if host == "" {
+		return nil
+	}
+	if !ttsVoxCPMHostRe.MatchString(host) {
+		return fmt.Errorf("invalid tts_voxcpm_host %q (choose an SSH host alias)", host)
+	}
+	return nil
 }
 
 // ValidateTTSBackend rejects backend names that cannot be dispatched by Voxi.
@@ -332,6 +353,9 @@ func FormatEnv(s *UserSettings, existing map[string]string) []byte {
 	merged["VOXI_HISTORY"] = strconv.FormatBool(s.DictationHistory)
 	merged["VOXI_MODIFIER_GATING"] = strconv.FormatBool(s.ModifierGating)
 	merged["VOXI_TTS_BACKEND"] = s.TTSBackend
+	if s.TTSVoxCPMHost != "" {
+		merged["VOXI_TTS_VOXCPM_HOST"] = s.TTSVoxCPMHost
+	}
 	merged["VOXI_PIPER_MODEL"] = s.TTSPiperModel
 	merged["VOXI_PIPER_CONFIG"] = s.TTSPiperConfig
 	if s.TTSVoiceReferenceWav != "" {
@@ -349,6 +373,7 @@ func FormatEnv(s *UserSettings, existing map[string]string) []byte {
 		"VOXI_HISTORY",
 		"VOXI_MODIFIER_GATING",
 		"VOXI_TTS_BACKEND",
+		"VOXI_TTS_VOXCPM_HOST",
 		"VOXI_PIPER_MODEL",
 		"VOXI_PIPER_CONFIG",
 		"VOXI_TTS_VOICE_REFERENCE_WAV",

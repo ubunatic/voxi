@@ -152,6 +152,34 @@ func TestVoxCPMCommandArgsUsePresetReferenceAndDefaults(t *testing.T) {
 	}
 }
 
+func TestRemoteVoxCPMSSHCommandConstruction(t *testing.T) {
+	controlPath := "/run/user/1000/vtx-AbCd/c-%C"
+	remoteArgs := []string{"--model", "~/.local/share/voxi/model.gguf", "--voice-ref", "~/voices/full.wav", "--text", "it's $(touch /tmp/nope)", "--out", "/tmp/voxi-tts/chunk.wav"}
+	got := remoteVoxCPMCommand("~/.local/share/voxi/audiocpp_cli", remoteArgs)
+	want := `cd "$HOME" && './.local/share/voxi/audiocpp_cli' '--model' './.local/share/voxi/model.gguf' '--voice-ref' './voices/full.wav' '--text' 'it'\''s $(touch /tmp/nope)' '--out' '/tmp/voxi-tts/chunk.wav'`
+	if got != want {
+		t.Fatalf("remote command = %q, want %q", got, want)
+	}
+	args := buildRemoteVoxCPMSSHArgs("x600", controlPath, got, true)
+	joined := strings.Join(args, " ")
+	for _, wantPart := range []string{"ControlMaster=auto", "ControlPersist=600", "ControlPath=" + controlPath, "x600", got} {
+		if !strings.Contains(joined, wantPart) {
+			t.Errorf("SSH args %q missing %q", joined, wantPart)
+		}
+	}
+	withoutReuse := buildRemoteVoxCPMSSHArgs("x600", controlPath, got, false)
+	if strings.Join(withoutReuse, " ") != "x600 "+got {
+		t.Fatalf("SSH args without reuse = %q, want host and command only", withoutReuse)
+	}
+}
+
+func TestRemoteVoxCPMCommandDoesNotRewriteTextBeginningWithTilde(t *testing.T) {
+	got := remoteVoxCPMCommand("~/bin/audiocpp_cli", []string{"--text", "~/read this literally"})
+	if !strings.Contains(got, "'~/read this literally'") {
+		t.Fatalf("remote command rewrote text: %q", got)
+	}
+}
+
 func TestEngineLoadsTTSSettingsAndEnvironmentOverrides(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
