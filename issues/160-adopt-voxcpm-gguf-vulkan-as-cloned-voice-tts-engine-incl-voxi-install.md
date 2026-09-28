@@ -23,8 +23,8 @@ Machine (2026-09-28): Ryzen 5 PRO 5650U (Cezanne, AVX2, no AVX-512), RADV Vulkan
 8 GB VRAM carve-out, `cmake` and `glslc` present. ROCm is not an option on gfx90c.
 
 ## Open questions
-- German output needed? VoxCPM 1/1.5 is mainly EN/ZH at 16 kHz; VoxCPM 2 (2B, Q4 ~1.5 GB) is
-  multilingual at 48 kHz and fits the VRAM. Ask the user before M1 if not answered.
+- German output: deferred. This ticket uses VoxCPM 1/1.5 (mainly EN/ZH, 16 kHz); VoxCPM 2
+  (multilingual, 48 kHz) is a later option in issue 161.
 - `audio.cpp` vs `VoxCPM.cpp`: pick in M1 by build success, Vulkan support and CLI/server fit.
 
 ## M1 — canary (no voxi code changes)
