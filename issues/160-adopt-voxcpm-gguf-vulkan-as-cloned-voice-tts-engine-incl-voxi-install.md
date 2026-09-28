@@ -214,3 +214,16 @@ idempotent re-run, clear errors when Vulkan/`glslc` are missing. Live-verify fro
 User decision (2026-09-28): Chatterbox is too slow and too big, and voxi should avoid PyTorch.
 Issue 162 retires Chatterbox/tts-serve (155, 159) and leaves a `voxcpm` placeholder. If M1 passes,
 fill that placeholder; any replacement engine must be PyTorch-free.
+
+Pre-Work / Required Refinements (host, 2026-09-28, after M2):
+- Install layout (user addendum, shared with issue 163): only runtime pieces, never repos/build trees,
+  into `~/.local/share/voxi/voxcpm/{bin/audiocpp_cli, model/<gguf>, voices/<preset wav>}`. Point
+  `spec/tts.yaml` voxcpm paths there instead of `~/.cache/voxi/voxcpm-canary/`.
+- Runtime source: prefer the pinned upstream Vulkan prebuilt of `v0.8.2-audio8-perf-hotfix` if one
+  exists and runs here (checksum-pinned); otherwise build from the pinned commit in a temp dir, copy
+  only the binary, and delete the build tree. No systemd unit (subprocess per sentence; server crashed).
+- The 8 s `short` reference was cut from `cloned.wav`; generate it at install from `cloned.wav`
+  (same cut points as `~/.cache/voxi/voxcpm-canary/prework/reference-8s.wav`) or copy it; decide in plan.
+- Pin GGUF by HF revision + SHA-256 from M1 results. Idempotent re-run skips verified files.
+- Live-verify: move the canary cache aside, `voxi install --voxcpm`, `voxi say --no-llm` with both
+  presets; then the canary cache may be deleted (ask the user first).
