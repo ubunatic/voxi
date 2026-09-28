@@ -53,3 +53,18 @@ Python venv from the 2026-09-27 test was gone.
 ### M2 — live install and end-to-end check (needs the user's go for the download)
 - Run `voxi install --tts-serve` for real, `curl <url>/capabilities`, `voxi voice clone`,
   `voxi say --no-llm` in the cloned voice. Document setup in `docs/TTSReading.md`.
+
+### M1 delivered (1ed5180): `--tts-serve` flag, pins, unit
+Decisions: pin both repos in `spec/tts.yaml` `tts_serve_install` (tts-serve `6ca92b2`, master HEAD
+2026-09-28, no upstream tags; chatterbox `5de7a54`); start at login via `voxi-tts-serve.service`
+(`WantedBy=graphical-session.target`). Re-runs reuse checkout and venv. Tests green, no downloads run.
+
+### M2 Pre-Work / Required Refinements (from M1 review)
+1. **CPU-only PyTorch:** plain `pip install` on Linux pulls CUDA torch plus nvidia wheels (several GB
+   extra, useless on this AMD CPU setup). Install torch/torchaudio from the CPU index
+   (`--index-url https://download.pytorch.org/whl/cpu`) first, matching chatterbox's pinned versions.
+   Test the pip command sequence.
+2. **`MemoryMax=8G` may OOM-kill the server** while loading the model, and `Restart=on-failure` then
+   loops. Measure peak RSS during the live run and set the limit above it (or drop it); record the number.
+3. Before the live run, check `~/.cache/voxi/tts-serve` for local changes (`git status`); the pinned
+   checkout must not overwrite them.
