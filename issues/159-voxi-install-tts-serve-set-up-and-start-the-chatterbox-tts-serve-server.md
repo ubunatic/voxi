@@ -1,6 +1,6 @@
 # 159 — voxi install --tts-serve: set up and start the Chatterbox tts-serve server
 
-**Status**: Open
+**Status**: Closed — `voxi install --tts-serve` shipped (1ed5180, c8c14be, b3cddc2), live-verified: cloned voice spoken via voxi-tts-serve.service
 **Priority**: P2 (Medium)
 **Severity**: Feature
 **Category**: Feature
@@ -68,3 +68,10 @@ Decisions: pin both repos in `spec/tts.yaml` `tts_serve_install` (tts-serve `6ca
    loops. Measure peak RSS during the live run and set the limit above it (or drop it); record the number.
 3. Before the live run, check `~/.cache/voxi/tts-serve` for local changes (`git status`); the pinned
    checkout must not overwrite them.
+
+### M2 delivered (c8c14be, b3cddc2): CPU torch, live install, docs
+CPU-only torch 2.6.0 (~1.6 GB download, 73 s with warm cache); checkout guard for local changes.
+Live: peak RSS 7.3 GiB (MemoryPeak 7854809088) -> `MemoryMax=12G`; `/capabilities` OK; cloned from
+sample `calm-reference`; `voxi say --no-llm` spoke 3.2 s audio after 24 s compute (RTF ~7.6), 200 OK
+in server log. Host re-verified: service active, full test suite green. Also closes issue 155's
+pending live check.
