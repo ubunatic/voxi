@@ -1,6 +1,6 @@
 # 160 — adopt VoxCPM (GGUF, Vulkan) as cloned-voice TTS engine incl. voxi install
 
-**Status**: Closed — No-go: M1 latency and memory miss the acceptance bar
+**Status**: Open
 **Priority**: P2 (Medium)
 **Severity**: Feature
 **Category**: Feature
@@ -77,9 +77,24 @@ Write results into this ticket; no-go closes the ticket with findings.
 
 **Decision:** NO-GO. All three Vulkan RTF measurements exceed 2. All three CPU
 peak RSS measurements exceed 3 GB. The missing demo 4–7 inputs also prevent
-the planned full-set comparison. **Voice quality rating vs Chatterbox: pending
-user listening/rating.** No code or install integration is warranted from
-this canary result.
+the planned full-set comparison. **Voice quality rating vs Chatterbox: user rates
+Vulkan demo 1–3 "awesome" (2026-09-28).** No code or install integration is
+warranted until the M1b tuning round meets the speed and memory bar.
+
+### M1b — tuning round (host, 2026-09-28)
+Quality accepted by the user; misses are speed (Vulkan RTF 2.8–3.8 vs ≤ 2) and memory (Vulkan GTT
+rise ~3.5 GB over idle, process RSS 665 MiB; CPU RSS ~3.4 GB). One tuning pass on Vulkan before a
+final no-go.
+
+Pre-Work / Required Refinements:
+- Memory metric: report Vulkan total as process RSS + GTT delta over idle (not system-wide GTT).
+- Try `v0.8.2-audio8-perf-hotfix` (`ac16661`) vs `v0.8.2`.
+- Shorter reference: cut cloned.wav to a clean ~8 s sentence-aligned clip (default AudioVAE capacity,
+  no override); transcript via voxtype; keep the original untouched.
+- Fewer inference timesteps and other documented speed knobs (CFG, threads); note quality risk.
+- Measure a persistent/server mode if audio.cpp has one, since per-sentence model load is overhead.
+- Same demo 1–3 texts; outputs to `voice-demo/voxcpm/tuned/<variant>/`; table per variant; flag the
+  best variant and whether it meets RTF ≤ 2 and ≤ 3 GB. The user re-listens to the best variant.
 
 ## M2 — engine onboarding
 - Integration shape chosen from M1: subprocess (Piper pattern) if the CLI loads fast enough per
