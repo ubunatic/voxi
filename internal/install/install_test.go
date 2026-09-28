@@ -509,7 +509,7 @@ func TestInstallCommandHelpExplainsSafetyBoundary(t *testing.T) {
 	e, _ := testEffects(t)
 	cmd := NewCommand(*e, &strings.Builder{})
 	help := cmd.Long
-	if !strings.Contains(help, "--modifierd") || !strings.Contains(help, "--no-tts") || !strings.Contains(help, "asks before using sudo") {
+	if !strings.Contains(help, "--modifierd") || !strings.Contains(help, "--no-tts") || !strings.Contains(help, "--voxcpm") || !strings.Contains(help, "asks before using sudo") {
 		t.Fatalf("help = %s", help)
 	}
 }

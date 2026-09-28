@@ -146,6 +146,7 @@ func confirmOnTTY(prompt string) (bool, error) {
 type InstallOptions struct {
 	Modifierd  bool
 	DisableTTS bool
+	VoxCPM     bool
 }
 
 // Install performs the user installation and, when requested, the privileged
@@ -265,6 +266,11 @@ func InstallWithOptions(ctx context.Context, out io.Writer, e Effects, options I
 		}
 	} else {
 		fmt.Fprintln(out, "[TTS] disabled by config (tts_enabled: false); system packages not changed")
+	}
+	if options.VoxCPM {
+		if err := phase("VoxCPM runtime, model, and cloned voice", func() error { return installVoxCPM(ctx, e) }); err != nil {
+			return err
+		}
 	}
 
 	if err := phase("user service units", func() error {
@@ -862,18 +868,20 @@ func buildModifier(ctx context.Context, dir string) (string, error) {
 func NewCommand(e Effects, out io.Writer) *cobra.Command {
 	var modifierd bool
 	var noTTS bool
+	var voxcpm bool
 	cmd := &cobra.Command{
 		Use:   "install",
 		Short: "Install Voxi for this user (optional: --modifierd needs sudo)",
 		Long: "Install the CLI and systemd user services under your home directory, then enable and start voxi-agent.service.\n" +
 			"When TTS tools are missing, Voxi asks before using sudo and the system package manager.\n\n" +
-			"Use --no-tts to persistently opt out of TTS packages. Use --modifierd for the optional system-wide physical modifier daemon; it also requires sudo and Linux systemd.",
+			"Use --no-tts to persistently opt out of TTS packages. Use --voxcpm to install the VoxCPM Vulkan runtime and cloned-voice model. Use --modifierd for the optional system-wide physical modifier daemon; it also requires sudo and Linux systemd.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return InstallWithOptions(cmd.Context(), out, e, InstallOptions{Modifierd: modifierd, DisableTTS: noTTS})
+			return InstallWithOptions(cmd.Context(), out, e, InstallOptions{Modifierd: modifierd, DisableTTS: noTTS, VoxCPM: voxcpm})
 		},
 	}
 	cmd.Flags().BoolVar(&modifierd, "modifierd", false, "also install the optional system-wide modifier daemon (requires sudo)")
 	cmd.Flags().BoolVar(&noTTS, "no-tts", false, "disable TTS and skip Festival/espeak-ng system packages")
+	cmd.Flags().BoolVar(&voxcpm, "voxcpm", false, "install the VoxCPM Vulkan runtime, model, and cloned-voice references")
 	return cmd
 }

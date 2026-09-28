@@ -24,10 +24,28 @@
     },
     "voxcpm": {
       "type": "object",
-      "required": ["binary", "model", "backend", "family", "threads", "seed", "num_inference_steps", "guidance_scale", "default_preset", "max_text_chars", "presets"],
+      "required": ["runtime_version", "source_commit", "runtime_assets", "binary", "model", "model_revision", "model_url", "model_sha256", "backend", "family", "threads", "seed", "num_inference_steps", "guidance_scale", "default_preset", "max_text_chars", "presets"],
       "properties": {
+        "runtime_version": { "type": "string", "minLength": 1 },
+        "source_commit": { "type": "string", "minLength": 1 },
+        "runtime_assets": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["url", "sha256"],
+            "properties": {
+              "url": { "type": "string", "format": "uri" },
+              "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+            },
+            "additionalProperties": false
+          }
+        },
         "binary": { "type": "string", "minLength": 1 },
         "model": { "type": "string", "minLength": 1 },
+        "model_revision": { "type": "string", "minLength": 1 },
+        "model_url": { "type": "string", "format": "uri" },
+        "model_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
         "backend": { "type": "string", "enum": ["vulkan"] },
         "family": { "type": "string", "minLength": 1 },
         "threads": { "type": "integer", "minimum": 1 },
@@ -84,6 +102,8 @@
       "properties": {
         "reference_wav": { "type": "string", "minLength": 1 },
         "reference_text": { "type": "string", "minLength": 1 },
+        "reference_start_sample": { "type": "integer", "minimum": 0 },
+        "reference_end_sample": { "type": "integer", "minimum": 1 },
         "session_options": { "type": "array", "items": { "type": "string", "minLength": 1 } }
       },
       "additionalProperties": false

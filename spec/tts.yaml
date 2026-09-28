@@ -10,8 +10,18 @@ piper:
   model: "~/.local/share/voxi/voices/en_US-lessac-medium.onnx"
   config: "~/.local/share/voxi/voices/en_US-lessac-medium.onnx.json"
 voxcpm:
-  binary: "~/.cache/voxi/voxcpm-canary/build-hotfix-vulkan/bin/audiocpp_cli"
-  model: "~/.cache/voxi/voxcpm-canary/model/voxcpm-0.5b-q8_0-audiovae-f16.gguf"
+  runtime_version: v0.8.2-audio8-perf-hotfix
+  source_commit: ac16661d144f00f84ea0483f3574c374c9868e2d
+  runtime_assets:
+    - url: "https://github.com/0xShug0/audio.cpp/releases/download/v0.8.2-audio8-perf-hotfix/audio-v0.8.2-audio8-perf-hotfix-bin-ubuntu-x64-vulkan.tar.gz"
+      sha256: "2144c8565f9b963dcea7a42cdc1bd09b09149f5934c0332f7383ed51a6b4418c"
+    - url: "https://github.com/0xShug0/audio.cpp/releases/download/v0.8.2-audio8-perf-hotfix/audio-v0.8.2-audio8-perf-hotfix-bin-ubuntu-x64-vulkan-portable.tar.gz"
+      sha256: "0763c8a828be4d428884878d0de6b551ed269a3695fe78537e8f68de9067c98c"
+  binary: "~/.local/share/voxi/voxcpm/bin/audiocpp_cli"
+  model: "~/.local/share/voxi/voxcpm/model/voxcpm-0.5b-q8_0-audiovae-f16.gguf"
+  model_revision: "5f57aad57dc0acea2e6a571ec99c71e4035f812d"
+  model_url: "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/5f57aad57dc0acea2e6a571ec99c71e4035f812d/VoxCPM1-GGUF/voxcpm-0.5b-q8_0-audiovae-f16.gguf"
+  model_sha256: "01210319c5ce617613c9d1c38e34649f7479e98a60d51b719f7df82970658241"
   backend: vulkan
   family: voxcpm1
   threads: 12
@@ -22,13 +32,15 @@ voxcpm:
   max_text_chars: 1000
   presets:
     full:
-      reference_wav: "~/.local/share/voxi/voices/cloned.wav"
+      reference_wav: "~/.local/share/voxi/voxcpm/voices/full.wav"
       reference_text: "Good morning. Today I want to read a short passage at a relaxed pace. I speak clearly, take a breath between sentences and let each word finish before the next one starts. This is how I would like my voice to sound."
       session_options:
         - voxcpm1.audiovae_encoder_sample_capacity=320000
     short:
-      reference_wav: "~/.cache/voxi/voxcpm-canary/prework/reference-8s.wav"
+      reference_wav: "~/.local/share/voxi/voxcpm/voices/short.wav"
       reference_text: "I speak clearly, take a breath between sentences and let each word finish before the next one starts."
+      reference_start_sample: 109386
+      reference_end_sample: 248091
       session_options: []
 playback:
   # Trim at most this much quiet audio from the end of each synthesized chunk.

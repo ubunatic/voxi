@@ -208,9 +208,10 @@ Pre-Work / Required Refinements (host, 2026-09-28, after M1b):
 - Runtime/model remain in the canary cache pending M3 installation work.
 
 ## M3 — `voxi install`
-`voxi install --voxcpm`: fetch/build the pinned runtime release
-with Vulkan, download the pinned GGUF with checksum, install a systemd --user unit if a server is used,
-idempotent re-run, clear errors when Vulkan/`glslc` are missing. Live-verify from a clean state.
+`voxi install --voxcpm`: fetch/build the pinned runtime with Vulkan, download the pinned GGUF with
+checksum, idempotent re-run, and actionable errors when Vulkan is missing (`glslc` is needed only
+for the source-build fallback). M2 chose the subprocess CLI; no VoxCPM systemd unit is needed.
+Live-verify from a clean state.
 User decision (2026-09-28): Chatterbox is too slow and too big, and voxi should avoid PyTorch.
 Issue 162 retires Chatterbox/tts-serve (155, 159) and leaves a `voxcpm` placeholder. If M1 passes,
 fill that placeholder; any replacement engine must be PyTorch-free.
@@ -227,3 +228,29 @@ Pre-Work / Required Refinements (host, 2026-09-28, after M2):
 - Pin GGUF by HF revision + SHA-256 from M1 results. Idempotent re-run skips verified files.
 - Live-verify: move the canary cache aside, `voxi install --voxcpm`, `voxi say --no-llm` with both
   presets; then the canary cache may be deleted (ask the user first).
+
+### M3 delivered (2026-09-28)
+- Added `voxi install --voxcpm`. It installs only `bin/audiocpp_cli`, the model, and private preset
+  WAVs under `~/.local/share/voxi/voxcpm/`; verified files are reused on rerun. It does not install a
+  VoxCPM systemd unit.
+- Runtime preference: checksum-pinned Ubuntu x86_64 Vulkan release assets (non-portable, then
+  portable), each probed with `--list-devices`; when neither runs on this Fedora host, build the
+  pinned `ac16661d144f00f84ea0483f3574c374c9868e2d` source with Vulkan and only the `voxcpm1` model
+  target in a temporary directory, then retain only the CLI. The non-portable asset passed `ldd`
+  dependency resolution but exited SIGILL on this Cezanne host; the source-built CLI passed the
+  Vulkan device probe. `glslc` is checked only when the source fallback is needed.
+- Model: HF revision `5f57aad57dc0acea2e6a571ec99c71e4035f812d`,
+  `voxcpm-0.5b-q8_0-audiovae-f16.gguf`, SHA-256
+  `01210319c5ce617613c9d1c38e34649f7479e98a60d51b719f7df82970658241`.
+- The installer copies the full clone and creates the short reference with ffmpeg sample trimming.
+  Exact source range is `[109386,248091)` at 16 kHz (6.836625–15.5056875 s); its PCM payload matched
+  the canary reference byte-for-byte. Both installed WAVs are mode `0600`. The original `cloned.wav`
+  is unchanged.
+- `spec/tts.yaml` owns the release URLs/checksums, runtime source commit, model HF revision/URL/hash,
+  install paths, and short reference sample bounds. Schema and spec tests cover those pins and paths.
+- Verification: `make test` passed with no `--- FAIL` lines; `make restart-service` succeeded. With
+  `~/.cache/voxi/voxcpm-canary` moved to `~/.cache/voxi/voxcpm-canary.m3-live-saved`,
+  `voxi install --voxcpm` succeeded and a rerun completed idempotently. `ldd`, the Vulkan device
+  listing, and model checksum passed. `voxi say --no-llm 'Good morning.'` completed through both
+  `full` and `short`; the TTS monitor reported Vulkan backend, then idle. Config was restored to
+  `tts_voxcpm_preset: full`. The canary cache remains preserved pending the user's deletion decision.
