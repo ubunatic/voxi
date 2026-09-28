@@ -35,3 +35,9 @@ Files referencing chatterbox/tts-serve (preflight grep, 349 hits): `spec/tts.yam
 - Docs: `docs/TTSReading.md` and `docs/Roadmap.md` drop Chatterbox usage, mention placeholder + 160.
 - Update 160's M2/M3 wording if it references tts-serve as the fallback shape.
 - `make test` green; `make restart-service`.
+
+## Delivery
+M1 (remove and placeholder) delivered in ecc35b2: tts-serve client, `voxi install --tts-serve`,
+systemd unit and spec/schema keys removed (-1586 lines); `voxcpm` backend is a stub erroring "not yet
+implemented; see issue 160"; explicit `tts-serve` selection errors "removed"; legacy `tts_serve*` keys
+ignored; clone profile now `tts_voice_reference_wav`. `make test` green, service restarted.
