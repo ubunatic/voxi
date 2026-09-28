@@ -120,8 +120,35 @@ func TestSynthesizeVoxCPMPlaceholderReturnsIssue160Error(t *testing.T) {
 		return ""
 	}}, "/usr/bin/voxi")
 	_, _, err := engine.Synthesize(t.Context(), "hello")
-	if err == nil || !strings.Contains(err.Error(), "not yet implemented") || !strings.Contains(err.Error(), "issue 160") {
-		t.Fatalf("Synthesize() error = %v, want placeholder issue 160 error", err)
+	if err == nil || !strings.Contains(err.Error(), "VoxCPM CLI") {
+		t.Fatalf("Synthesize() error = %v, want missing VoxCPM CLI error", err)
+	}
+}
+
+func TestVoxCPMCommandArgsUsePresetReferenceAndDefaults(t *testing.T) {
+	spec, err := loadVoxCPMSpec()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, presetName := range []string{"full", "short"} {
+		t.Run(presetName, func(t *testing.T) {
+			preset := spec.Presets[presetName]
+			args, err := voxCPMArgs(spec, preset, "/tmp/chunk.wav", "hello there")
+			if err != nil {
+				t.Fatal(err)
+			}
+			joined := strings.Join(args, " ")
+			for _, want := range []string{"--task tts", "--family voxcpm1", "--backend vulkan", "--num-inference-steps 10", "--guidance-scale 2", "--voice-ref " + preset.ReferenceWav, "--reference-text " + preset.ReferenceText, "--text hello there", "--out /tmp/chunk.wav"} {
+				if !strings.Contains(joined, want) {
+					t.Errorf("args %q missing %q", joined, want)
+				}
+			}
+			wantCapacity := presetName == "full"
+			gotCapacity := strings.Contains(joined, "voxcpm1.audiovae_encoder_sample_capacity=320000")
+			if gotCapacity != wantCapacity {
+				t.Errorf("capacity override present = %v, want %v", gotCapacity, wantCapacity)
+			}
+		})
 	}
 }
 

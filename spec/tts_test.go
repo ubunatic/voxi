@@ -36,6 +36,27 @@ func TestLoadTTSAcceptsVoxCPMPlaceholderBackend(t *testing.T) {
 	}
 }
 
+func TestLoadTTSVoxCPMDefaultsAndPresets(t *testing.T) {
+	s, err := LoadTTS()
+	if err != nil {
+		t.Fatalf("LoadTTS() error = %v", err)
+	}
+	if s.VoxCPM.Binary == "" || s.VoxCPM.Model == "" || s.VoxCPM.Backend != "vulkan" {
+		t.Fatalf("VoxCPM runtime defaults = %#v, want configured CLI/model and Vulkan", s.VoxCPM)
+	}
+	if s.VoxCPM.DefaultPreset != "full" || s.VoxCPM.MaxTextChars < 1 {
+		t.Fatalf("VoxCPM default preset/limit = %q/%d, want full and positive cap", s.VoxCPM.DefaultPreset, s.VoxCPM.MaxTextChars)
+	}
+	full, fullOK := s.VoxCPM.Presets["full"]
+	short, shortOK := s.VoxCPM.Presets["short"]
+	if !fullOK || !shortOK || full.ReferenceWav == "" || short.ReferenceWav == "" || full.ReferenceText == "" || short.ReferenceText == "" {
+		t.Fatalf("VoxCPM presets = %#v, want full and short WAV/transcript profiles", s.VoxCPM.Presets)
+	}
+	if len(full.SessionOptions) != 1 || full.SessionOptions[0] != "voxcpm1.audiovae_encoder_sample_capacity=320000" || len(short.SessionOptions) != 0 {
+		t.Fatalf("preset session options full=%v short=%v", full.SessionOptions, short.SessionOptions)
+	}
+}
+
 func TestTTSMatchesSchema(t *testing.T) {
 	schemaData, err := os.ReadFile("schemas/tts.schema.json")
 	if err != nil {

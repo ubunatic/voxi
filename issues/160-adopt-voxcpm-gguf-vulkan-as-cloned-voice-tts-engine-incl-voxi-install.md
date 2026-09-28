@@ -192,6 +192,21 @@ Pre-Work / Required Refinements (host, 2026-09-28, after M1b):
 - Live check: `voxi say --no-llm` with each preset after `make restart-service`; the user restarts
   `voxi monitor` (it reads config once at start).
 
+### M2 delivered (2026-09-28)
+- Added a spec-driven `voxcpm` CLI engine with Vulkan, 12 threads, seed 42, 10 steps, CFG 2.0,
+  and a 1,000-character chunk cap. Piper remains the default backend.
+- Added `tts_voxcpm_preset` (`full` or `short`; empty selects spec default `full`). Both presets carry
+  their exact WAV and transcript in the spec; `full` adds the 320,000-sample AudioVAE option.
+- `Synthesize` invokes the hotfix CLI once per queue chunk, validates the selected assets, applies
+  the configured text cap, and returns the generated WAV through the existing playback path.
+- Added spec/schema, config, and command-construction tests; updated `docs/TTSReading.md`.
+- `make test` passed; captured output at `/tmp/voxi-issue160-m2-make-test.log`, with no `--- FAIL` lines.
+- `make restart-service` succeeded. Live `voxi say --no-llm` checks queued both presets; the service
+  journal recorded two completed Vulkan WAV renders per request with the expected reference/transcript
+  and full-only capacity option, and no synthesis errors. Monitor was restarted for each config and
+  returned to the original config afterward. No user listening rating recorded.
+- Runtime/model remain in the canary cache pending M3 installation work.
+
 ## M3 — `voxi install`
 `voxi install --voxcpm`: fetch/build the pinned runtime release
 with Vulkan, download the pinned GGUF with checksum, install a systemd --user unit if a server is used,

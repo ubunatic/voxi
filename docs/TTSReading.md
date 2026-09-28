@@ -73,7 +73,7 @@ Voxi provides a pluggable text-to-speech engine seam with automatic fallback:
 1. **Piper (Neural)**: High-quality, local ONNX neural text-to-speech. Installed as a self-contained, pip-free prebuilt binary under `~/.local/lib/voxi/piper/` and symlinked to `~/.local/bin/piper`. Voice models reside in `~/.local/share/voxi/voices/`.
 2. **Festival (`text2wave`)**: Packaged standard synthesizer fallback.
 3. **`espeak-ng`**: Lightweight, instant synthetic fallback.
-4. **VoxCPM (cloned voice, placeholder)**: reserved cloned-voice backend for issue 160; selecting it currently returns a not-yet-implemented error.
+4. **VoxCPM (cloned voice)**: local audio.cpp Vulkan CLI using a GGUF model and the `full` or `short` reference profile.
 
 ### Configuration & Precedence
 
@@ -91,6 +91,7 @@ TTS backend and voice selection resolve in this order:
    - `tts_piper_model`: E.g. `/home/uwe/.local/share/voxi/voices/en_US-lessac-medium.onnx`.
    - `tts_piper_config`: Optional custom model JSON.
    - `tts_voice_reference_wav`: Set by `voxi voice clone`; the cloned-voice reference WAV path.
+   - `tts_voxcpm_preset`: `full` or `short`; defaults to the embedded spec's `full` preset.
 4. **Embedded Spec Defaults (`spec/tts.yaml`)**:
    - `backend.default_backend: auto`
    - `piper.model: ~/.local/share/voxi/voices/en_US-lessac-medium.onnx`
@@ -124,15 +125,17 @@ Local CPU canary measurements on AMD Ryzen 5 PRO 5650U (Cezanne APU, 12 threads,
 
 Piper synthesizes ~4x faster than Festival with less than half the memory footprint, achieving sub-second first-chunk audio playback.
 
-## Cloned-voice engine placeholder
+## VoxCPM cloned-voice engine
 
 Chatterbox and the `tts-serve` integration were removed because the CPU path
-was too slow and resource hungry. `voxi voice clone` still installs an
-allowlisted reference WAV and records it as `tts_voice_reference_wav` for a
-future cloned-voice engine. The `voxcpm` backend is reserved for issue 160 and
-currently returns a clear not-yet-implemented error. Select it with
-`tts_backend: voxcpm` or `VOXI_TTS_BACKEND=voxcpm` only when testing that
-placeholder. Unknown backend names fail during `voxi say` configuration loading.
+was too slow and resource hungry. `voxi voice clone` installs an allowlisted
+reference WAV. VoxCPM uses `full` and `short` WAV/transcript profiles embedded in
+`spec/tts.yaml`; `full` is the default. Select it with `tts_backend: voxcpm` and
+choose the profile with `tts_voxcpm_preset: full` or `short`. Synthesis invokes
+the local CLI once per chunk. The full reference uses an AudioVAE capacity
+override for its 18.6 s clip. Runtime and model paths remain spec values pending
+the M3 installer. Missing runtime assets and unknown presets return synthesis
+errors. Unknown backend names fail during `voxi say` configuration loading.
 Synthesis and playback failures appear in the monitor TTS panel and are logged
 to stderr (the agent service journal when running under systemd).
 

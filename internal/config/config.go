@@ -36,6 +36,7 @@ type UserSettings struct {
 	TTSPiperModel        string `json:"tts_piper_model,omitempty" yaml:"tts_piper_model,omitempty"`
 	TTSPiperConfig       string `json:"tts_piper_config,omitempty" yaml:"tts_piper_config,omitempty"`
 	TTSVoiceReferenceWav string `json:"tts_voice_reference_wav,omitempty" yaml:"tts_voice_reference_wav,omitempty"`
+	TTSVoxCPMPreset      string `json:"tts_voxcpm_preset,omitempty" yaml:"tts_voxcpm_preset,omitempty"`
 }
 
 // DefaultUserSettings returns standard user settings.

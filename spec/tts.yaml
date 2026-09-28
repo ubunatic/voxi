@@ -9,6 +9,27 @@ piper:
   # Installed by `voxi install`; user configuration can override these paths.
   model: "~/.local/share/voxi/voices/en_US-lessac-medium.onnx"
   config: "~/.local/share/voxi/voices/en_US-lessac-medium.onnx.json"
+voxcpm:
+  binary: "~/.cache/voxi/voxcpm-canary/build-hotfix-vulkan/bin/audiocpp_cli"
+  model: "~/.cache/voxi/voxcpm-canary/model/voxcpm-0.5b-q8_0-audiovae-f16.gguf"
+  backend: vulkan
+  family: voxcpm1
+  threads: 12
+  seed: 42
+  num_inference_steps: 10
+  guidance_scale: 2.0
+  default_preset: full
+  max_text_chars: 1000
+  presets:
+    full:
+      reference_wav: "~/.local/share/voxi/voices/cloned.wav"
+      reference_text: "Good morning. Today I want to read a short passage at a relaxed pace. I speak clearly, take a breath between sentences and let each word finish before the next one starts. This is how I would like my voice to sound."
+      session_options:
+        - voxcpm1.audiovae_encoder_sample_capacity=320000
+    short:
+      reference_wav: "~/.cache/voxi/voxcpm-canary/prework/reference-8s.wav"
+      reference_text: "I speak clearly, take a breath between sentences and let each word finish before the next one starts."
+      session_options: []
 playback:
   # Trim at most this much quiet audio from the end of each synthesized chunk.
   # This shortens pauses between chunks without cutting audible speech. Set to

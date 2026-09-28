@@ -305,3 +305,28 @@ func TestLoadUserSettingsRejectsUnknownTTSBackend(t *testing.T) {
 		t.Fatalf("LoadUserSettings() error = %v, want unknown backend error", err)
 	}
 }
+
+func TestLoadUserSettingsVoxCPMPresetDefaultsAndSelection(t *testing.T) {
+	home := t.TempDir()
+	settings, err := LoadUserSettings(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.TTSVoxCPMPreset != "" {
+		t.Fatalf("unset tts_voxcpm_preset = %q, want empty for spec default", settings.TTSVoxCPMPreset)
+	}
+	configDir := filepath.Join(home, ".config", "voxi")
+	if err := os.MkdirAll(configDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(VoxiConfigYAMLPath(home), []byte("tts_voxcpm_preset: short\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	settings, err = LoadUserSettings(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.TTSVoxCPMPreset != "short" {
+		t.Fatalf("tts_voxcpm_preset = %q, want short", settings.TTSVoxCPMPreset)
+	}
+}

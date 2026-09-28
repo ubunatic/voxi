@@ -3,7 +3,7 @@
   "title": "Voxi TTS Playback Tuning",
   "description": "Playback tuning for monitor-gated text to speech.",
   "type": "object",
-  "required": ["backend", "piper", "playback", "llm"],
+  "required": ["backend", "piper", "voxcpm", "playback", "llm"],
   "properties": {
     "backend": {
       "type": "object",
@@ -19,6 +19,32 @@
       "properties": {
         "model": { "type": "string" },
         "config": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "voxcpm": {
+      "type": "object",
+      "required": ["binary", "model", "backend", "family", "threads", "seed", "num_inference_steps", "guidance_scale", "default_preset", "max_text_chars", "presets"],
+      "properties": {
+        "binary": { "type": "string", "minLength": 1 },
+        "model": { "type": "string", "minLength": 1 },
+        "backend": { "type": "string", "enum": ["vulkan"] },
+        "family": { "type": "string", "minLength": 1 },
+        "threads": { "type": "integer", "minimum": 1 },
+        "seed": { "type": "integer", "minimum": 0 },
+        "num_inference_steps": { "type": "integer", "minimum": 1 },
+        "guidance_scale": { "type": "number", "exclusiveMinimum": 0 },
+        "default_preset": { "type": "string", "enum": ["full", "short"] },
+        "max_text_chars": { "type": "integer", "minimum": 1 },
+        "presets": {
+          "type": "object",
+          "required": ["full", "short"],
+          "properties": {
+            "full": { "$ref": "#/definitions/voicePreset" },
+            "short": { "$ref": "#/definitions/voicePreset" }
+          },
+          "additionalProperties": false
+        }
       },
       "additionalProperties": false
     },
@@ -49,6 +75,18 @@
       "max_tokens": { "type": "integer", "minimum": 1, "maximum": 32768 }
     },
     "additionalProperties": false
+    }
+  },
+  "definitions": {
+    "voicePreset": {
+      "type": "object",
+      "required": ["reference_wav", "reference_text", "session_options"],
+      "properties": {
+        "reference_wav": { "type": "string", "minLength": 1 },
+        "reference_text": { "type": "string", "minLength": 1 },
+        "session_options": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false

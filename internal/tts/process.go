@@ -277,6 +277,8 @@ type Engine struct {
 	piperModel               string
 	piperConfig              string
 	ttsVoiceReferenceWav     string
+	ttsVoxCPMPreset          string
+	voxcpm                   spec.TTSVoxCPMSpec
 }
 
 // NewEngine creates a Festival-first engine with espeak-ng fallback.
@@ -285,6 +287,7 @@ func NewEngine(d deps.Dependencies, executable string) *Engine {
 	if err != nil {
 		panic(fmt.Errorf("load embedded TTS specification: %w", err))
 	}
+	voxcpmSpec := ttsSpec.VoxCPM
 	home := ""
 	if d.Getenv != nil {
 		home = d.Getenv("HOME")
@@ -315,6 +318,8 @@ func NewEngine(d deps.Dependencies, executable string) *Engine {
 		piperModel:               model,
 		piperConfig:              piperConfig,
 		ttsVoiceReferenceWav:     settings.TTSVoiceReferenceWav,
+		ttsVoxCPMPreset:          settings.TTSVoxCPMPreset,
+		voxcpm:                   voxcpmSpec,
 	}
 }
 
@@ -326,7 +331,21 @@ func (e *Engine) BackendStatus() string {
 	engine := "missing (Festival / espeak-ng)"
 	preferred := e.selectedBackend()
 	model := e.piperModelPath()
-	if preferred == "piper" && model == "" {
+	if preferred == "voxcpm" {
+		presetName := strings.TrimSpace(e.ttsVoxCPMPreset)
+		if presetName == "" {
+			presetName = e.voxcpm.DefaultPreset
+		}
+		preset := e.voxcpm.Presets[presetName]
+		binary := expandUserHome(e.voxcpm.Binary, e.deps.Getenv)
+		modelPath := expandUserHome(e.voxcpm.Model, e.deps.Getenv)
+		ref := expandUserHome(preset.ReferenceWav, e.deps.Getenv)
+		if fileAvailable(binary) && fileAvailable(modelPath) && fileAvailable(ref) {
+			engine = "VoxCPM Vulkan (" + presetName + ")"
+		} else {
+			engine = "VoxCPM unavailable (runtime, model, or " + presetName + " reference missing)"
+		}
+	} else if preferred == "piper" && model == "" {
 		engine = "Piper unavailable: VOXI_PIPER_MODEL is unset"
 	} else if (preferred == "piper" || (preferred == "auto" && model != "")) && piperModelAvailable(e, model) {
 		if _, err := e.deps.LookPath("piper"); err == nil {
@@ -341,7 +360,7 @@ func (e *Engine) BackendStatus() string {
 	if strings.HasPrefix(engine, "Piper unavailable") {
 		piperUnavailable = engine
 	}
-	if engine != "Piper" {
+	if preferred != "voxcpm" && engine != "Piper" {
 		if _, err := e.deps.LookPath("text2wave"); err == nil {
 			engine = "Festival"
 		} else if _, err := e.deps.LookPath("espeak-ng"); err == nil {
@@ -358,6 +377,11 @@ func (e *Engine) BackendStatus() string {
 		player = "paplay"
 	}
 	return engine + "; player " + player
+}
+
+func fileAvailable(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }
 
 // selectedBackend reads the runtime preference. Auto preserves the historic
@@ -430,7 +454,7 @@ func (e *Engine) Synthesize(ctx context.Context, text string) (audioFile, time.D
 	}
 	backend := e.selectedBackend()
 	if backend == "voxcpm" {
-		return audioFile{}, 0, errors.New("the VoxCPM cloned-voice backend is not yet implemented; see issue 160")
+		return e.synthesizeVoxCPM(ctx, text)
 	}
 	dir, err := os.MkdirTemp("", "voxi-tts-")
 	if err != nil {
@@ -523,6 +547,71 @@ func (e *Engine) Synthesize(ctx context.Context, text string) (audioFile, time.D
 			_ = os.RemoveAll(dir)
 			return audioFile{}, 0, fmt.Errorf("espeak-ng synthesis: %w", err)
 		}
+	}
+	return e.finishSynthesis(wavPath, dir, started)
+}
+
+func loadVoxCPMSpec() (spec.TTSVoxCPMSpec, error) {
+	ttsSpec, err := spec.LoadTTS()
+	if err != nil {
+		return spec.TTSVoxCPMSpec{}, err
+	}
+	return ttsSpec.VoxCPM, nil
+}
+
+func voxCPMArgs(cfg spec.TTSVoxCPMSpec, preset spec.TTSVoicePreset, wavPath, text string) ([]string, error) {
+	if len([]rune(text)) > cfg.MaxTextChars {
+		return nil, fmt.Errorf("VoxCPM text exceeds configured limit of %d characters", cfg.MaxTextChars)
+	}
+	args := []string{"--task", "tts", "--family", cfg.Family, "--model", cfg.Model, "--backend", cfg.Backend, "--threads", strconv.Itoa(cfg.Threads), "--seed", strconv.Itoa(cfg.Seed), "--voice-ref", preset.ReferenceWav, "--reference-text", preset.ReferenceText, "--num-inference-steps", strconv.Itoa(cfg.NumInferenceSteps), "--guidance-scale", strconv.FormatFloat(cfg.GuidanceScale, 'f', -1, 64)}
+	for _, option := range preset.SessionOptions {
+		args = append(args, "--session-option", option)
+	}
+	args = append(args, "--text", text, "--out", wavPath)
+	return args, nil
+}
+
+func (e *Engine) synthesizeVoxCPM(ctx context.Context, text string) (audioFile, time.Duration, error) {
+	cfg := e.voxcpm
+	presetName := strings.TrimSpace(e.ttsVoxCPMPreset)
+	if presetName == "" {
+		presetName = cfg.DefaultPreset
+	}
+	preset, ok := cfg.Presets[presetName]
+	if !ok {
+		return audioFile{}, 0, fmt.Errorf("unknown VoxCPM voice preset %q (choose full or short)", presetName)
+	}
+	binary := expandUserHome(cfg.Binary, e.deps.Getenv)
+	model := expandUserHome(cfg.Model, e.deps.Getenv)
+	if !fileAvailable(binary) {
+		return audioFile{}, 0, fmt.Errorf("VoxCPM CLI %q is not accessible", binary)
+	}
+	if !fileAvailable(model) {
+		return audioFile{}, 0, fmt.Errorf("VoxCPM model %q is not accessible", model)
+	}
+	preset.ReferenceWav = expandUserHome(preset.ReferenceWav, e.deps.Getenv)
+	if !fileAvailable(preset.ReferenceWav) {
+		return audioFile{}, 0, fmt.Errorf("VoxCPM reference WAV %q is not accessible", preset.ReferenceWav)
+	}
+	cfg.Binary, cfg.Model = binary, model
+	args, err := voxCPMArgs(cfg, preset, "", text)
+	if err != nil {
+		return audioFile{}, 0, err
+	}
+	dir, err := os.MkdirTemp("", "voxi-tts-voxcpm-")
+	if err != nil {
+		return audioFile{}, 0, err
+	}
+	wavPath := filepath.Join(dir, "chunk.wav")
+	args[len(args)-1] = wavPath
+	started := time.Now()
+	p, err := startSupervised(ctx, e.executable, nil, binary, args...)
+	if err == nil {
+		err = <-p.Done()
+	}
+	if err != nil {
+		_ = os.RemoveAll(dir)
+		return audioFile{}, 0, fmt.Errorf("VoxCPM synthesis: %w", err)
 	}
 	return e.finishSynthesis(wavPath, dir, started)
 }
