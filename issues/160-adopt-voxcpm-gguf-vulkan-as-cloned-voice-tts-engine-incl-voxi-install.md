@@ -1,6 +1,6 @@
 # 160 — adopt VoxCPM (GGUF, Vulkan) as cloned-voice TTS engine incl. voxi install
 
-**Status**: Open
+**Status**: Closed
 **Priority**: P2 (Medium)
 **Severity**: Feature
 **Category**: Feature
