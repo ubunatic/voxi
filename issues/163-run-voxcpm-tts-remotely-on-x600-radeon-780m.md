@@ -35,6 +35,35 @@ Then render demo 1–3 with the issue 160 M2 settings (hotfix, 10 steps, CFG 2.0
 Record RTF, peak RSS + GTT delta, dropped words, and ssh round-trip overhead per sentence
 (copy text in, WAV back). Go bar: end-to-end RTF ≤ 2 including transfer, x600 stays within free RAM.
 
+### M1 results (2026-09-28)
+
+- Installed only `audiocpp_cli`, the pinned GGUF, and `voices/full.wav` under
+  `~/.local/share/voxi/voxcpm/` on x600. The pinned Ubuntu x64 Vulkan archive SHA-256 matched
+  `spec/tts.yaml`; the CLI reports audio.cpp `v0.8.2-audio8-perf-hotfix`, commit `ac16661`, and
+  detected the AMD Radeon 780M (`RADV PHOENIX`). The remote GGUF SHA-256 also matched the spec.
+- Rendered the three exact texts from `scripts/canary_voiceclone/run.sh` with the hotfix runtime,
+  Vulkan, 12 threads, seed 42, 10 inference steps, CFG 2.0, and the spec's 320,000-sample
+  AudioVAE capacity override. Used the spec's full reference WAV and transcript.
+- `/usr/bin/time` measured peak process RSS. A 250 ms sampler measured system-wide GTT; because this
+  is an integrated GPU, RSS plus GTT delta is an approximate combined-memory upper bound. Before
+  demo 1, x600 had 7.07 GiB `MemAvailable` and 26.50 GiB GTT in use. GTT returned to baseline after
+  each render; `MemAvailable` after demo 1 was 9.12 GiB.
+- SSH time is measured from the local host through the remote render and return of the CLI result;
+  WAV return is the separate local `scp`. End-to-end RTF includes both. Local
+  `voxtype --model small.en --threads 6 -q transcribe` matched every input exactly (0 dropped words).
+- WAVs copied to `~/.local/share/voxi/voice-demo/voxcpm/x600/demo-{1,2,3}.wav` for listening.
+
+| Demo | Audio | CLI RTF | Peak RSS | GTT delta | RSS + GTT delta | SSH round trip | WAV return | End-to-end RTF | ASR / dropped words |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| 1 | 5.28 s | 1.551 | 680 MiB | 3.41 GiB | 4.07 GiB | 11.343 s | 0.195 s | 2.185 | exact / 0 |
+| 2 | 4.40 s | 1.224 | 684 MiB | 3.37 GiB | 4.04 GiB | 7.149 s | 0.193 s | 1.669 | exact / 0 |
+| 3 | 5.44 s | 1.163 | 683 MiB | 3.39 GiB | 4.06 GiB | 8.944 s | 0.189 s | 1.679 | exact / 0 |
+
+Weighted end-to-end RTF is 1.852 across all three demos. **Decision: NO-GO for M2.** Demo 1's
+transfer-inclusive RTF is 2.185, above the ≤2 bar, even though demos 2 and 3 meet it. The measured
+memory estimate fits within the available RAM, and all ASR checks passed. The x600 runtime install
+is left in place; temporary remote WAVs were removed after copying them locally. Stop at M1.
+
 ## M2 — remote engine option
 Config selects local vs remote host for the `voxcpm` engine (reuse the `x600` host naming of
 `tts_llm_host`); remote runs the same CLI over ssh and fetches the WAV. Clear error and no silent
