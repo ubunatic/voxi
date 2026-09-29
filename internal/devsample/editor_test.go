@@ -42,6 +42,7 @@ func TestStripCommentLines(t *testing.T) {
 }
 
 func TestEditTranscriptInEditorRunsEditorOnTempFile(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
 	script := filepath.Join(t.TempDir(), "fake-editor.sh")
 	body := "#!/bin/sh\ngrep -q 'asr guess' \"$1\" || exit 3\nprintf '# c\\ncorrected text\\n' > \"$1\"\n"
 	if err := os.WriteFile(script, []byte(body), 0o700); err != nil {

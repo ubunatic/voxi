@@ -117,17 +117,19 @@ func NewCommand(d deps.Dependencies) *cobra.Command {
 		if err != nil {
 			return err
 		}
-		text, err = devsample.PromptTranscript(c.Context(), d, text, func() (string, error) {
-			var in *bufio.Reader
-			if d.Stdin != nil {
-				in = bufio.NewReader(d.Stdin)
+		if text != "" {
+			text, err = devsample.PromptTranscript(c.Context(), d, text, func() (string, error) {
+				var in *bufio.Reader
+				if d.Stdin != nil {
+					in = bufio.NewReader(d.Stdin)
+				}
+				return devsample.PromptText(d.Stdout, in, nil, "Enter the corrected transcript (what you actually said): ", text)
+			})
+			if err != nil {
+				return err
 			}
-			return devsample.PromptText(d.Stdout, in, nil, "Enter the corrected transcript (what you actually said): ", text)
-		})
-		if err != nil {
-			return err
 		}
-		if text == "" {
+		if Purpose(addPurpose) == Dictation && strings.TrimSpace(text) == "" {
 			return fmt.Errorf("sample transcript must not be empty")
 		}
 		return s.Put(Sample{ID: a[0], Purpose: Purpose(addPurpose), Transcript: text, Created: time.Now(), Source: fmt.Sprintf("chunk:%s/%d", ch.SessionID, ch.Index)}, b.WAVPath(ch))
@@ -161,7 +163,7 @@ func NewCommand(d deps.Dependencies) *cobra.Command {
 		if err != nil {
 			return err
 		}
-		if text == "" {
+		if x.Purpose == Dictation && strings.TrimSpace(text) == "" {
 			return fmt.Errorf("sample transcript must not be empty")
 		}
 		return s.UpdateTranscript(a[0], text)
@@ -245,13 +247,20 @@ func recordSample(ctx context.Context, d deps.Dependencies, open func() (*Store,
 	} else {
 		rawTranscript = raw
 	}
-	text, err := devsample.PromptTranscript(ctx, d, rawTranscript, func() (string, error) {
-		return devsample.PromptText(d.Stdout, in, stdinFile, "Enter the corrected transcript (what you actually said): ", rawTranscript)
-	})
-	if err != nil {
-		return err
+	text := rawTranscript
+	if purpose == Noise && rawTranscript == "" {
+		if d.Stdout != nil {
+			fmt.Fprintln(d.Stdout, "No ASR transcript detected; saving this noise sample with an empty transcript.")
+		}
+	} else {
+		text, err = devsample.PromptTranscript(ctx, d, rawTranscript, func() (string, error) {
+			return devsample.PromptText(d.Stdout, in, stdinFile, "Enter the corrected transcript (what you actually said): ", rawTranscript)
+		})
+		if err != nil {
+			return err
+		}
 	}
-	if text == "" {
+	if purpose == Dictation && strings.TrimSpace(text) == "" {
 		return fmt.Errorf("sample transcript must not be empty")
 	}
 	var keyterms []string

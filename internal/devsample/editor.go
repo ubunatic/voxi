@@ -50,9 +50,6 @@ func promptTranscript(ctx context.Context, d deps.Dependencies, rawDefault strin
 	if err != nil {
 		return "", err
 	}
-	if text == "" {
-		return "", fmt.Errorf("corrected transcript text must not be empty")
-	}
 	return text, nil
 }
 

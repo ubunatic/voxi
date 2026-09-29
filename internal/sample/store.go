@@ -117,9 +117,6 @@ func (s *Store) Put(x Sample, source string) error {
 
 // UpdateTranscript replaces a sample's transcript.
 func (s *Store) UpdateTranscript(id, transcript string) error {
-	if strings.TrimSpace(transcript) == "" {
-		return errors.New("sample transcript must not be empty")
-	}
 	x, err := s.Get(id)
 	if err != nil {
 		return err

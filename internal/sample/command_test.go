@@ -64,7 +64,7 @@ func (r *delayedReader) Read(p []byte) (int, error) {
 func TestRecordCapturesAndStoresWithPurpose(t *testing.T) {
 	home, bin := t.TempDir(), t.TempDir()
 	recorder := filepath.Join(bin, "pw-record")
-	if err := os.WriteFile(recorder, []byte("#!/bin/sh\nsleep 0.1\ndd if=/dev/zero bs=32000 count=1 2>/dev/null\nsleep 5\n"), 0o700); err != nil {
+	if err := os.WriteFile(recorder, []byte("#!/bin/sh\nsleep 0.1\ndd if=/dev/zero bs=32000 count=1 2>/dev/null\nexec sleep 5\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
@@ -81,7 +81,7 @@ func TestRecordCapturesAndStoresWithPurpose(t *testing.T) {
 	var out bytes.Buffer
 	d.Stdout = &out
 	cmd := testCommand(t, home, "", &out, d)
-	cmd.SetArgs([]string{"record", "--purpose", "noise", "room-tone"})
+	cmd.SetArgs([]string{"record", "room-tone"})
 	if err := cmd.ExecuteContext(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestRecordCapturesAndStoresWithPurpose(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if x.Purpose != Noise || x.Transcript != "hello there" || x.Source != "record" {
+	if x.Purpose != Dictation || x.Transcript != "hello there" || x.Source != "record" {
 		t.Fatalf("recorded sample = %+v", x)
 	}
 	audioInfo, err := os.Stat(store.AudioPath(x))
@@ -239,6 +239,136 @@ func TestAddRejectsUnknownDuplicateAndVoicePurpose(t *testing.T) {
 	}
 }
 
+func TestEmptyTranscriptAllowedOnlyForNoiseAddAndEdit(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	dataHome, runtime := t.TempDir(), t.TempDir()
+	addChunkFixture(t, runtime, "")
+	var out bytes.Buffer
+	cmd := testCommand(t, dataHome, runtime, &out, deps.Dependencies{})
+	cmd.SetArgs([]string{"add", "silent-room", "--last", "--purpose", "noise"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("noise add with empty transcript: %v", err)
+	}
+	store, err := Open(Root(dataHome))
+	if err != nil {
+		t.Fatal(err)
+	}
+	noise, err := store.Get("silent-room")
+	if err != nil || noise.Transcript != "" {
+		t.Fatalf("noise sample = %+v, %v", noise, err)
+	}
+
+	addChunkFixture(t, runtime, "")
+	cmd = testCommand(t, dataHome, runtime, &out, deps.Dependencies{})
+	cmd.SetArgs([]string{"add", "empty-dictation", "--last"})
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("dictation add with empty transcript succeeded")
+	}
+
+	if err := store.Add(Sample{ID: "empty-noise", Purpose: Noise, Transcript: ""}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Add(Sample{ID: "dictation", Purpose: Dictation, Transcript: "before"}); err != nil {
+		t.Fatal(err)
+	}
+	editor := filepath.Join(t.TempDir(), "editor.sh")
+	if err := os.WriteFile(editor, []byte("#!/bin/sh\n: > \"$1\"\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	d := deps.Dependencies{Getenv: func(k string) string {
+		if k == "XDG_DATA_HOME" {
+			return dataHome
+		}
+		if k == "EDITOR" {
+			return editor
+		}
+		return ""
+	}}
+	cmd = testCommand(t, dataHome, "", &out, d)
+	cmd.SetArgs([]string{"edit", "dictation"})
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("dictation edit to empty transcript succeeded")
+	}
+	cmd = testCommand(t, dataHome, "", &out, d)
+	cmd.SetArgs([]string{"edit", "empty-noise"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("noise edit to empty transcript: %v", err)
+	}
+	noise, err = store.Get("empty-noise")
+	if err != nil || noise.Transcript != "" {
+		t.Fatalf("edited noise sample = %+v, %v", noise, err)
+	}
+}
+
+func TestRecordNoiseSkipsTranscriptPromptForEmptyASR(t *testing.T) {
+	home, bin := t.TempDir(), t.TempDir()
+	recorder := filepath.Join(bin, "pw-record")
+	if err := os.WriteFile(recorder, []byte("#!/bin/sh\nsleep 0.1\ndd if=/dev/zero bs=32000 count=1 2>/dev/null\nexec sleep 5\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	d := deps.Dependencies{
+		LookPath: func(name string) (string, error) {
+			if name == "pw-record" {
+				return recorder, nil
+			}
+			return "", os.ErrNotExist
+		},
+		Stdin: &delayedReader{reader: strings.NewReader("\n\n"), delay: 300 * time.Millisecond},
+	}
+	var out bytes.Buffer
+	cmd := testCommand(t, home, "", &out, d)
+	cmd.SetArgs([]string{"record", "--purpose", "noise", "silent-room"})
+	if err := cmd.ExecuteContext(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out.String(), "Enter the corrected transcript") {
+		t.Fatalf("asked transcript question despite empty ASR result: %s", out.String())
+	}
+	if !strings.Contains(out.String(), "No ASR transcript detected; saving this noise sample with an empty transcript.") {
+		t.Fatalf("missing empty-transcript confirmation line: %s", out.String())
+	}
+	store, err := Open(Root(home))
+	if err != nil {
+		t.Fatal(err)
+	}
+	x, err := store.Get("silent-room")
+	if err != nil || x.Purpose != Noise || x.Transcript != "" {
+		t.Fatalf("recorded sample = %+v, %v", x, err)
+	}
+}
+
+func TestRecordDictationRejectsEmptyTranscript(t *testing.T) {
+	home, bin := t.TempDir(), t.TempDir()
+	recorder := filepath.Join(bin, "pw-record")
+	if err := os.WriteFile(recorder, []byte("#!/bin/sh\nsleep 0.1\ndd if=/dev/zero bs=32000 count=1 2>/dev/null\nexec sleep 5\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	d := deps.Dependencies{
+		LookPath: func(name string) (string, error) {
+			if name == "pw-record" {
+				return recorder, nil
+			}
+			return "", os.ErrNotExist
+		},
+		Stdin: &delayedReader{reader: strings.NewReader("\n\n"), delay: 300 * time.Millisecond},
+	}
+	var out bytes.Buffer
+	cmd := testCommand(t, home, "", &out, d)
+	cmd.SetArgs([]string{"record", "dictation-sample"})
+	if err := cmd.ExecuteContext(context.Background()); err == nil {
+		t.Fatal("dictation record with empty transcript succeeded")
+	}
+	store, err := Open(Root(home))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Get("dictation-sample"); err == nil {
+		t.Fatal("empty dictation sample was saved")
+	}
+}
+
 func TestPlayUsesInjectedRunner(t *testing.T) {
 	dataHome := t.TempDir()
 	store, err := Open(Root(dataHome))
@@ -303,6 +433,7 @@ func TestFeedbackSampleCommandIsGone(t *testing.T) {
 }
 
 func TestEditAndMoveCommands(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
 	dataHome := t.TempDir()
 	store, err := Open(Root(dataHome))
 	if err != nil {

@@ -64,3 +64,16 @@ M2 delivered commit 9b95e3c: `record`, `edit`, `move`, help texts, hardening, te
 1. **Noise samples may have an empty transcript** (for example the existing no-speech sample `artifact-keyboard-smash`). `sample add`, `sample record` and `sample edit` currently reject an empty transcript for every purpose. Require a non-empty transcript only for `dictation`; allow it for `noise`. Tests for both.
 2. `sample record --purpose noise` should not ask the transcript question at all when the ASR result is empty; go straight to keyterms/save with an empty transcript after one confirmation line.
 3. Note in the ticket which `internal/devsample` legacy helpers remain and which issue (171) deletes them.
+
+### M3 items 1–3 delivered
+
+Empty transcripts are allowed for `noise` samples across add, record, and edit; `dictation` still
+requires a transcript. When noise recording has no ASR result, it skips transcript editing, prints
+one confirmation line, and continues to keyterms/save.
+
+The legacy corpus API still present in `internal/devsample/sample.go` includes `SamplesDir`,
+`ManifestPath*`, `WAVPath*`, `LoadManifest*`, `SaveManifest*`, `ParseManifest`, `FormatManifest`,
+`SanitizeName`, `Find`, `Upsert`, and `RemoveEntry`. Existing TTS readers still use this layer;
+issue 171 removes it after migrating the legacy corpus. Shared capture, transcript/keyterm, editor,
+and playback helpers remain. Old flow helpers `Remove`, `Play`, `Import`, and `Promote` also remain
+internally but are no longer exposed as CLI commands.
