@@ -1,6 +1,6 @@
 # 170 — Sample store package: purpose folders and per-sample JSON sidecars
 
-**Status**: Open — filed from 169
+**Status**: Closed — M1 (store package) and M2 (Move rollback, script switch, tests) delivered; go test passes, installed; real-data check 29/29 rows; 099 closed as superseded
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Architecture
