@@ -1,6 +1,6 @@
 # 165 — voxi chunks delete
 
-**Status**: Open
+**Status**: Closed — M1 (delete command) delivered: chunks delete INDEX|last|--all with confirmation, tests pass, installed
 **Priority**: P3 (Low)
 **Severity**: Minor
 **Category**: Feature

@@ -146,4 +146,4 @@
 | 162 | [162-remove-chatterbox-tts-serve-keep-cloned-voice-engine-placeholder.md](162-remove-chatterbox-tts-serve-keep-cloned-voice-engine-placeholder.md) | remove Chatterbox/tts-serve, keep a cloned-voice engine placeholder | Closed |
 | 163 | [163-run-voxcpm-tts-remotely-on-x600-radeon-780m.md](163-run-voxcpm-tts-remotely-on-x600-radeon-780m.md) | Run VoxCPM TTS remotely on x600 (Radeon 780M) | Closed — M2 remote VoxCPM engine implemented, tested, and live-validated on x600 |
 | 164 | [164-voxi-settings-menu-tts-backend-switch.md](164-voxi-settings-menu-tts-backend-switch.md) | Voxi settings menu: TTS backend switch | Closed — TTS Backend row added to voxi settings menu and dump; tests pass, installed |
-| 165 | [165-voxi-chunks-delete.md](165-voxi-chunks-delete.md) | voxi chunks delete | Open |
+| 165 | [165-voxi-chunks-delete.md](165-voxi-chunks-delete.md) | voxi chunks delete | Closed — M1 (delete command) delivered: chunks delete INDEX\|last\|--all with confirmation, tests pass, installed |
