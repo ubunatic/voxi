@@ -192,7 +192,7 @@ func NewCommand(d deps.Dependencies, buf *Buffer) *cobra.Command {
 					for _, chunk := range chunks {
 						if (deleteLowEnergy && chunk.RejectionReason == "low_energy_transient") ||
 							(deleteUnvoiced && chunk.RejectionReason == "unvoiced_transient") ||
-							(deleteEmpty && strings.TrimSpace(chunk.CleanedTranscript) == "") {
+							(deleteEmpty && chunk.RejectionReason == "empty") {
 							selected = append(selected, chunk)
 						}
 					}
@@ -244,10 +244,10 @@ func NewCommand(d deps.Dependencies, buf *Buffer) *cobra.Command {
 		},
 	}
 	deleteCmd.Flags().BoolVar(&deleteAll, "all", false, "delete every stored chunk")
-	deleteCmd.Flags().BoolVarP(&deleteYes, "yes", "y", false, "skip the interactive confirmation for --all")
-	deleteCmd.Flags().BoolVar(&deleteLowEnergy, "low-energy", false, "delete chunks rejected for low energy")
-	deleteCmd.Flags().BoolVar(&deleteUnvoiced, "unvoiced", false, "delete chunks rejected as unvoiced")
-	deleteCmd.Flags().BoolVar(&deleteEmpty, "empty", false, "delete chunks with an empty transcript")
+	deleteCmd.Flags().BoolVarP(&deleteYes, "yes", "y", false, "skip confirmation for --all and category filters")
+	deleteCmd.Flags().BoolVar(&deleteLowEnergy, "low-energy", false, "delete chunks with low_energy_transient rejection")
+	deleteCmd.Flags().BoolVar(&deleteUnvoiced, "unvoiced", false, "delete chunks with unvoiced_transient rejection")
+	deleteCmd.Flags().BoolVar(&deleteEmpty, "empty", false, "delete chunks with empty rejection reason")
 
 	cmd.AddCommand(listCmd, showCmd, playCmd, deleteCmd)
 	return cmd

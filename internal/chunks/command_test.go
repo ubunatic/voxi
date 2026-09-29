@@ -440,7 +440,7 @@ func TestChunksDeleteFilters(t *testing.T) {
 		chunks := []Chunk{
 			{RejectionReason: "low_energy_transient", RawTranscript: "quiet", CleanedTranscript: "quiet"},
 			{RejectionReason: "unvoiced_transient", RawTranscript: "noise", CleanedTranscript: "noise"},
-			{RawTranscript: "", CleanedTranscript: ""},
+			{RejectionReason: "empty", RawTranscript: "", CleanedTranscript: ""},
 			{RawTranscript: "keep", CleanedTranscript: "keep"},
 			{RejectionReason: "low_energy_transient", RawTranscript: "older", CleanedTranscript: "older"},
 		}
@@ -514,4 +514,49 @@ func TestChunksDeleteFilters(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestChunksDeleteEmptyMatchesOnlyEmptyRejectionReason(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+		want []int
+	}{
+		{name: "low-energy", args: []string{"--low-energy", "--yes"}, want: []int{1}},
+		{name: "unvoiced", args: []string{"--unvoiced", "--yes"}, want: []int{2}},
+		{name: "empty", args: []string{"--empty", "--yes"}, want: []int{3}},
+		{name: "union", args: []string{"--low-energy", "--unvoiced", "--empty", "--yes"}, want: []int{1, 2, 3}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			buf := NewBuffer(t.TempDir(), 10)
+			for _, reason := range []string{"low_energy_transient", "unvoiced_transient", "empty", "other"} {
+				if _, err := buf.Add(Chunk{RejectionReason: reason, RawTranscript: "", CleanedTranscript: ""}, []byte{1, 2}, 16000); err != nil {
+					t.Fatal(err)
+				}
+			}
+			out := &bytes.Buffer{}
+			cmd := NewCommand(deps.Dependencies{Stdout: out}, buf)
+			cmd.SetArgs(append([]string{"delete"}, tc.args...))
+			if err := cmd.Execute(); err != nil {
+				t.Fatal(err)
+			}
+			if want := fmt.Sprintf("Deleted %d chunks.\n", len(tc.want)); out.String() != want {
+				t.Fatalf("output = %q, want %q", out.String(), want)
+			}
+			got, err := buf.ListAll(false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, chunk := range got {
+				for _, deleted := range tc.want {
+					if chunk.Index == deleted {
+						t.Errorf("selected chunk %d remains", deleted)
+					}
+				}
+			}
+			if len(got) != 4-len(tc.want) {
+				t.Errorf("remaining chunks = %d, want %d", len(got), 4-len(tc.want))
+			}
+		})
+	}
 }
