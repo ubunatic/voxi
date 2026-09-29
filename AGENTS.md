@@ -1,4 +1,4 @@
-**Before any work, read `.harnez/rules/Index.md` if it exists, then `.harnez/rules/Local.md`; they are part of this file. Local.md overrides both.**
+**Before any work, read all Harnez rules in one call: `harnez read .harnez/rules/Tools.md .harnez/rules/Issues.md .harnez/rules/Quota.md .harnez/rules/Subagents.md .harnez/rules/Output.md .harnez/rules/Local.md`. This follows Index.md order; Local.md overrides the other rules.**
 
 
 Adhere to the following conventions.
@@ -26,13 +26,14 @@ If you touched code the live daemon actually runs (`internal/eager`, `internal/r
 restarts `voxi-agent.service` so the change takes effect. Purely on-demand
 subcommands invoked fresh each run (e.g. `voxi monitor`) don't need a restart.
 
+Before removing or changing a file format (e.g. `corpus.tsv`), search the repo for every reader of
+it — code, scripts, benches, testdata READMEs — and convert or ticket each one in the same change.
+
 <!-- harnez:begin Language Conventions -->
 Adhere to the following conventions.
 
 Docs in `./docs/` are managed by harnez. <!-- harnez:bundled -->
 
-- Issue Tracking Practices @docs/IssueTracking.md,
-  P0-P3 priorities, metadata headers (Status, Priority, Severity, Category), tracker sync
 - Agentic Loop Practices @docs/AgenticLoop.md,
   5-phase loop (Advisory -> Dev -> Review -> Hygiene -> Retro), zero zombie guarantee
 - Bash/Shell @docs/Bash.md,
@@ -49,6 +50,8 @@ Docs in `./docs/` are managed by harnez. <!-- harnez:bundled -->
   Modern Go, avoid deps but use Cobra, add tests; use runes and display width for terminal layout
 - Release Pipeline @docs/GoRelease.md,
   harnez release, version.yaml spec, GoReleaser v2, non-interactive minisign (-W), Forgejo has_releases, language-agnostic (Go/Python/Zig/Rust/scripted)
+- Issue Tracking Practices @docs/IssueTracking.md,
+  P0-P3 priorities, metadata headers (Status, Priority, Severity, Category), tracker sync
 - Make/Makefile @docs/Make.md,
   ⚙️ phony sentinel, self-doc help, build dependency pattern
 - Man Pages for Go CLIs @docs/ManPages.md,

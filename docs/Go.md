@@ -65,7 +65,7 @@ weight: 60
 - Write compiler/unit test assertions to verify Go structs match specs.
 
 ## CLI & Releases
-- Use Cobra; one `*cobra.Command` per verb, flags defined on that command.
+- Use Cobra for every Go app, including `examples/` and small demo programs; one `*cobra.Command` per verb, flags defined on that command.
 - Use `RunE` instead of `Run` — return errors, don't `os.Exit` inside commands.
 - Set `SilenceUsage: true` on commands where error is not a usage mistake.
 - **Version Wiring**: Keep `var Version = "..."` in `version.go` (synced automatically by `harnez release` from `version.yaml`) and wire `rootCmd.Version = Version`.

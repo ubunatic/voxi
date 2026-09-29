@@ -1,32 +1,21 @@
 # Harnez Tools
 
-If `harnez` is not installed or available in PATH, install it via:
-```bash
-go install ubunatic.com/harnez/cmd/harnez@latest
-```
-
-- Prefer structured patch tools (`apply_patch`) or whole-block replacements over narrow string substitution edits.
-- For medium/large files, prefer `harnez read -L <range>` / `harnez read -n`; use targeted native reads only when appropriate.
-- Before broad shell searches, use `harnez find code|docs` or MCP `harnez_find`; see `@docs/Search.md`.
-
-## Harnez Managed Conventions
-
 Managed by harnez — local edits here are overwritten on the next `harnez init`.
-Put project-specific rules outside this block.
+Put tool-neutral project rules in AGENTS.md and Harnez-only rules in .harnez/rules/.
 
-### Tool Availability
+## Tool Availability
 If `harnez` is not installed or available in PATH, install it via:
 ```bash
 go install ubunatic.com/harnez/cmd/harnez@latest
 ```
 
-### Always `make install`
+## Always `make install`
 After every change to a project that has a `make install` target, run `make install` before
 reporting or committing, so the user's installed binary always matches the code. This applies in
 every repo to solo developers, host sessions that talk to a human, and orchestrators. Leaf developer
 subagents in a sprint skip it unless their skill requires it at the end; the host installs after review.
 
-### Editing Discipline
+## Editing Discipline
 - Prefer structured patch tools (`apply_patch`) or whole-block replacements over
   narrow string substitution edits.
 - When making multi-line edits, ensure sufficient surrounding context lines to
@@ -39,7 +28,7 @@ subagents in a sprint skip it unless their skill requires it at the end; the hos
   `reading_discipline.enforce` mode in `~/.harnez/config.yaml` (or
   `HARNEZ_READ_ENFORCE`).
 
-### Issue Tracker Discovery (harnez find)
+## Issue Tracker Discovery (harnez find)
 Applies when this project has an `issues/` tracker. To search existing issues,
 compute the next ticket number, or allocate one, use `harnez find` / `harnez issues`
 instead of `ls issues/`, `find`, or raw grep:
@@ -55,7 +44,7 @@ instead of `ls issues/`, `find`, or raw grep:
 - Commit documentation and `issues/*.md` changes immediately; don't batch them behind
   pending code work.
 
-### Harnez Agent
+## Harnez Agent
 - Prefer loaded `mcp__harnez__*` tools for lifecycle actions; otherwise use `harnez agent` via Bash (see the local Subagent Policy).
 - A requested model such as `terra:low` or `luna` is a Harnez agent model (see `harnez agent models`); dispatch it with `harnez agent start --model <name>`, regardless of `subagent_mode`.
 - Start (run it in a background shell, e.g. Claude `run_in_background`): `harnez agent start --name <name> --role <role> --model <model> -p <prompt>`.
@@ -66,10 +55,19 @@ instead of `ls issues/`, `find`, or raw grep:
 - Stop: `harnez agent stop --name <session>`.
 - When a `/goal` without an exit clause is set (e.g. typed by the user), say so in the first reply and offer `/goal ... or stop and report when blocked on a user decision or denied permission`; once blocked on the user, suggest `/goal clear` instead of repeating the wait message.
 
-### Code and Documentation Search
+## External Skills
+External skills (installed with `harnez skill install`) are explicit-only: never use one
+unless the user names it (e.g. `/scroll-craft`, "use scroll-craft") or picks it after you ask.
+- When a task could fit an external skill and the user named none, run
+  `harnez skill search <topic>`. If anything matches, list the matches with their one-line
+  descriptions and ask which to use, or none. Never pick one yourself.
+- Agents without a native copy (Gemini, Prime) load the chosen skill with
+  `harnez skill show <name>`.
+
+## Code and Documentation Search
 - Before broad shell searches, use `harnez find code|docs` or MCP `harnez_find`; see `@docs/Search.md`.
 
-### Agentic Loop Invariants
+## Agentic Loop Invariants
 Where `@docs/AgenticLoop.md` is present in this project, follow it rather than
 restating it here — in particular Invariant 1 (Parallel Read, Sequential Write:
 one writer per workspace), Invariant 3 (Zero Zombie Guarantee: track and terminate
