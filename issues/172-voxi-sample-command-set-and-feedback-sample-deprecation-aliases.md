@@ -54,3 +54,13 @@ editor, and playback helpers remain in `internal/devsample`; its legacy corpus p
 remain for migration and current voice-training readers until issues 171/173 switch them.
 
 Import, publish, public/recent listing, and merge remain deferred/out of scope.
+
+## M2 (rest of the verbs) delivered, review findings
+
+M2 delivered commit 9b95e3c: `record`, `edit`, `move`, help texts, hardening, tests; `feedback sample` gone; tests pass.
+
+### Milestone 3 (noise samples): Pre-Work / Required Refinements
+
+1. **Noise samples may have an empty transcript** (for example the existing no-speech sample `artifact-keyboard-smash`). `sample add`, `sample record` and `sample edit` currently reject an empty transcript for every purpose. Require a non-empty transcript only for `dictation`; allow it for `noise`. Tests for both.
+2. `sample record --purpose noise` should not ask the transcript question at all when the ASR result is empty; go straight to keyterms/save with an empty transcript after one confirmation line.
+3. Note in the ticket which `internal/devsample` legacy helpers remain and which issue (171) deletes them.
