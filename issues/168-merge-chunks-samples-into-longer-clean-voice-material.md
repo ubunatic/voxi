@@ -1,6 +1,6 @@
 # 168 — Merge chunks/samples into longer clean voice material
 
-**Status**: Open
+**Status**: Closed — resolved
 **Priority**: P3 (Low)
 **Severity**: Minor
 **Category**: Feature
@@ -43,3 +43,29 @@ M2 (implementation, only if M1 says yes): merge for chunks then samples, tests (
 ## Note from 169 (2026-09-29)
 
 Command shape decided: `voxi sample merge ID --from A B C` (samples) or `--chunks` (chunk indices), writing a new sample whose sidecar `source` records the inputs; builds on 170/172. See docs/SampleStore.md §5.
+
+## M1 Decision and M2 Delivery (2026-09-29)
+
+Answer: merge can be made safe; implemented as `voxi sample merge ID SOURCE... [--chunks]`
+(`internal/sample/merge.go`). The shape differs from the 169 note (`--from A B C`) because cobra flags
+take one value; sources are plain arguments, `--chunks` switches them to chunk indices.
+
+1. Audio: every part must be 16-bit mono PCM at one sample rate, else refused; no resampling. `--gap`
+   (default 300 ms, 0–5 s) of silence between parts. Odd-sized data chunks are refused.
+2. Adjacency (chunks): one session, accepted, at most 30 s between neighbours; `--force` overrides.
+   Samples: all of one purpose.
+3. Transcript: single-space join of trimmed texts (chunks: cleaned, else raw), reviewed in
+   `$VISUAL`/`$EDITOR` (`VOXI_SAMPLE_EDITOR=off` skips); keyterms: ordered union.
+4. Loudness: warning when the loudest part's RMS is over 2x the quietest; no normalization.
+5. Provenance: sidecar `source` is `merge:samples:A,B` or `merge:chunks:SESSION/N,SESSION/M`; inputs
+   are only read. An existing id is refused; there is no `--force` overwrite (delete first).
+6. Limit: 20 s default (`--max-duration`), from VoxCPM's `audiovae_encoder_sample_capacity=320000`
+   at 16 kHz in spec/tts.yaml. Piper has no hard clip limit that we found.
+7. Order: argument order, always explicit.
+8. Atomicity: WAV built in a temp dir; `Store.Put` now writes audio via temp file + rename, sidecar last.
+
+Voice: merging voice samples keeps the latest consent of the parts; any other merge into voice
+(`--purpose voice`) asks for own-voice consent or `--own-voice`.
+
+Tests: `internal/sample/merge_test.go`. Review (Terra): green; its three minor findings (odd data
+size, per-chunk session in provenance, non-atomic audio write in `Put`) are fixed.

@@ -110,6 +110,9 @@ voxi sample add ID --chunk N|--last [--purpose P]      replaces save-chunk / sav
 voxi sample edit ID                                    transcript in $VISUAL/$EDITOR (166)
 voxi sample move ID PURPOSE                            consent gate for voice
 voxi sample delete ID...                               replaces remove
+voxi sample publish ID [--no-speech]                   noise only, FLAC into testdata/samples (173)
+voxi sample merge ID SOURCE... [--chunks]              join samples or chunks (168)
+voxi sample list --public                              list the public store (173)
 ```
 
 `merge` (168), import, publish, public/recent listing, and export are not part of issue 172.

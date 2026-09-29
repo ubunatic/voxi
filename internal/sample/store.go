@@ -118,11 +118,7 @@ func (s *Store) Put(x Sample, source string) error {
 	if err != nil {
 		return err
 	}
-	if err = os.WriteFile(s.AudioPath(x), data, s.fileMode); err != nil {
-		return err
-	}
-	if err = os.Chmod(s.AudioPath(x), s.fileMode); err != nil {
-		_ = os.Remove(s.AudioPath(x))
+	if err = s.writeAudio(s.AudioPath(x), data); err != nil {
 		return err
 	}
 	if err = s.Add(x); err != nil {
@@ -130,6 +126,26 @@ func (s *Store) Put(x Sample, source string) error {
 		return err
 	}
 	return nil
+}
+
+// writeAudio places data at path via a temp file and rename.
+func (s *Store) writeAudio(path string, data []byte) error {
+	f, err := os.CreateTemp(filepath.Dir(path), ".audio-*")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	defer os.Remove(tmp)
+	if err = f.Chmod(s.fileMode); err == nil {
+		_, err = f.Write(data)
+	}
+	if closeErr := f.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 // UpdateTranscript replaces a sample's transcript.

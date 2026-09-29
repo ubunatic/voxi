@@ -228,6 +228,7 @@ func NewCommand(d deps.Dependencies) *cobra.Command {
 	}}
 	publish.Flags().BoolVar(&noSpeech, "no-speech", false, "confirm without prompting that the sample contains no intelligible speech")
 	cmd.AddCommand(publish)
+	cmd.AddCommand(newMergeCommand(d, open))
 	cmd.AddCommand(&cobra.Command{Use: "play ID", Short: "Play a sample", Long: "Play a sample using a local audio player.\n\nExample: voxi sample play greeting", Args: cobra.ExactArgs(1), RunE: func(c *cobra.Command, a []string) error {
 		s, err := open()
 		if err != nil {
