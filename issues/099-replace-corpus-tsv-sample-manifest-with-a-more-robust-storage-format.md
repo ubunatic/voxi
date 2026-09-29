@@ -1,6 +1,6 @@
 # 099 — Replace corpus.tsv Sample Manifest With a More Robust Storage Format
 
-**Status**: Open
+**Status**: Closed — superseded by 170
 **Priority**: P3 (Low)
 **Severity**: Enhancement
 **Category**: Dev Tooling / Data Format
