@@ -145,3 +145,4 @@
 | 161 | [161-voxcpm-2-multilingual-48-khz-as-optional-voxcpm-model.md](161-voxcpm-2-multilingual-48-khz-as-optional-voxcpm-model.md) | VoxCPM 2 (multilingual, 48 kHz) as optional voxcpm model | Open |
 | 162 | [162-remove-chatterbox-tts-serve-keep-cloned-voice-engine-placeholder.md](162-remove-chatterbox-tts-serve-keep-cloned-voice-engine-placeholder.md) | remove Chatterbox/tts-serve, keep a cloned-voice engine placeholder | Closed |
 | 163 | [163-run-voxcpm-tts-remotely-on-x600-radeon-780m.md](163-run-voxcpm-tts-remotely-on-x600-radeon-780m.md) | Run VoxCPM TTS remotely on x600 (Radeon 780M) | Closed — M2 remote VoxCPM engine implemented, tested, and live-validated on x600 |
+| 164 | [164-voxi-settings-menu-tts-backend-switch.md](164-voxi-settings-menu-tts-backend-switch.md) | Voxi settings menu: TTS backend switch | Open |
