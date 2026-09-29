@@ -52,12 +52,16 @@ func NewCloneCommand(d deps.Dependencies) *cobra.Command {
 			if !safeID.MatchString(name) {
 				return fmt.Errorf("invalid voice name %q: use 1-128 ASCII letters, digits, underscores, or hyphens; start with a letter or digit", name)
 			}
+			warnLegacyAllowlist(d.Stderr, home)
 			store, err := sample.OpenReadOnly(storeRoot)
 			if err != nil {
 				return fmt.Errorf("open sample store: %w", err)
 			}
 			kept, err := store.List(sample.Voice)
 			if err != nil {
+				return err
+			}
+			if err := sample.RequireConsent(kept); err != nil {
 				return err
 			}
 			if len(kept) == 0 {
@@ -89,6 +93,9 @@ func NewCloneCommand(d deps.Dependencies) *cobra.Command {
 			}
 			if err := config.SetTTSVoiceReferenceWav(home, target); err != nil {
 				return fmt.Errorf("record tts_voice_reference_wav: %w", err)
+			}
+			if err := config.SetTTSVoiceSample(home, sample.ID); err != nil {
+				return fmt.Errorf("record tts_voice_sample: %w", err)
 			}
 			fmt.Fprintf(d.Stdout, "installed cloned-voice profile %s from sample %q at %s\n", name, sample.ID, target)
 			return nil

@@ -21,7 +21,7 @@ func newCloneCommand(t *testing.T, home string) (*bytes.Buffer, func(args ...str
 		return ""
 	}
 	run := func(args ...string) error {
-		cmd := NewCloneCommand(deps.Dependencies{Stdout: out, Getenv: getenv})
+		cmd := NewCloneCommand(deps.Dependencies{Stdout: out, Stderr: out, Getenv: getenv})
 		cmd.SetArgs(args)
 		cmd.SetOut(out)
 		cmd.SetErr(out)
@@ -58,6 +58,9 @@ func TestVoiceCloneInstallsSingleAllowlistedSample(t *testing.T) {
 	}
 	if settings.TTSVoiceReferenceWav != target {
 		t.Errorf("tts_voice_reference_wav = %q, want %q", settings.TTSVoiceReferenceWav, target)
+	}
+	if settings.TTSVoiceSample != "only-one" {
+		t.Errorf("tts_voice_sample = %q, want only-one", settings.TTSVoiceSample)
 	}
 }
 

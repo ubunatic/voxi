@@ -211,7 +211,12 @@ func writeSampleData(t *testing.T, root, id string, purpose sample.Purpose, tran
 	}
 	source := filepath.Join(t.TempDir(), id+".wav")
 	writeFile(t, source, data)
-	if err := store.Put(sample.Sample{ID: id, Purpose: purpose, Transcript: transcript, Created: time.Now(), Source: "test"}, source); err != nil {
+	x := sample.Sample{ID: id, Purpose: purpose, Transcript: transcript, Created: time.Now(), Source: "test"}
+	if purpose == sample.Voice {
+		now := time.Now()
+		x.Consent = &now
+	}
+	if err := store.Put(x, source); err != nil {
 		t.Fatal(err)
 	}
 }

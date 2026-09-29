@@ -3,6 +3,8 @@ package clone
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -37,6 +39,7 @@ func NewPrepareCommand(d deps.Dependencies) *cobra.Command {
 		Short: "Convert local speech samples to a Piper training dataset",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			warnLegacyAllowlist(d.Stderr, home)
 			if d.LookPath == nil {
 				return fmt.Errorf("prepare voice dataset: dependency lookup is unavailable")
 			}
@@ -63,4 +66,13 @@ func NewPrepareCommand(d deps.Dependencies) *cobra.Command {
 	cmd.Flags().StringVar(&outputDir, "output-dir", outputDir, "directory for the generated LJSpeech dataset")
 	cmd.SilenceUsage = true
 	return cmd
+}
+
+// warnLegacyAllowlist notes that the pre-store allowlist no longer selects
+// training samples; only the store's voice/ folder does.
+func warnLegacyAllowlist(w io.Writer, home string) {
+	legacy := filepath.Join(home, ".config", "voxi", "samples", "voice-training.txt")
+	if _, err := os.Stat(legacy); err == nil && w != nil {
+		fmt.Fprintf(w, "note: %s is ignored; only voice-purpose samples in the sample store are used\n", legacy)
+	}
 }

@@ -61,6 +61,7 @@ func newTrainCommand(d deps.Dependencies, run commandRunner) *cobra.Command {
 		Long:  "Prepare voice-purpose samples from the private sample store, fine-tune a Piper medium checkpoint, export ONNX, and install the voice under ~/.local/share/voxi/voices/.",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			warnLegacyAllowlist(d.Stderr, home)
 			if !safeID.MatchString(name) {
 				return fmt.Errorf("invalid voice name %q: use 1-128 ASCII letters, digits, underscores, or hyphens; start with a letter or digit", name)
 			}

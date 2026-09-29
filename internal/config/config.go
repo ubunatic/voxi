@@ -38,6 +38,7 @@ type UserSettings struct {
 	TTSPiperModel        string `json:"tts_piper_model,omitempty" yaml:"tts_piper_model,omitempty"`
 	TTSPiperConfig       string `json:"tts_piper_config,omitempty" yaml:"tts_piper_config,omitempty"`
 	TTSVoiceReferenceWav string `json:"tts_voice_reference_wav,omitempty" yaml:"tts_voice_reference_wav,omitempty"`
+	TTSVoiceSample       string `json:"tts_voice_sample,omitempty" yaml:"tts_voice_sample,omitempty"`
 	TTSVoxCPMPreset      string `json:"tts_voxcpm_preset,omitempty" yaml:"tts_voxcpm_preset,omitempty"`
 }
 
@@ -110,6 +111,17 @@ func SetTTSEnabled(home string, enabled bool) error {
 // SetTTSVoiceReferenceWav updates only tts_voice_reference_wav in config.yaml,
 // preserving other keys and their comments, for `voxi voice clone`.
 func SetTTSVoiceReferenceWav(home, path string) error {
+	return setScalar(home, "tts_voice_reference_wav", path)
+}
+
+// SetTTSVoiceSample records the sample id tts_voice_reference_wav was copied from.
+func SetTTSVoiceSample(home, id string) error {
+	return setScalar(home, "tts_voice_sample", id)
+}
+
+// setScalar updates one top-level string key in config.yaml, preserving other
+// keys and their comments.
+func setScalar(home, key, value string) error {
 	if home == "" {
 		if h, err := os.UserHomeDir(); err == nil {
 			home = h
@@ -133,22 +145,22 @@ func SetTTSVoiceReferenceWav(home, path string) error {
 	if root.Kind != yaml.MappingNode {
 		return fmt.Errorf("parse %s: configuration must be a YAML mapping", cfgPath)
 	}
+	found := false
 	for i := 0; i+1 < len(root.Content); i += 2 {
-		if root.Content[i].Value == "tts_voice_reference_wav" {
+		if root.Content[i].Value == key {
 			root.Content[i+1].Kind = yaml.ScalarNode
 			root.Content[i+1].Tag = "!!str"
-			root.Content[i+1].Value = path
-			encoded, err := yaml.Marshal(doc)
-			if err != nil {
-				return fmt.Errorf("encode %s: %w", cfgPath, err)
-			}
-			return WriteConfigAtomic(cfgPath, encoded)
+			root.Content[i+1].Value = value
+			found = true
+			break
 		}
 	}
-	root.Content = append(root.Content,
-		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "tts_voice_reference_wav"},
-		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: path},
-	)
+	if !found {
+		root.Content = append(root.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key},
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value},
+		)
+	}
 	encoded, err := yaml.Marshal(doc)
 	if err != nil {
 		return fmt.Errorf("encode %s: %w", cfgPath, err)

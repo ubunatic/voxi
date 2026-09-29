@@ -66,6 +66,9 @@ func Prepare(ctx context.Context, opts Options) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("list voice samples: %w", err)
 	}
+	if err := sample.RequireConsent(samples); err != nil {
+		return Result{}, err
+	}
 	if len(samples) == 0 {
 		return Result{}, errors.New("sample store contains no voice samples")
 	}

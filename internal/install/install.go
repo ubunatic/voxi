@@ -268,7 +268,11 @@ func InstallWithOptions(ctx context.Context, out io.Writer, e Effects, options I
 		fmt.Fprintln(out, "[TTS] disabled by config (tts_enabled: false); system packages not changed")
 	}
 	if options.VoxCPM {
-		if err := phase("VoxCPM runtime, model, and cloned voice", func() error { return installVoxCPM(ctx, e) }); err != nil {
+		voiceStep := "VoxCPM runtime, model, and cloned voice"
+		if settings.TTSVoiceSample != "" {
+			voiceStep += fmt.Sprintf(" from sample %q", settings.TTSVoiceSample)
+		}
+		if err := phase(voiceStep, func() error { return installVoxCPM(ctx, e) }); err != nil {
 			return err
 		}
 	}

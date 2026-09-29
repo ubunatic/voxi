@@ -96,6 +96,9 @@ func (s *Store) Put(x Sample, source string) error {
 	if !validPurpose(x.Purpose) {
 		return fmt.Errorf("invalid sample purpose %q", x.Purpose)
 	}
+	if x.Purpose == Voice && x.Consent == nil {
+		return errors.New("voice samples require own-voice consent")
+	}
 	if _, err := s.Get(x.ID); err == nil {
 		return fmt.Errorf("sample id %q already exists", x.ID)
 	} else if !errors.Is(err, os.ErrNotExist) {
@@ -137,6 +140,31 @@ func (s *Store) UpdateTranscript(id, transcript string) error {
 	}
 	x.Transcript = strings.TrimSpace(transcript)
 	return s.write(x)
+}
+
+// GrantConsent records that the user confirmed id is their own voice and may be cloned.
+func (s *Store) GrantConsent(id string, at time.Time) error {
+	x, err := s.Get(id)
+	if err != nil {
+		return err
+	}
+	at = at.UTC()
+	x.Consent = &at
+	return s.write(x)
+}
+
+// RequireConsent refuses voice samples that carry no own-voice consent.
+func RequireConsent(xs []Sample) error {
+	var missing []string
+	for _, x := range xs {
+		if x.Purpose == Voice && x.Consent == nil {
+			missing = append(missing, x.ID)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("voice samples without own-voice consent: %s (run `voxi sample move ID voice` to confirm)", strings.Join(missing, ", "))
+	}
+	return nil
 }
 
 // Has reports whether id exists in the store.
@@ -237,6 +265,9 @@ func (s *Store) Add(x Sample) error {
 	}
 	if !validPurpose(x.Purpose) {
 		return fmt.Errorf("invalid sample purpose %q", x.Purpose)
+	}
+	if x.Purpose == Voice && x.Consent == nil {
+		return errors.New("voice samples require own-voice consent")
 	}
 	if _, err := s.Get(x.ID); err == nil {
 		return fmt.Errorf("sample id %q already exists", x.ID)
