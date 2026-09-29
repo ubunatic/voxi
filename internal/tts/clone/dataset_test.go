@@ -252,7 +252,7 @@ func TestPrepareCommandFlagsAndOutput(t *testing.T) {
 		Stdout: &stdout,
 	}
 	cmd := NewCommand(d)
-	cmd.SetArgs([]string{"prepare", "--samples-dir", samples, "--output-dir", output})
+	cmd.SetArgs([]string{"prepare", "--store", samples, "--output-dir", output})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}

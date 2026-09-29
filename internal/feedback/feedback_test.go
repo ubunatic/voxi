@@ -257,9 +257,10 @@ func TestSampleSaveLast(t *testing.T) {
 
 	cmd := NewCommand(&out, home, rules, 64, nil, d, nil)
 	cmd.SetArgs([]string{"sample", "save-last", "test-sample"})
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("sample save-last failed: %v", err)
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("feedback sample command remains available")
 	}
+	t.Skip("legacy feedback sample test retired by issue 172")
 
 	// Verify sample was saved in ~/.config/voxi/samples
 	sampleWAV := filepath.Join(home, ".config", "voxi", "samples", "test-sample.wav")
@@ -335,9 +336,10 @@ func TestSampleSaveChunk(t *testing.T) {
 		d := depsFor("\n\n", &out)
 		cmd := NewCommand(&out, home, rules, 64, nil, d, nil)
 		cmd.SetArgs([]string{"sample", "save-chunk", "1", "sample-chunk-1"})
-		if err := cmd.Execute(); err != nil {
-			t.Fatalf("save-chunk 1 sample-chunk-1 failed: %v", err)
+		if err := cmd.Execute(); err == nil {
+			t.Fatal("feedback sample command remains available")
 		}
+		t.Skip("legacy feedback sample test retired by issue 172")
 
 		sampleWAV := filepath.Join(home, ".config", "voxi", "samples", "sample-chunk-1.wav")
 		if _, err := os.Stat(sampleWAV); err != nil {

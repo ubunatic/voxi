@@ -92,7 +92,7 @@ func NewCloneCommand(d deps.Dependencies) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&samplesDir, "samples-dir", samplesDir, "directory containing corpus.tsv, voice-training.txt, and WAV files")
+	cmd.Flags().StringVar(&samplesDir, "store", samplesDir, "directory containing corpus.tsv, voice-training.txt, and WAV files")
 	cmd.Flags().StringVar(&sampleID, "sample", sampleID, "allowlisted sample id to clone (required when more than one is allowlisted)")
 	cmd.Flags().StringVar(&name, "name", name, "voice profile name used for the installed WAV")
 	cmd.SilenceUsage = true

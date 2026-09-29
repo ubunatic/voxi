@@ -68,9 +68,6 @@ func TestImportFreshMerge(t *testing.T) {
 	if !strings.Contains(out.String(), "vocabulary: 2 imported, 0 skipped, 0 failed") {
 		t.Errorf("output missing vocabulary summary:\n%s", out.String())
 	}
-	if !strings.Contains(out.String(), "no samples/ found") {
-		t.Errorf("output missing samples skip notice:\n%s", out.String())
-	}
 }
 
 func TestImportStopWordCollisionSkipped(t *testing.T) {
@@ -263,6 +260,10 @@ func TestImportSamplesDelegatesToDevsample(t *testing.T) {
 	if err := Import(home, src, ImportOptions{}, testMaxTermChars, out); err != nil {
 		t.Fatalf("Import: %v\noutput:\n%s", err, out.String())
 	}
+	if _, err := os.Stat(devsample.ManifestPath(home)); !os.IsNotExist(err) {
+		t.Fatalf("config import wrote legacy samples: %v", err)
+	}
+	t.Skip("legacy config sample import test retired by issue 172")
 
 	samples, err := devsample.LoadManifest(home)
 	if err != nil {

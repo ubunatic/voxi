@@ -459,8 +459,6 @@ func NewCommand(out io.Writer, home string, builtins []spec.StopWord, maxVocabul
 	importCmd.Flags().Bool("overwrite", false, "replace an existing local sample with the same name instead of skipping it")
 	sample.AddCommand(importCmd)
 
-	cmd.AddCommand(sample)
-
 	return cmd
 }
 

@@ -52,7 +52,7 @@ func NewPrepareCommand(d deps.Dependencies) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&samplesDir, "samples-dir", samplesDir, "directory containing corpus.tsv and WAV files")
+	cmd.Flags().StringVar(&samplesDir, "store", samplesDir, "directory containing corpus.tsv and WAV files")
 	cmd.Flags().StringVar(&outputDir, "output-dir", outputDir, "directory for the generated LJSpeech dataset")
 	cmd.SilenceUsage = true
 	return cmd

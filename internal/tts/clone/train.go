@@ -138,7 +138,7 @@ func newTrainCommand(d deps.Dependencies, run commandRunner) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", name, "voice name used for the installed ONNX files")
-	cmd.Flags().StringVar(&samplesDir, "samples-dir", samplesDir, "directory containing corpus.tsv and source WAV files")
+	cmd.Flags().StringVar(&samplesDir, "store", samplesDir, "directory containing corpus.tsv and source WAV files")
 	cmd.Flags().StringVar(&datasetDir, "dataset-dir", datasetDir, "prepared LJSpeech dataset directory")
 	cmd.Flags().StringVar(&base, "base", base, "local medium checkpoint path or checkpoint URL")
 	cmd.Flags().IntVar(&epochs, "epochs", epochs, "training epoch limit")

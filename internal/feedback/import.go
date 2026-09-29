@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"ubunatic.com/voxi/internal/devsample"
 	"ubunatic.com/voxi/internal/speechcontext"
 )
 
@@ -17,12 +16,11 @@ const (
 	AreaStopWords    = "stop-words"
 	AreaReplacements = "replacements"
 	AreaVocabulary   = "vocabulary"
-	AreaSamples      = "samples"
 )
 
 // AreaNames lists every area voxi config import understands, in processing
 // order.
-var AreaNames = []string{AreaStopWords, AreaReplacements, AreaVocabulary, AreaSamples}
+var AreaNames = []string{AreaStopWords, AreaReplacements, AreaVocabulary}
 
 // vocabularyFileName mirrors the private literal in
 // internal/speechcontext/context.go's VocabularyPath -- that package exposes
@@ -35,10 +33,8 @@ const vocabularyFileName = "vocabulary.txt"
 type ImportOptions struct {
 	// Overwrite replaces a colliding replacement entry (same From, case-
 	// insensitive) instead of skipping it. Stop-words, vocabulary, and
-	// samples are plain sets/collections with no separate overwrite
-	// semantics -- a collision there always just means "already present" --
-	// so this only changes replacement behavior, but every area's merge
-	// function accepts it for a consistent call shape.
+	// Stop-words and vocabulary are sets with no separate overwrite
+	// semantics, so this only changes replacement behavior.
 	Overwrite bool
 	// Only restricts import to these areas (see AreaNames). Empty means
 	// import every area found in sourceDir.
@@ -54,7 +50,7 @@ type ImportAreaSummary struct {
 	Failed   int // per-entry validation failure that did not abort the rest of the area (vocabulary.txt only)
 }
 
-// Import merges stop-words, replacements, vocabulary, and dev samples from
+// Import merges stop-words, replacements, and vocabulary from
 // sourceDir -- a local, previously-copied ~/.config/voxi-shaped directory,
 // the same way sample import's sourceDir mirrors SamplesDir's layout --
 // into home's local Voxi state. It never performs any transfer of its own.
@@ -104,17 +100,6 @@ func Import(home, sourceDir string, opts ImportOptions, maxVocabularyTermChars i
 		summary, found, err := importVocabulary(home, sourceDir, maxVocabularyTermChars)
 		reportArea(out, AreaVocabulary, "vocabulary.txt", summary, found, err, &failedAreas)
 	}
-	if want(AreaSamples) {
-		srcDir := filepath.Join(sourceDir, "samples")
-		info, statErr := os.Stat(srcDir)
-		if statErr != nil || !info.IsDir() {
-			fmt.Fprintf(out, "%s: no samples/ found in %s, skipping\n", AreaSamples, sourceDir)
-		} else if _, err := devsample.Import(home, srcDir, opts.Overwrite, out); err != nil {
-			fmt.Fprintf(out, "%s: import failed: %v\n", AreaSamples, err)
-			failedAreas = append(failedAreas, AreaSamples)
-		}
-	}
-
 	if len(failedAreas) > 0 {
 		return fmt.Errorf("config import failed for: %s (see output above)", strings.Join(failedAreas, ", "))
 	}

@@ -1,6 +1,6 @@
 # 172 — voxi sample command set and feedback sample deprecation aliases
 
-**Status**: Open — filed from 169
+**Status**: In Progress — M1 removes legacy feedback/config entry points and adds store-backed core commands
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: CLI
@@ -25,3 +25,8 @@
 ## 3. Implementation & Verification Plan
 
 Command tests for every verb; a test that the removed `feedback sample` command is gone; docs and help mention only the new names; `voxi man` regenerated, `make install`.
+
+M1 delivers `sample list|show|play|add|delete|export`, removes `feedback sample` and the
+`config import` samples area, and renames the voice `--samples-dir` flags to `--store`.
+Remaining: `record`, `edit`, `move`, store-to-store `import`, noise-only `publish`, public/recent
+list modes, and their command tests. `merge` remains deferred to issue 168.

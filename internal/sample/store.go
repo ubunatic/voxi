@@ -69,7 +69,43 @@ func open(root string, dm, fm os.FileMode) (*Store, error) {
 	return &Store{root: root, dirMode: dm, fileMode: fm}, nil
 }
 
-func (s *Store) Root() string         { return s.root }
+func (s *Store) Root() string { return s.root }
+
+// AudioPath returns the filesystem path of x's audio file.
+func (s *Store) AudioPath(x Sample) string { return filepath.Join(s.dir(x.Purpose), x.Audio) }
+
+// Put copies audio into the store and writes its sidecar.
+func (s *Store) Put(x Sample, source string) error {
+	if filepath.Ext(source) == "" {
+		return fmt.Errorf("sample audio %q has no extension", source)
+	}
+	if err := os.MkdirAll(s.dir(x.Purpose), s.dirMode); err != nil {
+		return err
+	}
+	x.Audio = x.ID + filepath.Ext(source)
+	data, err := os.ReadFile(source)
+	if err != nil {
+		return err
+	}
+	if err = os.WriteFile(s.AudioPath(x), data, s.fileMode); err != nil {
+		return err
+	}
+	if err = s.Add(x); err != nil {
+		_ = os.Remove(s.AudioPath(x))
+		return err
+	}
+	return nil
+}
+
+// UpdateTranscript replaces a sample's transcript.
+func (s *Store) UpdateTranscript(id, transcript string) error {
+	x, err := s.Get(id)
+	if err != nil {
+		return err
+	}
+	x.Transcript = strings.TrimSpace(transcript)
+	return s.write(x)
+}
 func validID(id string) bool          { return idPattern.MatchString(id) }
 func validPurpose(p Purpose) bool     { return purposes[p] }
 func (s *Store) dir(p Purpose) string { return filepath.Join(s.root, string(p)) }

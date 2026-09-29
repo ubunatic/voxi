@@ -214,7 +214,7 @@ func TestTrainCommandPreparesRunsUVAndInstallsVoice(t *testing.T) {
 		Stdout: &stdout,
 	}
 	cmd := newTrainCommand(d, run)
-	cmd.SetArgs([]string{"--name", "my-voice", "--samples-dir", samples, "--base", base, "--epochs", "7", "--batch-size", "4", "--accelerator", "gpu"})
+	cmd.SetArgs([]string{"--name", "my-voice", "--store", samples, "--base", base, "--epochs", "7", "--batch-size", "4", "--accelerator", "gpu"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
