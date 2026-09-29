@@ -17,6 +17,7 @@ In-depth references for architecture, decisions, and operations of the Voxi Linu
 | [EagerDeliverySafety.md](EagerDeliverySafety.md) | Eager chunk identities, at-most-once delivery ledger, stop/queue semantics, visible failures, and conservative transcript safety limits |
 | [LLMTranscriptCleanup.md](LLMTranscriptCleanup.md) | Local LLM cleanup request contract, chunk context, fallback behavior, and real-model validation limits |
 | [TTSReading.md](TTSReading.md) | `voxi say` narration, lmcoder hosts and sessions, chunk queue behavior, pause trimming, and observed model latency |
+| [SampleStore.md](SampleStore.md) | Decision record (issue 169): chunk vs sample glossary, `dictation`/`noise`/`voice` purposes, sample store layout, `voxi sample` command map, migration plan |
 
 ---
 
