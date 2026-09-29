@@ -1,6 +1,6 @@
 # 169 — Discovery: one sample concept and store (chunks, samples, feedback, training vocabulary)
 
-**Status**: Open
+**Status**: Closed — decision record docs/SampleStore.md; follow-ups 170-175 filed
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Architecture
