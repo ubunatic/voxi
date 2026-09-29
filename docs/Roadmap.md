@@ -46,14 +46,9 @@ cloning or training by accident, and only noise is ever published.
 > **Update 2026-09-29:** a new theme took over the working set. Issue 169
 > decided on one sample concept and store (`docs/SampleStore.md`); 170 (store
 > package) and 172 (`voxi sample` commands) shipped, 099 closed as superseded.
-> 171 (legacy migration and cleanup) shipped the same day, so 173 now heads
-> `Now`.
+> 171 (legacy migration and cleanup) shipped the same day; 173, 174, 168 and
+> 175 followed, so the sample store theme is complete. Its one leftover is 176.
 
-- **[173 sample purpose guards and consent](../issues/173-sample-purpose-guards-voice-only-training-and-cloning-consent-noise-only-publish.md)**
-  (Open, P1). Head of `Now`, because it depends on 170/172 (done) and the
-  store's invariants only become real when enforced: development samples
-  must never reach cloning or training, and only noise may be published.
-  Privacy of the user's own voice is a trust issue on par with delivery.
 - **[115 modifier-buffer flush drops](../issues/115-prevent-modifier-buffer-flush-drops-from-expired-stopdraintimeout.md)**
   (In Progress, P1). Unchanged: only the human live-dictation gate is open.
   Minutes of the user's time close a P1 that dropped transcribed speech.
@@ -90,14 +85,12 @@ Dictation accuracy and latency:
   **[088 scheduling priority](../issues/088-elevate-os-scheduling-priority-for-the-transcription-critical-path.md)**
   — unchanged bounded hardening.
 
-Sample store follow-ups (from 169):
+Sample store follow-up:
 
-- **[174 review public noise samples](../issues/174-review-public-noise-samples-and-move-them-to-testdata-samples-noise.md)**
-  (Open, P2). After 173's noise-only publish guard, so the move into
-  `testdata/samples/noise` runs through the guarded path.
-- **[175 sample glossary and wording](../issues/175-sample-glossary-help-text-man-pages-and-website-wording.md)**
-  (Open, P3). Cheap, and users cannot tell chunk, sample, corpus and clone
-  apart today; do it once the command set stops moving (after 171/173).
+- **[176 speech-context bench fixtures](../issues/176-speech-context-bench-fixtures-convert-testdata-speech-context-to-the-sample-store-layout.md)**
+  (Open). Found during 175: the speech-context bench still reads the removed
+  `corpus.tsv` format, so that bench cannot run until its fixtures use the
+  sample store layout. Benches on private samples are unaffected.
 
 Reading aloud (TTS):
 
@@ -114,10 +107,7 @@ Reading aloud (TTS):
 - **[161 VoxCPM 2 as optional model](../issues/161-voxcpm-2-multilingual-48-khz-as-optional-voxcpm-model.md)**
   (Open, P3). New. Multilingual (German) cloned voice at 48 kHz, but a 2B
   model; 160 already delivers a working cloned voice, so this is an upgrade,
-  gated on 140 and on 173's cloning guards.
-- **[168 merge chunks/samples into longer voice material](../issues/168-merge-chunks-samples-into-longer-clean-voice-material.md)**
-  (Open, P3). New. Serves cloning/training input quality; lands on the new
-  store and behind 173's guards, so it waits for both.
+  gated on 140 (173's cloning guards have shipped).
 - **[119 consolidate config formats](../issues/119-consolidate-voxi-local-config-storage-formats-stop-words-replacements-vocabulary-samples-config-yaml.md)**
   (Open, P3). Its samples half is now answered by the store (169/170); what
   remains is stop-words, replacements, vocabulary and config.yaml.
@@ -161,6 +151,8 @@ Reading aloud (TTS):
 ## Reconciliation notes
 
 - **171 shipped** (2026-09-29): it headed `Now` only to fix the broken build; 173 moves up.
+- **173, 174, 168, 175 shipped** (2026-09-29): consent and purpose guards, public noise store move,
+  `voxi sample merge`, glossary and wording. 176 (bench fixtures) is new.
 - **New in `Now`: 173 (P1)** — voice-sample privacy guards, ranked with trust.
 - **Promoted: 125 `Later` -> `Now`**, as the 09-27 pass proposed.
 - **New in `Next`: 158, 174, 175**; **new in `Later`: 161, 168** (both wait

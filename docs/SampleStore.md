@@ -162,7 +162,26 @@ voice samples --voice prepare/train/clone--> voices (derived copies)
 
 Order: 170 -> 171 -> 172 -> 173; 174 after 170; 175 last. 168 (merge) builds on 172.
 
-## 9. Deliberately Not Changed
+Status 2026-09-29: all of 170-175 and 168 have shipped. Leftover: 176 (the speech-context bench
+fixtures in `testdata/speech-context/` still use the removed `corpus.tsv` format).
+
+## 9. Implementation Notes and Pitfalls
+
+- Consent is enforced in the store (`Store.Put` and `Store.Add` refuse a voice sample without
+  `consent`), not only in the CLI; every consumer of voice samples (`voice prepare|train|clone`,
+  profiles) additionally calls `sample.RequireConsent`. Review found `Add` bypassing the check once:
+  guard every write path, not just the obvious one.
+- Audio is written via temp file and rename, so a crash never leaves a sidecar pointing at a half WAV.
+- Merge rules: 16-bit mono PCM, same rate, even-length data chunks only (odd length is refused as
+  corrupt); 300 ms silence between parts; 20 s cap (VoxCPM reference encoder limit); warn if loudness
+  differs by more than 2x. Chunk merges require one session, accepted status and at most 30 s gaps
+  unless `--force`. Provenance lists every source, e.g. `merge:chunks:S1/4,S2/7`, so forced
+  cross-session merges stay traceable.
+- Publish encodes to FLAC with ffmpeg and needs an explicit no-speech confirmation (`--no-speech`).
+- The legacy `voice-training.txt` allowlist is no longer read; clone/train print a note if it exists.
+- Help texts share one glossary (`internal/glossary`); change wording there, then regenerate man pages.
+
+## 10. Deliberately Not Changed
 
 - `voxi chunks` name, storage, retention and its delete filters (165/167).
 - `voxi voice` command names and the Piper/VoxCPM engine file locations.
@@ -171,7 +190,7 @@ Order: 170 -> 171 -> 172 -> 173; 174 after 170; 175 last. 168 (merge) builds on 
 - Audio format (16 kHz mono PCM WAV private, FLAC public).
 - No database, no tags, no cloud sync.
 
-## 10. Open Uncertainties
+## 11. Open Uncertainties
 
 - Decided: the two public `bg-voice-*` noise files stay public (user, 2026-09-29). Do not ask again.
 - Decided (user, 2026-09-29): `kt-sentences-plus-*` are noisy real-world speech for dev/testing, purpose `dictation`
