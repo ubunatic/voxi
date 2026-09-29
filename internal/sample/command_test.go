@@ -202,7 +202,7 @@ func TestAddChunkAndLastCopyAudioSidecarAndPermissions(t *testing.T) {
 
 func TestEveryCommandHasShortAndExample(t *testing.T) {
 	cmd := NewCommand(deps.Dependencies{Getenv: func(string) string { return t.TempDir() }})
-	want := []string{"add", "delete", "edit", "list", "migrate", "move", "play", "record", "show"}
+	want := []string{"add", "delete", "edit", "list", "move", "play", "record", "show"}
 	got := make([]string, 0, len(cmd.Commands()))
 	for _, child := range cmd.Commands() {
 		got = append(got, child.Name())

@@ -1,7 +1,7 @@
 // Command clack_features is an offline research tool for issue-shaped work
 // on distinguishing keyboard-clack noise chunks from real short speech
-// utterances. It reads the private dev-sample corpus (voxi feedback sample
-// record/save-chunk), computes two cheap acoustic features per WAV —
+// utterances. It reads the private sample store and public noise fixtures,
+// computes two cheap acoustic features per WAV —
 // zero-crossing rate (ZCR) and energy-weighted spectral centroid — and
 // prints them side by side so a threshold's separating power can be judged
 // by eye before any of this is wired into the acoustic gate
@@ -11,18 +11,13 @@
 //
 //	go run ./scripts/clack_features [-private DIR] [-public DIR]
 //
-// -private defaults to the private dev-sample directory
-// (~/.config/voxi/samples); -public defaults to the git-tracked public
-// corpus (testdata/noise-samples, relative to the repo root -- run this from
-// the repo root). Either may be empty/missing (skipped silently) so this
-// works whether the corpus is entirely private, entirely promoted, or split
-// across both. Each is expected to hold a corpus.tsv manifest (see
-// internal/devsample) whose first field is the sample name and second field
-// the audio filename (.wav or .flac -- .flac is decoded via a shelled-out
-// `ffmpeg`, since promoted public samples are FLAC-encoded for git-lfs).
+// -private defaults to the private sample store
+// (~/.local/share/voxi/samples); -public defaults to the public legacy corpus
+// (testdata/noise-samples, relative to the repo root).
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/binary"
 	"flag"
@@ -49,28 +44,40 @@ const (
 type sample struct {
 	name string
 	wav  string
-	dir  string
 }
 
 func main() {
-	home, _ := os.UserHomeDir()
-	defaultPrivate := filepath.Join(home, ".config", "voxi", "samples")
+	defaultPrivate := samplestore.Root(os.Getenv("XDG_DATA_HOME"))
 
-	private := flag.String("private", defaultPrivate, "private samples directory holding corpus.tsv and its WAV files")
+	private := flag.String("private", defaultPrivate, "private sample store root")
 	public := flag.String("public", filepath.Join("testdata", "noise-samples"), "public (git-tracked) samples directory holding corpus.tsv and its FLAC files")
 	flag.Parse()
 
 	var samples []sample
-	for _, dir := range []string{*private, *public} {
-		s, err := loadManifest(filepath.Join(dir, "corpus.tsv"))
+	if *private != "" {
+		if store, err := samplestore.OpenReadOnly(*private); err == nil {
+			items, listErr := store.List()
+			if listErr != nil {
+				fmt.Fprintf(os.Stderr, "list sample store %s: %v\n", *private, listErr)
+			}
+			for _, item := range items {
+				samples = append(samples, sample{name: item.ID, wav: store.AudioPath(item)})
+		}
 		if err != nil && !os.IsNotExist(err) {
-			fmt.Fprintf(os.Stderr, "load manifest %s: %v\n", dir, err)
-			continue
+			fmt.Fprintf(os.Stderr, "open sample store %s: %v\n", *private, err)
 		}
-		for i := range s {
-			s[i].dir = dir
+	}
+	var publicSamples []sample
+	if *public != "" {
+		var err error
+		publicSamples, err = loadPublicManifest(filepath.Join(*public, "corpus.tsv"))
+		if err != nil && !os.IsNotExist(err) {
+			fmt.Fprintf(os.Stderr, "load public manifest %s: %v\n", *public, err)
 		}
-		samples = append(samples, s...)
+	}
+	for _, item := range publicSamples {
+		item.wav = filepath.Join(*public, item.wav)
+		samples = append(samples, item)
 	}
 	if len(samples) == 0 {
 		fmt.Fprintf(os.Stderr, "no samples found in %s or %s\n", *private, *public)
@@ -85,7 +92,7 @@ func main() {
 	}
 	var rows []row
 	for _, s := range samples {
-		pcm, rate, err := readAudioPCM(filepath.Join(s.dir, s.wav))
+		pcm, rate, err := readAudioPCM(s.wav)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%s: %v\n", s.name, err)
 			continue
@@ -102,19 +109,27 @@ func main() {
 	}
 }
 
-// loadManifest reads name/wav pairs from a corpus.tsv-compatible manifest,
-// skipping blank and comment lines (mirrors internal/devsample.ParseManifest
-// without pulling in that private package for a throwaway analysis tool).
-func loadManifest(path string) ([]sample, error) {
-	entries, err := samplestore.LoadLegacyTSV(filepath.Dir(path))
+// loadPublicManifest reads the still-legacy public noise manifest.
+func loadPublicManifest(path string) ([]sample, error) {
+	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
+	defer f.Close()
 	var samples []sample
-	for _, entry := range entries {
-		samples = append(samples, sample{name: entry.ID, wav: entry.Audio})
+	sc := bufio.NewScanner(f)
+	for line := 1; sc.Scan(); line++ {
+		text := sc.Text()
+		if text == "" || strings.HasPrefix(text, "#") {
+			continue
+		}
+		fields := strings.SplitN(text, "\t", 4)
+		if len(fields) < 3 {
+			return nil, fmt.Errorf("%s:%d: malformed row", path, line)
+		}
+		samples = append(samples, sample{name: fields[0], wav: fields[1]})
 	}
-	return samples, nil
+	return samples, sc.Err()
 }
 
 // readAudioPCM reads mono 16-bit PCM samples and the sample rate from either

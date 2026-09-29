@@ -11,11 +11,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strings"
 	"unicode"
 
-	"ubunatic.com/voxi/internal/devsample"
+	"ubunatic.com/voxi/internal/sample"
 )
 
 const (
@@ -24,17 +23,12 @@ const (
 	bits       = 16
 )
 
-// AllowlistFile names the file in the samples directory that lists, one id
-// per line, the samples fit for voice training. The corpus also holds bug
-// reproductions and noise, so nothing trains unless it is listed here.
-const AllowlistFile = "voice-training.txt"
-
 var safeID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`)
 
 // Options configures dataset preparation. ConvertAudio can replace ffmpeg for
 // tests or integrations; nil resolves and runs ffmpeg from PATH.
 type Options struct {
-	SamplesDir   string
+	StoreRoot    string
 	OutputDir    string
 	FFmpegPath   string
 	ConvertAudio func(ctx context.Context, input, output string) error
@@ -46,53 +40,44 @@ type Result struct {
 	Samples   int
 }
 
-// Prepare converts corpus.tsv samples into the LJSpeech directory layout.
+// Prepare converts voice-purpose samples into the LJSpeech directory layout.
 // Output is assembled in a sibling temporary directory and swapped into place
 // only after every sample has been converted and validated.
 func Prepare(ctx context.Context, opts Options) (Result, error) {
-	if strings.TrimSpace(opts.SamplesDir) == "" || strings.TrimSpace(opts.OutputDir) == "" {
-		return Result{}, errors.New("samples and output directories are required")
+	if strings.TrimSpace(opts.StoreRoot) == "" || strings.TrimSpace(opts.OutputDir) == "" {
+		return Result{}, errors.New("sample store and output directories are required")
 	}
-	samplesDir, err := filepath.Abs(opts.SamplesDir)
+	storeRoot, err := filepath.Abs(opts.StoreRoot)
 	if err != nil {
-		return Result{}, fmt.Errorf("resolve samples directory: %w", err)
+		return Result{}, fmt.Errorf("resolve sample store: %w", err)
 	}
 	outputDir, err := filepath.Abs(opts.OutputDir)
 	if err != nil {
 		return Result{}, fmt.Errorf("resolve output directory: %w", err)
 	}
-	if outputDir == samplesDir || within(outputDir, samplesDir) || within(samplesDir, outputDir) {
-		return Result{}, errors.New("output directory must be separate from the samples directory")
+	if outputDir == storeRoot || within(outputDir, storeRoot) || within(storeRoot, outputDir) {
+		return Result{}, errors.New("output directory must be separate from the sample store")
 	}
-	manifestPath := devsample.ManifestPathIn(samplesDir)
-	manifest, err := os.ReadFile(manifestPath)
+	store, err := sample.OpenReadOnly(storeRoot)
 	if err != nil {
-		return Result{}, fmt.Errorf("read corpus manifest %s: %w", manifestPath, err)
+		return Result{}, fmt.Errorf("open sample store %s: %w", storeRoot, err)
 	}
-	samples, err := devsample.ParseManifest(manifest)
+	samples, err := store.List(sample.Voice)
 	if err != nil {
-		return Result{}, fmt.Errorf("parse corpus manifest: %w", err)
+		return Result{}, fmt.Errorf("list voice samples: %w", err)
 	}
 	if len(samples) == 0 {
-		return Result{}, errors.New("corpus contains no samples")
-	}
-	allowed, err := readAllowlist(filepath.Join(samplesDir, AllowlistFile))
-	if err != nil {
-		return Result{}, err
-	}
-	samples, err = filterAllowed(samples, allowed)
-	if err != nil {
-		return Result{}, err
+		return Result{}, errors.New("sample store contains no voice samples")
 	}
 	transcribed := samples[:0]
 	for _, sample := range samples {
-		if strings.TrimSpace(sample.Text) != "" {
+		if strings.TrimSpace(sample.Transcript) != "" {
 			transcribed = append(transcribed, sample)
 		}
 	}
 	samples = transcribed
 	if len(samples) == 0 {
-		return Result{}, errors.New("corpus contains no transcribed samples")
+		return Result{}, errors.New("sample store contains no transcribed voice samples")
 	}
 	if err := validateSamples(samples); err != nil {
 		return Result{}, err
@@ -128,31 +113,31 @@ func Prepare(ctx context.Context, opts Options) (Result, error) {
 		return Result{}, fmt.Errorf("create staged WAV directory: %w", err)
 	}
 	var metadata strings.Builder
+	resolvedStore, err := filepath.EvalSymlinks(storeRoot)
+	if err != nil {
+		return Result{}, fmt.Errorf("resolve sample store: %w", err)
+	}
 	for _, sample := range samples {
-		input := filepath.Join(samplesDir, filepath.FromSlash(sample.WAVFile))
+		input := store.AudioPath(sample)
 		resolvedInput, err := filepath.EvalSymlinks(input)
 		if err != nil {
-			return Result{}, fmt.Errorf("sample %q WAV %q: %w", sample.Name, sample.WAVFile, err)
+			return Result{}, fmt.Errorf("sample %q WAV %q: %w", sample.ID, sample.Audio, err)
 		}
-		resolvedSamples, err := filepath.EvalSymlinks(samplesDir)
-		if err != nil {
-			return Result{}, fmt.Errorf("resolve samples directory: %w", err)
-		}
-		if !within(resolvedSamples, resolvedInput) {
-			return Result{}, fmt.Errorf("sample %q WAV path resolves outside the samples directory", sample.Name)
+		if !within(resolvedStore, resolvedInput) {
+			return Result{}, fmt.Errorf("sample %q WAV path resolves outside the sample store", sample.ID)
 		}
 		info, err := os.Stat(resolvedInput)
 		if err != nil || !info.Mode().IsRegular() {
-			return Result{}, fmt.Errorf("sample %q WAV is not a regular file", sample.Name)
+			return Result{}, fmt.Errorf("sample %q WAV is not a regular file", sample.ID)
 		}
-		output := filepath.Join(stage, "wavs", sample.Name+".wav")
+		output := filepath.Join(stage, "wavs", sample.ID+".wav")
 		if err := convert(ctx, resolvedInput, output); err != nil {
-			return Result{}, fmt.Errorf("convert sample %q: %w", sample.Name, err)
+			return Result{}, fmt.Errorf("convert sample %q: %w", sample.ID, err)
 		}
 		if err := validateWAV(output); err != nil {
-			return Result{}, fmt.Errorf("converted sample %q: %w", sample.Name, err)
+			return Result{}, fmt.Errorf("converted sample %q: %w", sample.ID, err)
 		}
-		fmt.Fprintf(&metadata, "%s|%s|%s\n", sample.Name, sample.Text, sample.Text)
+		fmt.Fprintf(&metadata, "%s|%s|%s\n", sample.ID, sample.Transcript, sample.Transcript)
 	}
 	if err := os.WriteFile(filepath.Join(stage, "metadata.csv"), []byte(metadata.String()), 0600); err != nil {
 		return Result{}, fmt.Errorf("write LJSpeech metadata: %w", err)
@@ -163,76 +148,28 @@ func Prepare(ctx context.Context, opts Options) (Result, error) {
 	return Result{OutputDir: outputDir, Samples: len(samples)}, nil
 }
 
-// readAllowlist returns the sample ids listed in path. Blank lines and lines
-// starting with # are ignored.
-func readAllowlist(path string) (map[string]bool, error) {
-	data, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("voice training allowlist %s is missing: list the sample ids to train on, one per line", path)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("read voice training allowlist: %w", err)
-	}
-	allowed := map[string]bool{}
-	for line := range strings.Lines(string(data)) {
-		id := strings.TrimSpace(line)
-		if id == "" || strings.HasPrefix(id, "#") {
-			continue
-		}
-		allowed[id] = true
-	}
-	if len(allowed) == 0 {
-		return nil, fmt.Errorf("voice training allowlist %s lists no samples", path)
-	}
-	return allowed, nil
-}
-
-// filterAllowed keeps the allowlisted samples in corpus order and rejects
-// allowlist ids that the corpus does not contain.
-func filterAllowed(samples []devsample.Sample, allowed map[string]bool) ([]devsample.Sample, error) {
-	kept := make([]devsample.Sample, 0, len(allowed))
-	found := map[string]bool{}
-	for _, sample := range samples {
-		if allowed[sample.Name] {
-			kept = append(kept, sample)
-			found[sample.Name] = true
-		}
-	}
-	var missing []string
-	for id := range allowed {
-		if !found[id] {
-			missing = append(missing, id)
-		}
-	}
-	if len(missing) > 0 {
-		slices.Sort(missing)
-		return nil, fmt.Errorf("voice training allowlist names samples missing from the corpus: %s", strings.Join(missing, ", "))
-	}
-	return kept, nil
-}
-
-func validateSamples(samples []devsample.Sample) error {
+func validateSamples(samples []sample.Sample) error {
 	seen := make(map[string]bool, len(samples))
 	for _, sample := range samples {
-		if !safeID.MatchString(sample.Name) {
-			return fmt.Errorf("invalid sample ID %q: use 1-128 ASCII letters, digits, underscores, or hyphens; start with a letter or digit", sample.Name)
+		if !safeID.MatchString(sample.ID) {
+			return fmt.Errorf("invalid sample ID %q: use 1-128 ASCII letters, digits, underscores, or hyphens; start with a letter or digit", sample.ID)
 		}
-		if seen[sample.Name] {
-			return fmt.Errorf("duplicate sample ID %q", sample.Name)
+		if seen[sample.ID] {
+			return fmt.Errorf("duplicate sample ID %q", sample.ID)
 		}
-		seen[sample.Name] = true
-		text := strings.TrimSpace(sample.Text)
-		if text == "" || text != sample.Text || strings.ContainsRune(text, '|') {
-			return fmt.Errorf("sample %q has an empty, padded, or pipe-delimited transcript", sample.Name)
+		seen[sample.ID] = true
+		text := strings.TrimSpace(sample.Transcript)
+		if text == "" || text != sample.Transcript || strings.ContainsRune(text, '|') {
+			return fmt.Errorf("sample %q has an empty, padded, or pipe-delimited transcript", sample.ID)
 		}
 		for _, r := range text {
 			if unicode.IsControl(r) {
-				return fmt.Errorf("sample %q transcript contains a control character", sample.Name)
+				return fmt.Errorf("sample %q transcript contains a control character", sample.ID)
 			}
 		}
-		name := filepath.FromSlash(sample.WAVFile)
-		if sample.WAVFile == "" || filepath.IsAbs(name) || filepath.Clean(name) != name || name == "." || strings.HasPrefix(name, ".."+string(filepath.Separator)) {
-			return fmt.Errorf("sample %q has unsafe WAV path %q", sample.Name, sample.WAVFile)
+		name := filepath.FromSlash(sample.Audio)
+		if sample.Audio == "" || filepath.IsAbs(name) || filepath.Clean(name) != name || name == "." || strings.HasPrefix(name, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("sample %q has unsafe WAV path %q", sample.ID, sample.Audio)
 		}
 	}
 	return nil

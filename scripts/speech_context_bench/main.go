@@ -1,5 +1,5 @@
 // Command speech_context_bench compares prompted and unprompted small.en on a
-// private local WAV corpus described by a committed text-only manifest.
+// private local sample store.
 package main
 
 import (
@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -57,23 +56,42 @@ type summary struct {
 }
 
 func main() {
-	corpus := flag.String("corpus", "testdata/speech-context", "directory containing corpus.tsv and private WAV files")
+	corpus := flag.String("corpus", sample.Root(os.Getenv("XDG_DATA_HOME")), "sample store root")
 	model := flag.String("model", "small.en", "local Whisper model (benchmark target is small.en)")
 	threads := flag.Int("threads", 6, "voxtype inference threads")
+	listOnly := flag.Bool("list-only", false, "list matching store samples without running ASR")
 	flag.Parse()
-	if err := run(context.Background(), *corpus, *model, *threads); err != nil {
+	if err := run(context.Background(), *corpus, *model, *threads, *listOnly); err != nil {
 		fmt.Fprintln(os.Stderr, "speech-context benchmark:", err)
 		os.Exit(1)
 	}
 }
 
-func run(ctx context.Context, corpus, model string, threads int) error {
+func run(ctx context.Context, corpus, model string, threads int, listOnly bool) error {
 	if model != "small.en" {
 		return fmt.Errorf("model must be small.en, got %q", model)
 	}
-	fixtures, err := loadManifest(filepath.Join(corpus, "corpus.tsv"))
+	store, err := sample.OpenReadOnly(corpus)
 	if err != nil {
 		return err
+	}
+	items, err := store.List()
+	if err != nil {
+		return err
+	}
+	fixtures := make([]fixture, 0, len(items))
+	for _, item := range items {
+		fixtures = append(fixtures, fixture{
+			ID: item.ID, File: store.AudioPath(item),
+			Expected: item.Transcript, Keyterms: item.Keyterms,
+		})
+	}
+	if len(fixtures) == 0 {
+		return fmt.Errorf("%s has no samples", corpus)
+	}
+	if listOnly {
+		fmt.Printf("found %d sample(s) in %s\n", len(fixtures), corpus)
+		return nil
 	}
 	modelSpec, err := spec.LoadModels()
 	if err != nil {
@@ -93,10 +111,10 @@ func run(ctx context.Context, corpus, model string, threads int) error {
 
 	report := report{Model: model, Prompt: prompt}
 	for _, item := range fixtures {
-		wavPath := filepath.Join(corpus, item.File)
+		wavPath := item.File
 		if _, statErr := os.Stat(wavPath); statErr != nil {
 			if errors.Is(statErr, os.ErrNotExist) {
-				return fmt.Errorf("missing private fixture %s; see %s", wavPath, filepath.Join(corpus, "README.md"))
+				return fmt.Errorf("missing sample audio %s", wavPath)
 			}
 			return statErr
 		}
@@ -130,21 +148,6 @@ func run(ctx context.Context, corpus, model string, threads int) error {
 	}
 	fmt.Println(string(data))
 	return nil
-}
-
-func loadManifest(path string) ([]fixture, error) {
-	samples, err := sample.LoadLegacyTSV(filepath.Dir(path))
-	if err != nil {
-		return nil, err
-	}
-	var fixtures []fixture
-	for _, item := range samples {
-		fixtures = append(fixtures, fixture{ID: item.ID, File: item.Audio, Expected: item.Transcript, Keyterms: item.Keyterms})
-	}
-	if len(fixtures) == 0 {
-		return nil, fmt.Errorf("%s has no fixtures", path)
-	}
-	return fixtures, nil
 }
 
 func transcribe(ctx context.Context, model string, threads int, wavPath, prompt string) (string, time.Duration, error) {

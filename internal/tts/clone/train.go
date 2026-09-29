@@ -18,7 +18,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"ubunatic.com/voxi/internal/deps"
-	"ubunatic.com/voxi/internal/devsample"
+	"ubunatic.com/voxi/internal/sample"
 )
 
 const defaultBaseCheckpoint = "https://huggingface.co/datasets/rhasspy/piper-checkpoints/resolve/main/en/en_US/lessac/medium/epoch%3D2164-step%3D1355540.ckpt"
@@ -39,7 +39,14 @@ func newTrainCommand(d deps.Dependencies, run commandRunner) *cobra.Command {
 	if home == "" {
 		home, _ = os.UserHomeDir()
 	}
-	samplesDir := devsample.SamplesDir(home)
+	dataHome := ""
+	if d.Getenv != nil {
+		dataHome = d.Getenv("XDG_DATA_HOME")
+	}
+	if dataHome == "" {
+		dataHome = filepath.Join(home, ".local", "share")
+	}
+	storeRoot := sample.Root(dataHome)
 	datasetDir := filepath.Join(home, ".local", "share", "voxi", "voice-training", "dataset")
 	workDir := filepath.Join(home, ".local", "share", "voxi", "voice-training", "runs")
 	base := defaultBaseCheckpoint
@@ -51,7 +58,7 @@ func newTrainCommand(d deps.Dependencies, run commandRunner) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "train",
 		Short: "Fine-tune and install a custom Piper voice",
-		Long:  "Prepare local feedback samples, fine-tune a Piper medium checkpoint, export ONNX, and install the voice under ~/.local/share/voxi/voices/.",
+		Long:  "Prepare voice-purpose samples from the private sample store, fine-tune a Piper medium checkpoint, export ONNX, and install the voice under ~/.local/share/voxi/voices/.",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if !safeID.MatchString(name) {
@@ -95,7 +102,7 @@ func newTrainCommand(d deps.Dependencies, run commandRunner) *cobra.Command {
 			convert := func(ctx context.Context, input, output string) error {
 				return runCommand(ctx, ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", input, "-ar", fmt.Sprint(SampleRate), "-ac", fmt.Sprint(channels), "-c:a", "pcm_s16le", output)
 			}
-			prepared, err := Prepare(cmd.Context(), Options{SamplesDir: samplesDir, OutputDir: datasetDir, ConvertAudio: convert})
+			prepared, err := Prepare(cmd.Context(), Options{StoreRoot: storeRoot, OutputDir: datasetDir, ConvertAudio: convert})
 			if err != nil {
 				return fmt.Errorf("prepare voice training data: %w", err)
 			}
@@ -138,7 +145,7 @@ func newTrainCommand(d deps.Dependencies, run commandRunner) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", name, "voice name used for the installed ONNX files")
-	cmd.Flags().StringVar(&samplesDir, "store", samplesDir, "legacy sample directory (until store-backed voice training lands)")
+	cmd.Flags().StringVar(&storeRoot, "store", storeRoot, "private sample store root; only voice-purpose samples are used")
 	cmd.Flags().StringVar(&datasetDir, "dataset-dir", datasetDir, "prepared LJSpeech dataset directory")
 	cmd.Flags().StringVar(&base, "base", base, "local medium checkpoint path or checkpoint URL")
 	cmd.Flags().IntVar(&epochs, "epochs", epochs, "training epoch limit")

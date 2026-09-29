@@ -2,16 +2,20 @@ package devsample
 
 import (
 	"bufio"
-	"context"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 
 	"ubunatic.com/voxi/internal/deps"
 )
+
+func sanitizeText(text string) string {
+	text = strings.ReplaceAll(text, "\t", " ")
+	text = strings.ReplaceAll(text, "\r\n", " ")
+	text = strings.ReplaceAll(text, "\n", " ")
+	return strings.TrimSpace(text)
+}
 
 // promptText reads the manually corrected ground-truth transcript from
 // stdin: what the user actually said, typed/pasted exactly, not raw ASR
@@ -95,8 +99,7 @@ func PromptText(out io.Writer, in *bufio.Reader, stdinFile *os.File, prompt, raw
 	return promptText(out, in, stdinFile, prompt, rawDefault)
 }
 
-// promptKeyterms reads the manifest's keyterms field: comma- or
-// `|`-separated terms, matching corpus.tsv's `|` convention on output.
+// promptKeyterms reads comma- or `|`-separated keyterms.
 // suggested is the pre-computed intersection of the corrected transcript
 // against the known vocabulary (see suggestKeyterms); a blank Enter (or
 // EOF, or no input reader) accepts it as-is, which is empty whenever
@@ -158,30 +161,6 @@ func PromptKeyterms(out io.Writer, in *bufio.Reader, stdinFile *os.File, suggest
 	return promptKeyterms(out, in, stdinFile, suggested)
 }
 
-// Remove deletes both the WAV and its manifest entry for name.
-func Remove(home, rawName string) error {
-	name, err := SanitizeName(rawName)
-	if err != nil {
-		return err
-	}
-	samples, err := LoadManifest(home)
-	if err != nil {
-		return err
-	}
-	if _, exists := Find(samples, name); !exists {
-		return fmt.Errorf("sample %q was not found", name)
-	}
-	wavPath := WAVPath(home, name)
-	if err := os.Remove(wavPath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("remove sample audio: %w", err)
-	}
-	samples, _ = RemoveEntry(samples, name)
-	if err := SaveManifest(home, samples); err != nil {
-		return fmt.Errorf("update sample manifest: %w", err)
-	}
-	return nil
-}
-
 // PlayerCommand picks a standard local audio player, mirroring the same
 // LookPath-fallback style used to pick the capture tool.
 func PlayerCommand(d deps.Dependencies) (name string, args func(wavPath string) []string, err error) {
@@ -198,221 +177,4 @@ func PlayerCommand(d deps.Dependencies) (name string, args func(wavPath string) 
 		}
 	}
 	return "", nil, fmt.Errorf("no local audio player found (looked for paplay, aplay, ffplay)")
-}
-
-// Play re-plays the stored WAV for name through a standard local player.
-func Play(ctx context.Context, d deps.Dependencies, home, rawName string) error {
-	name, err := SanitizeName(rawName)
-	if err != nil {
-		return err
-	}
-	samples, err := LoadManifest(home)
-	if err != nil {
-		return err
-	}
-	if _, exists := Find(samples, name); !exists {
-		return fmt.Errorf("sample %q was not found", name)
-	}
-	wavPath := WAVPath(home, name)
-	if _, statErr := os.Stat(wavPath); statErr != nil {
-		return fmt.Errorf("sample audio missing: %w", statErr)
-	}
-	playerName, playerArgs, err := PlayerCommand(d)
-	if err != nil {
-		return err
-	}
-	if d.Run == nil {
-		return fmt.Errorf("no runner available to play %s", wavPath)
-	}
-	if err := d.Run(ctx, playerName, playerArgs(wavPath)...); err != nil {
-		return fmt.Errorf("play sample with %s: %w", playerName, err)
-	}
-	return nil
-}
-
-// ImportSummary tallies the outcome of an Import run.
-type ImportSummary struct {
-	Imported int
-	Skipped  int // name collision, left alone because overwrite was not set
-	Failed   int // validation failure (missing/unreadable WAV, malformed fields)
-}
-
-// Import merges every sample from sourceDir's corpus.tsv-compatible manifest
-// into the private SamplesDir(home), copying each referenced WAV alongside
-// it. It is the local-directory counterpart to Record: sourceDir must
-// already be a plain directory in the same layout as SamplesDir/
-// PublicSamplesDir (see issue 117) -- Import performs no network/scp/rsync
-// transfer of its own.
-//
-// Each source entry is validated independently (name sanitizes, text is
-// non-empty, and its WAV exists and is readable) before it is accepted, so
-// one malformed or partially-copied entry cannot abort the rest of the
-// import or poison the local library; a validation failure is reported to
-// out and counted in Failed, and the loop continues. A name already present
-// in the destination manifest is left untouched and counted as Skipped
-// unless overwrite is set, in which case it is replaced.
-//
-// Like Record, each accepted entry's WAV is written to a temp file and
-// renamed into place before that entry is folded into the manifest and
-// saved, so a crash mid-import leaves the on-disk state either missing an
-// entry entirely or fully complete for it -- never a half-copied WAV
-// referenced by the manifest. Unlike Record, each entry's Timestamp is
-// carried over verbatim from the source manifest (this is a transfer, not a
-// fresh recording) and the manifest is saved once per accepted entry rather
-// than once per SamplesDir(home), because that is unsafe if the whole
-// process is interrupted mid-run.
-func Import(home, sourceDir string, overwrite bool, out io.Writer) (ImportSummary, error) {
-	var summary ImportSummary
-
-	// LoadManifestIn treats a missing corpus.tsv as an empty manifest, which
-	// would otherwise make a typo'd or not-yet-copied-over sourceDir report a
-	// silent "0 imported, 0 skipped, 0 failed" success. Fail loudly instead.
-	if info, statErr := os.Stat(sourceDir); statErr != nil {
-		return summary, fmt.Errorf("source directory: %w", statErr)
-	} else if !info.IsDir() {
-		return summary, fmt.Errorf("source path %s is not a directory", sourceDir)
-	}
-
-	source, err := LoadManifestIn(sourceDir)
-	if err != nil {
-		return summary, fmt.Errorf("read source manifest: %w", err)
-	}
-
-	dir := SamplesDir(home)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return summary, fmt.Errorf("create samples directory: %w", err)
-	}
-	if err := os.Chmod(dir, 0o700); err != nil {
-		return summary, fmt.Errorf("secure samples directory: %w", err)
-	}
-
-	for _, s := range source {
-		name, err := SanitizeName(s.Name)
-		if err != nil {
-			summary.Failed++
-			fmt.Fprintf(out, "skip %q: invalid name: %v\n", s.Name, err)
-			continue
-		}
-		text := sanitizeText(s.Text)
-		if text == "" {
-			summary.Failed++
-			fmt.Fprintf(out, "skip %q: empty transcript text\n", name)
-			continue
-		}
-		srcWAVPath := filepath.Join(sourceDir, s.WAVFile)
-		srcBytes, err := os.ReadFile(srcWAVPath)
-		if err != nil {
-			summary.Failed++
-			fmt.Fprintf(out, "skip %q: read source wav %s: %v\n", name, srcWAVPath, err)
-			continue
-		}
-
-		samples, err := LoadManifest(home)
-		if err != nil {
-			return summary, err
-		}
-		if _, exists := Find(samples, name); exists && !overwrite {
-			summary.Skipped++
-			fmt.Fprintf(out, "skip %q: already exists locally, use --overwrite to replace\n", name)
-			continue
-		}
-
-		wavPath := WAVPath(home, name)
-		tmpWAVPath := wavPath + ".tmp"
-		if err := os.WriteFile(tmpWAVPath, srcBytes, 0o600); err != nil {
-			os.Remove(tmpWAVPath)
-			summary.Failed++
-			fmt.Fprintf(out, "skip %q: write sample audio: %v\n", name, err)
-			continue
-		}
-		if err := os.Rename(tmpWAVPath, wavPath); err != nil {
-			os.Remove(tmpWAVPath)
-			summary.Failed++
-			fmt.Fprintf(out, "skip %q: finalize sample audio: %v\n", name, err)
-			continue
-		}
-		if err := os.Chmod(wavPath, 0o600); err != nil {
-			summary.Failed++
-			fmt.Fprintf(out, "skip %q: secure sample audio: %v\n", name, err)
-			continue
-		}
-
-		samples = Upsert(samples, Sample{
-			Name:      name,
-			WAVFile:   name + ".wav",
-			Text:      text,
-			Keyterms:  s.Keyterms,
-			Timestamp: s.Timestamp,
-		})
-		if err := SaveManifest(home, samples); err != nil {
-			summary.Failed++
-			fmt.Fprintf(out, "skip %q: save sample manifest (audio saved at %s): %v\n", name, wavPath, err)
-			continue
-		}
-
-		summary.Imported++
-		fmt.Fprintf(out, "imported %q (%s)\n", name, wavPath)
-	}
-
-	fmt.Fprintf(out, "Import complete: %d imported, %d skipped, %d failed\n", summary.Imported, summary.Skipped, summary.Failed)
-	if summary.Failed > 0 {
-		return summary, fmt.Errorf("import completed with %d failed entries", summary.Failed)
-	}
-	return summary, nil
-}
-
-// Promote moves a private sample into the public, git-tracked corpus
-// (PublicSamplesDir): FLAC-encodes its WAV (lossless, smaller for git-lfs)
-// into publicDir, copies its manifest entry, then deletes both the WAV and
-// the manifest entry from the private store. It is the caller's
-// responsibility to confirm the sample contains no real speech before
-// promoting it — Promote itself does not (and cannot) verify that.
-func Promote(ctx context.Context, home, publicDir, name string) error {
-	private, err := LoadManifest(home)
-	if err != nil {
-		return err
-	}
-	sample, ok := Find(private, name)
-	if !ok {
-		return fmt.Errorf("sample %q not found", name)
-	}
-
-	public, err := LoadManifestIn(publicDir)
-	if err != nil {
-		return err
-	}
-
-	if err := os.MkdirAll(publicDir, 0o755); err != nil {
-		return fmt.Errorf("create public samples directory: %w", err)
-	}
-	publicWAVFile := name + ".flac"
-	publicWAVPath := filepath.Join(publicDir, publicWAVFile)
-	tmpWAVPath := publicWAVPath + ".tmp"
-	// -compression_level 12 is FLAC's max (lossless): smallest git-lfs
-	// payload at the cost of slower encoding, which is fine for a one-off
-	// promotion.
-	cmd := exec.CommandContext(ctx, "ffmpeg", "-y", "-i", WAVPath(home, name),
-		"-compression_level", "12", "-f", "flac", tmpWAVPath)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		os.Remove(tmpWAVPath)
-		return fmt.Errorf("flac-encode public sample: %w\n%s", err, out)
-	}
-	if err := os.Rename(tmpWAVPath, publicWAVPath); err != nil {
-		os.Remove(tmpWAVPath)
-		return fmt.Errorf("finalize public sample audio: %w", err)
-	}
-
-	sample.WAVFile = publicWAVFile
-	if err := SaveManifestIn(publicDir, Upsert(public, sample)); err != nil {
-		return fmt.Errorf("save public sample manifest (audio encoded at %s): %w", publicWAVPath, err)
-	}
-
-	remaining, _ := RemoveEntry(private, name)
-	if err := SaveManifest(home, remaining); err != nil {
-		return fmt.Errorf("sample promoted to %s but failed to remove from private manifest: %w", publicWAVPath, err)
-	}
-	if err := os.Remove(WAVPath(home, name)); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("sample promoted to %s but failed to delete private wav: %w", publicWAVPath, err)
-	}
-	return nil
 }

@@ -136,7 +136,7 @@ func suggestKeyterms(text string, vocabulary []string, maxTermChars int) []strin
 }
 
 // normalizeKeyterms turns free-form comma- or `|`-separated user input into
-// corpus.tsv's canonical `|`-joined keyterms field, trimming whitespace and
+// a canonical `|`-joined keyterm string, trimming whitespace and
 // dropping case-insensitive duplicates while preserving first-seen order
 // and casing.
 func normalizeKeyterms(raw string) string {

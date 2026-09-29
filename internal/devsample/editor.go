@@ -93,7 +93,7 @@ func editTranscriptInEditor(ctx context.Context, editor, text string) (string, e
 }
 
 // stripCommentLines drops lines starting with '#' and flattens the rest into
-// one sanitized line, as corpus.tsv requires.
+// one sanitized line.
 func stripCommentLines(s string) string {
 	var kept []string
 	for _, line := range strings.Split(s, "\n") {

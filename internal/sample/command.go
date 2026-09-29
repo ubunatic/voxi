@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -48,37 +47,6 @@ func NewCommand(d deps.Dependencies) *cobra.Command {
 	}}
 	list.Flags().StringVar(&purpose, "purpose", "", "limit to dictation, noise, or voice")
 	cmd.AddCommand(list)
-	var migrationDryRun bool
-	var migrationFrom string
-	migrate := &cobra.Command{Use: "migrate", Short: "Copy legacy samples into the private store", Long: "Print and optionally perform the one-shot legacy sample migration.\n\nExample: voxi sample migrate --dry-run", Args: cobra.NoArgs, RunE: func(c *cobra.Command, _ []string) error {
-		from := migrationFrom
-		if from == "" {
-			home := ""
-			if d.Getenv != nil {
-				home = d.Getenv("HOME")
-			}
-			from = filepath.Join(home, ".config", "voxi", "samples")
-		}
-		plan, err := PlanMigration(from, time.Now())
-		if err != nil {
-			return err
-		}
-		printMigrationPlan(d.Stdout, plan)
-		if len(plan.Items) == 0 {
-			return fmt.Errorf("migration has no valid samples")
-		}
-		if migrationDryRun {
-			return nil
-		}
-		s, err := open()
-		if err != nil {
-			return err
-		}
-		return Migrate(s, from, plan)
-	}}
-	migrate.Flags().BoolVar(&migrationDryRun, "dry-run", false, "print the migration plan without writing")
-	migrate.Flags().StringVar(&migrationFrom, "from", "", "legacy samples directory")
-	cmd.AddCommand(migrate)
 	cmd.AddCommand(&cobra.Command{Use: "show ID", Short: "Show sample metadata", Long: "Show the metadata for one sample.\n\nExample: voxi sample show greeting", Args: cobra.ExactArgs(1), RunE: func(c *cobra.Command, a []string) error {
 		s, err := open()
 		if err != nil {
@@ -233,21 +201,6 @@ func NewCommand(d deps.Dependencies) *cobra.Command {
 		return d.Run(c.Context(), player, args(s.AudioPath(x))...)
 	}})
 	return cmd
-}
-
-func printMigrationPlan(out io.Writer, plan MigrationPlan) {
-	totals := map[Purpose]int{}
-	fmt.Fprintln(out, "Migration plan:")
-	for _, item := range plan.Items {
-		fmt.Fprintf(out, "  %s\t%s\t%s\n", item.Sample.ID, item.Sample.Purpose, item.Reason)
-		totals[item.Sample.Purpose]++
-	}
-	for _, purpose := range []Purpose{Dictation, Noise, Voice} {
-		fmt.Fprintf(out, "  total %s: %d\n", purpose, totals[purpose])
-	}
-	for _, problem := range plan.Problems {
-		fmt.Fprintf(out, "  problem: %s\n", problem)
-	}
 }
 
 func voicePurposeError() error {

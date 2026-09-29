@@ -2,7 +2,6 @@
 package sample
 
 import (
-	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -56,6 +55,21 @@ func Root(dataHome string) string {
 
 func Open(root string) (*Store, error)       { return open(root, 0o700, 0o600) }
 func OpenPublic(root string) (*Store, error) { return open(root, 0o755, 0o644) }
+
+// OpenReadOnly opens an existing store without creating or changing files.
+func OpenReadOnly(root string) (*Store, error) {
+	if root == "" {
+		return nil, errors.New("sample store root is empty")
+	}
+	info, err := os.Stat(root)
+	if err != nil {
+		return nil, err
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("sample store root %s is not a directory", root)
+	}
+	return &Store{root: root, dirMode: 0o700, fileMode: 0o600}, nil
+}
 func open(root string, dm, fm os.FileMode) (*Store, error) {
 	if root == "" {
 		return nil, errors.New("sample store root is empty")
@@ -333,54 +347,4 @@ func (s *Store) Move(id string, p Purpose) error {
 		return rollback(err, audioMoved)
 	}
 	return nil
-}
-
-// LoadLegacyTSV reads a legacy corpus.tsv directory without modifying it.
-func LoadLegacyTSV(dir string) ([]Sample, error) {
-	f, err := os.Open(filepath.Join(dir, "corpus.tsv"))
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	var out []Sample
-	sc := bufio.NewScanner(f)
-	for line := 1; sc.Scan(); line++ {
-		t := sc.Text()
-		if t == "" || strings.HasPrefix(t, "#") {
-			continue
-		}
-		fields := strings.SplitN(t, "\t", 4)
-		if len(fields) < 3 {
-			return nil, fmt.Errorf("corpus.tsv:%d: malformed row", line)
-		}
-		id := fields[0]
-		if !validID(id) {
-			return nil, fmt.Errorf("corpus.tsv:%d: invalid id %q", line, id)
-		}
-		x := Sample{ID: id, Audio: fields[1], Transcript: fields[2], Purpose: Dictation, Created: time.Time{}}
-		if len(fields) == 4 && fields[3] != "" {
-			x.Keyterms = strings.Split(fields[3], "|")
-		}
-		out = append(out, x)
-	}
-	return out, sc.Err()
-}
-
-// ExportTSV formats samples in the legacy four-column corpus format.
-func ExportTSV(samples []Sample) []byte {
-	x := append([]Sample(nil), samples...)
-	sort.Slice(x, func(i, j int) bool { return x[i].ID < x[j].ID })
-	var b strings.Builder
-	b.WriteString("# id\twav file\texpected transcript\tkeyterms separated by |\n")
-	for _, s := range x {
-		audio := s.Audio
-		if audio == "" {
-			audio = s.ID + ".wav"
-		}
-		fmt.Fprintf(&b, "%s\t%s\t%s\t%s\n", s.ID, audio, sanitize(s.Transcript), sanitize(strings.Join(s.Keyterms, "|")))
-	}
-	return []byte(b.String())
-}
-func sanitize(s string) string {
-	return strings.TrimSpace(strings.NewReplacer("\t", " ", "\r", " ", "\n", " ").Replace(s))
 }

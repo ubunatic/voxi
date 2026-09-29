@@ -31,7 +31,7 @@ func newCloneCommand(t *testing.T, home string) (*bytes.Buffer, func(args ...str
 
 func TestVoiceCloneInstallsSingleAllowlistedSample(t *testing.T) {
 	home := t.TempDir()
-	samples := filepath.Join(home, ".config", "voxi", "samples")
+	samples := filepath.Join(home, ".local", "share", "voxi", "samples")
 	if err := os.MkdirAll(samples, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func TestVoiceCloneInstallsSingleAllowlistedSample(t *testing.T) {
 
 func TestVoiceCloneRequiresSampleFlagWhenMultipleAllowlisted(t *testing.T) {
 	home := t.TempDir()
-	samples := filepath.Join(home, ".config", "voxi", "samples")
+	samples := filepath.Join(home, ".local", "share", "voxi", "samples")
 	if err := os.MkdirAll(samples, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestVoiceCloneRequiresSampleFlagWhenMultipleAllowlisted(t *testing.T) {
 
 	_, run := newCloneCommand(t, home)
 	if err := run(); err == nil {
-		t.Fatal("expected an error requiring --sample when multiple samples are allowlisted")
+		t.Fatal("expected an error requiring --sample when multiple voice samples exist")
 	}
 
 	if err := run("--sample", "second"); err != nil {
@@ -91,7 +91,7 @@ func TestVoiceCloneRequiresSampleFlagWhenMultipleAllowlisted(t *testing.T) {
 
 func TestVoiceCloneRejectsUnknownSample(t *testing.T) {
 	home := t.TempDir()
-	samples := filepath.Join(home, ".config", "voxi", "samples")
+	samples := filepath.Join(home, ".local", "share", "voxi", "samples")
 	if err := os.MkdirAll(samples, 0700); err != nil {
 		t.Fatal(err)
 	}

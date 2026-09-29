@@ -41,3 +41,13 @@ M1 delivered commit 4982deb. The live migration ran on the dev machine on 2026-0
 3. Remove the old `internal/devsample` store code (`corpus.tsv` read/write, allowlist, promote/import) that has no remaining caller; keep shared helpers still used (capture, editor, transcribe, playback). List what remains and why.
 4. `voice prepare|train|clone --store` must read from the store's `voice/` purpose instead of the legacy dir and `voice-training.txt` (only voice samples; the allowlist file is no longer read). Fix the flag help text accordingly. If this turns out larger than a small change, do items 1-3 and 5 and report exactly what is left for issue 173.
 5. Never modify or delete anything under `~/.config/voxi/samples`; the user deletes the legacy dir by hand. Tests use `t.TempDir()`.
+
+## Handoff (session wrap, 2026-09-29): M2 interrupted, tree does not build
+
+The developer was stopped mid-way through M2 (legacy cleanup). The WIP is committed as-is so nothing is lost; it is **not finished and does not build**.
+
+- Known breakage: `scripts/clack_features/main.go` has syntax errors from an interrupted edit (around lines 109-140, `loadPublicManifest` and following functions). `go build ./...` fails there.
+- Seen in the tree (unverified): `internal/sample/migrate.go`, its test, and `internal/devsample/{audiofile,sample}*.go` deleted; edits in `internal/sample`, `internal/devsample`, `internal/tts/clone`, `internal/feedback/import_test.go`, both scripts.
+- Live migration is DONE and verified (29 samples in `~/.local/share/voxi/samples`); the legacy dir is untouched and must stay so.
+
+Resume point: finish M2 items 1-5 above. First `go build ./... && go vet ./...`, fix `clack_features`, then check each M2 item against the diff; run `make test-q1` once, `make install`. Do not close the ticket until the build and tests are green.

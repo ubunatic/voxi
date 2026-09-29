@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"ubunatic.com/voxi/internal/deps"
-	"ubunatic.com/voxi/internal/devsample"
+	"ubunatic.com/voxi/internal/sample"
 )
 
 // NewCommand creates the voice management command.
@@ -23,7 +23,14 @@ func NewPrepareCommand(d deps.Dependencies) *cobra.Command {
 	if d.Getenv != nil {
 		home = d.Getenv("HOME")
 	}
-	samplesDir := devsample.SamplesDir(home)
+	dataHome := ""
+	if d.Getenv != nil {
+		dataHome = d.Getenv("XDG_DATA_HOME")
+	}
+	if dataHome == "" {
+		dataHome = filepath.Join(home, ".local", "share")
+	}
+	storeRoot := sample.Root(dataHome)
 	outputDir := filepath.Join(home, ".local", "share", "voxi", "voice-training", "dataset")
 	cmd := &cobra.Command{
 		Use:   "prepare",
@@ -44,7 +51,7 @@ func NewPrepareCommand(d deps.Dependencies) *cobra.Command {
 			convert := func(ctx context.Context, input, output string) error {
 				return run(ctx, ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", input, "-ar", fmt.Sprint(SampleRate), "-ac", fmt.Sprint(channels), "-c:a", "pcm_s16le", output)
 			}
-			result, err := Prepare(cmd.Context(), Options{SamplesDir: samplesDir, OutputDir: outputDir, ConvertAudio: convert})
+			result, err := Prepare(cmd.Context(), Options{StoreRoot: storeRoot, OutputDir: outputDir, ConvertAudio: convert})
 			if err != nil {
 				return err
 			}
@@ -52,7 +59,7 @@ func NewPrepareCommand(d deps.Dependencies) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&samplesDir, "store", samplesDir, "legacy sample directory (until store-backed voice training lands)")
+	cmd.Flags().StringVar(&storeRoot, "store", storeRoot, "private sample store root; only voice-purpose samples are used")
 	cmd.Flags().StringVar(&outputDir, "output-dir", outputDir, "directory for the generated LJSpeech dataset")
 	cmd.SilenceUsage = true
 	return cmd

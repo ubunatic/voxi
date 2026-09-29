@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"ubunatic.com/voxi/internal/config"
 	"ubunatic.com/voxi/internal/deps"
-	"ubunatic.com/voxi/internal/devsample"
+	"ubunatic.com/voxi/internal/sample"
 )
 
 // VoicesDir is where cloned-voice reference WAVs are installed (issue 155 M2).
@@ -20,24 +20,30 @@ func VoicesDir(home string) string {
 }
 
 // NewCloneCommand creates `voxi voice clone`, which installs a reference WAV
-// from the issue 153 allowlist as a cloned-voice profile for a future engine
+// from voice-purpose store data as a cloned-voice profile for a future engine
 // backend and records it in ~/.config/voxi/config.yaml.
 //
 // Consent: the voice profile is local and private, and is intended to hold
-// only the user's own recorded voice (the same allowlist voice training
-// already relies on for issue 153).
+// only the user's own recorded voice, tracked through sample-store consent.
 func NewCloneCommand(d deps.Dependencies) *cobra.Command {
 	home := ""
 	if d.Getenv != nil {
 		home = d.Getenv("HOME")
 	}
-	samplesDir := devsample.SamplesDir(home)
+	dataHome := ""
+	if d.Getenv != nil {
+		dataHome = d.Getenv("XDG_DATA_HOME")
+	}
+	if dataHome == "" {
+		dataHome = filepath.Join(home, ".local", "share")
+	}
+	storeRoot := sample.Root(dataHome)
 	sampleID := ""
 	name := "cloned"
 	cmd := &cobra.Command{
 		Use:   "clone",
-		Short: "Install an allowlisted speech sample as a cloned-voice profile",
-		Long: "Copies one allowlisted sample WAV (see voice-training.txt, issue 153) to " +
+		Short: "Install a voice sample as a cloned-voice profile",
+		Long: "Copies one voice-purpose sample WAV from the private sample store to " +
 			"~/.local/share/voxi/voices/<name>.wav and records it as " +
 			"tts_voice_reference_wav in ~/.config/voxi/config.yaml for a cloned-voice engine. " +
 			"Only clone your own voice.",
@@ -46,36 +52,32 @@ func NewCloneCommand(d deps.Dependencies) *cobra.Command {
 			if !safeID.MatchString(name) {
 				return fmt.Errorf("invalid voice name %q: use 1-128 ASCII letters, digits, underscores, or hyphens; start with a letter or digit", name)
 			}
-			samples, err := devsample.LoadManifestIn(samplesDir)
+			store, err := sample.OpenReadOnly(storeRoot)
 			if err != nil {
-				return fmt.Errorf("read corpus manifest: %w", err)
+				return fmt.Errorf("open sample store: %w", err)
 			}
-			allowed, err := readAllowlist(filepath.Join(samplesDir, AllowlistFile))
-			if err != nil {
-				return err
-			}
-			kept, err := filterAllowed(samples, allowed)
+			kept, err := store.List(sample.Voice)
 			if err != nil {
 				return err
 			}
 			if len(kept) == 0 {
-				return fmt.Errorf("no allowlisted samples in %s", samplesDir)
+				return fmt.Errorf("no voice-purpose samples in %s", storeRoot)
 			}
 			sample, err := selectSample(kept, sampleID)
 			if err != nil {
 				return err
 			}
-			input := filepath.Join(samplesDir, filepath.FromSlash(sample.WAVFile))
+			input := store.AudioPath(sample)
 			resolvedInput, err := filepath.EvalSymlinks(input)
 			if err != nil {
-				return fmt.Errorf("sample %q WAV %q: %w", sample.Name, sample.WAVFile, err)
+				return fmt.Errorf("sample %q WAV %q: %w", sample.ID, sample.Audio, err)
 			}
-			resolvedSamples, err := filepath.EvalSymlinks(samplesDir)
+			resolvedSamples, err := filepath.EvalSymlinks(storeRoot)
 			if err != nil {
-				return fmt.Errorf("resolve samples directory: %w", err)
+				return fmt.Errorf("resolve sample store: %w", err)
 			}
 			if !within(resolvedSamples, resolvedInput) {
-				return fmt.Errorf("sample %q WAV path resolves outside the samples directory", sample.Name)
+				return fmt.Errorf("sample %q WAV path resolves outside the sample store", sample.ID)
 			}
 			voiceDir := VoicesDir(home)
 			if err := os.MkdirAll(voiceDir, 0700); err != nil {
@@ -88,33 +90,35 @@ func NewCloneCommand(d deps.Dependencies) *cobra.Command {
 			if err := config.SetTTSVoiceReferenceWav(home, target); err != nil {
 				return fmt.Errorf("record tts_voice_reference_wav: %w", err)
 			}
-			fmt.Fprintf(d.Stdout, "installed cloned-voice profile %s from sample %q at %s\n", name, sample.Name, target)
+			fmt.Fprintf(d.Stdout, "installed cloned-voice profile %s from sample %q at %s\n", name, sample.ID, target)
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&samplesDir, "store", samplesDir, "legacy sample directory (until store-backed voice cloning lands)")
-	cmd.Flags().StringVar(&sampleID, "sample", sampleID, "allowlisted sample id to clone (required when more than one is allowlisted)")
+	cmd.Flags().StringVar(&storeRoot, "store", storeRoot, "private sample store root; only voice-purpose samples are used")
+	cmd.Flags().StringVar(&sampleID, "sample", sampleID, "voice sample id to clone (required when more than one voice sample exists)")
 	cmd.Flags().StringVar(&name, "name", name, "voice profile name used for the installed WAV")
 	cmd.SilenceUsage = true
 	return cmd
 }
 
-func selectSample(kept []devsample.Sample, sampleID string) (devsample.Sample, error) {
+func selectSample(kept []sample.Sample, sampleID string) (sample.Sample, error) {
 	if sampleID == "" {
 		if len(kept) == 1 {
 			return kept[0], nil
 		}
 		var ids []string
 		for _, s := range kept {
-			ids = append(ids, s.Name)
+			ids = append(ids, s.ID)
 		}
 		slices.Sort(ids)
-		return devsample.Sample{}, fmt.Errorf("multiple allowlisted samples available; choose one with --sample: %s", strings.Join(ids, ", "))
+		return sample.Sample{}, fmt.Errorf("multiple voice-purpose samples available; choose one with --sample: %s", strings.Join(ids, ", "))
 	}
-	if sample, ok := devsample.Find(kept, sampleID); ok {
-		return sample, nil
+	for _, item := range kept {
+		if item.ID == sampleID {
+			return item, nil
+		}
 	}
-	return devsample.Sample{}, fmt.Errorf("sample %q is not allowlisted in %s", sampleID, AllowlistFile)
+	return sample.Sample{}, fmt.Errorf("sample %q is not a voice-purpose sample", sampleID)
 }
 
 // copyReplacing copies source to destination, replacing any existing file

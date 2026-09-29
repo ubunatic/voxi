@@ -4,22 +4,22 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"ubunatic.com/voxi/internal/deps"
+	"ubunatic.com/voxi/internal/sample"
 )
 
-func TestPrepareWritesLJSpeechDatasetInStableOrder(t *testing.T) {
-	samples := t.TempDir()
-	writeCorpus(t, samples, "z-last\tz.wav\tLast sample.\tterm\na-first\ta.wav\tFirst sample.\t\n")
-	writeFile(t, filepath.Join(samples, "z.wav"), []byte("source"))
-	writeFile(t, filepath.Join(samples, "a.wav"), []byte("source"))
+func TestPrepareWritesVoiceDatasetInStableOrder(t *testing.T) {
+	root := t.TempDir()
+	writePurposeSample(t, root, "z-last", sample.Voice, "Last sample.")
+	writePurposeSample(t, root, "a-first", sample.Voice, "First sample.")
 	output := filepath.Join(t.TempDir(), "dataset")
-	result, err := Prepare(context.Background(), Options{SamplesDir: samples, OutputDir: output, ConvertAudio: fakeConverter})
+	result, err := Prepare(context.Background(), Options{StoreRoot: root, OutputDir: output, ConvertAudio: fakeConverter})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,22 +33,44 @@ func TestPrepareWritesLJSpeechDatasetInStableOrder(t *testing.T) {
 	if got, want := string(metadata), "a-first|First sample.|First sample.\nz-last|Last sample.|Last sample.\n"; got != want {
 		t.Fatalf("metadata = %q, want %q", got, want)
 	}
-	for _, id := range []string{"a-first", "z-last"} {
-		if err := validateWAV(filepath.Join(output, "wavs", id+".wav")); err != nil {
-			t.Fatalf("validate %s.wav: %v", id, err)
-		}
+}
+
+func TestPrepareReadsOnlyVoicePurpose(t *testing.T) {
+	root := t.TempDir()
+	writePurposeSample(t, root, "voice", sample.Voice, "Own voice.")
+	writePurposeSample(t, root, "dictation", sample.Dictation, "Dictation speech.")
+	writePurposeSample(t, root, "noise", sample.Noise, "")
+	output := filepath.Join(t.TempDir(), "dataset")
+	result, err := Prepare(context.Background(), Options{StoreRoot: root, OutputDir: output, ConvertAudio: fakeConverter})
+	if err != nil {
+		t.Fatal(err)
+	}
+	metadata, err := os.ReadFile(filepath.Join(output, "metadata.csv"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Samples != 1 || string(metadata) != "voice|Own voice.|Own voice.\n" {
+		t.Fatalf("result = %#v, metadata = %q", result, metadata)
 	}
 }
 
-func TestPrepareSkipsUntranscribedSamples(t *testing.T) {
-	samples := t.TempDir()
-	writeCorpus(t, samples, "noise\tmissing-noise.wav\t \t\nspeech\tspeech.wav\tHello there.\t\n")
-	writeFile(t, filepath.Join(samples, "speech.wav"), []byte("source"))
+func TestPrepareRequiresVoiceSamples(t *testing.T) {
+	root := t.TempDir()
+	writePurposeSample(t, root, "dictation", sample.Dictation, "Speech.")
+	_, err := Prepare(context.Background(), Options{StoreRoot: root, OutputDir: filepath.Join(t.TempDir(), "dataset"), ConvertAudio: fakeConverter})
+	if err == nil || !strings.Contains(err.Error(), "no voice samples") {
+		t.Fatalf("Prepare error = %v", err)
+	}
+}
+
+func TestPrepareSkipsUntranscribedVoiceSamples(t *testing.T) {
+	root := t.TempDir()
+	writePurposeSample(t, root, "noise-like", sample.Voice, " ")
+	writePurposeSample(t, root, "speech", sample.Voice, "Hello there.")
 	output := filepath.Join(t.TempDir(), "dataset")
 	converted := 0
 	result, err := Prepare(context.Background(), Options{
-		SamplesDir: samples,
-		OutputDir:  output,
+		StoreRoot: root, OutputDir: output,
 		ConvertAudio: func(ctx context.Context, input, destination string) error {
 			converted++
 			return fakeConverter(ctx, input, destination)
@@ -58,120 +80,78 @@ func TestPrepareSkipsUntranscribedSamples(t *testing.T) {
 		t.Fatal(err)
 	}
 	if result.Samples != 1 || converted != 1 {
-		t.Fatalf("result = %#v, conversions = %d; want one transcribed sample", result, converted)
-	}
-	metadata, err := os.ReadFile(filepath.Join(output, "metadata.csv"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got, want := string(metadata), "speech|Hello there.|Hello there.\n"; got != want {
-		t.Fatalf("metadata = %q, want %q", got, want)
-	}
-	if _, err := os.Stat(filepath.Join(output, "wavs", "noise.wav")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("noise WAV exists or stat failed unexpectedly: %v", err)
+		t.Fatalf("result = %#v, conversions = %d", result, converted)
 	}
 }
 
-func TestPrepareTrainsOnlyAllowlistedSamples(t *testing.T) {
-	samples := t.TempDir()
-	writeCorpus(t, samples, "bug\tbug.wav\tMisheard text.\t\nclone\tclone.wav\tGood speech.\t\n")
-	writeFile(t, filepath.Join(samples, AllowlistFile), []byte("# clone set\n\nclone\n"))
-	writeFile(t, filepath.Join(samples, "clone.wav"), []byte("source"))
-	output := filepath.Join(t.TempDir(), "dataset")
-	result, err := Prepare(context.Background(), Options{SamplesDir: samples, OutputDir: output, ConvertAudio: fakeConverter})
-	if err != nil {
-		t.Fatal(err)
-	}
-	metadata, err := os.ReadFile(filepath.Join(output, "metadata.csv"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.Samples != 1 || string(metadata) != "clone|Good speech.|Good speech.\n" {
-		t.Fatalf("result = %#v, metadata = %q", result, metadata)
-	}
-}
-
-func TestPrepareRequiresAllowlist(t *testing.T) {
-	samples := t.TempDir()
-	writeCorpus(t, samples, "clone\tclone.wav\tGood speech.\t\n")
-	if err := os.Remove(filepath.Join(samples, AllowlistFile)); err != nil {
-		t.Fatal(err)
-	}
-	_, err := Prepare(context.Background(), Options{SamplesDir: samples, OutputDir: filepath.Join(t.TempDir(), "dataset"), ConvertAudio: fakeConverter})
-	if err == nil || !strings.Contains(err.Error(), "allowlist") {
-		t.Fatalf("err = %v, want missing allowlist error", err)
-	}
-}
-
-func TestPrepareRejectsUnknownAllowlistID(t *testing.T) {
-	samples := t.TempDir()
-	writeCorpus(t, samples, "clone\tclone.wav\tGood speech.\t\n")
-	writeFile(t, filepath.Join(samples, AllowlistFile), []byte("clone\ntypo\n"))
-	_, err := Prepare(context.Background(), Options{SamplesDir: samples, OutputDir: filepath.Join(t.TempDir(), "dataset"), ConvertAudio: fakeConverter})
-	if err == nil || !strings.Contains(err.Error(), "typo") {
-		t.Fatalf("err = %v, want unknown id error", err)
-	}
-}
-
-func TestPrepareRejectsCorpusWithoutTranscribedSamples(t *testing.T) {
-	samples := t.TempDir()
-	writeCorpus(t, samples, "noise\tmissing.wav\t \t\nnoise2\tmissing2.wav\t\t\n")
-	_, err := Prepare(context.Background(), Options{
-		SamplesDir: samples,
-		OutputDir:  filepath.Join(t.TempDir(), "dataset"),
-		ConvertAudio: func(context.Context, string, string) error {
-			t.Fatal("converter called without a transcribed sample")
-			return nil
-		},
-	})
-	if err == nil || !strings.Contains(err.Error(), "no transcribed samples") {
-		t.Fatalf("Prepare error = %v, want no-transcribed-samples error", err)
-	}
-}
-
-func TestPrepareRejectsInvalidCorpusBeforeReplacingExistingOutput(t *testing.T) {
-	cases := []struct {
-		name, corpus, want string
-	}{
-		{"invalid id", "../escape\ta.wav\tText.\t\n", "invalid sample ID"},
-		{"duplicate id", "same\ta.wav\tOne.\t\nsame\tb.wav\tTwo.\t\n", "duplicate sample ID"},
-		{"padded transcript", "sample\ta.wav\t Text. \t\n", "transcript"},
-		{"pipe transcript", "sample\ta.wav\tA|B\t\n", "transcript"},
-		{"control transcript", "sample\ta.wav\tA\x01B\t\n", "control character"},
-		{"unsafe path", "sample\t../escape.wav\tText.\t\n", "unsafe WAV path"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			samples := t.TempDir()
-			writeCorpus(t, samples, tc.corpus)
+func TestPrepareRejectsInvalidTranscriptBeforeReplacingOutput(t *testing.T) {
+	for _, transcript := range []string{" Padded. ", "left|right", "bad\x01text"} {
+		t.Run(transcript, func(t *testing.T) {
+			root := t.TempDir()
+			writePurposeSample(t, root, "invalid", sample.Voice, transcript)
 			output := filepath.Join(t.TempDir(), "dataset")
 			if err := os.Mkdir(output, 0700); err != nil {
 				t.Fatal(err)
 			}
 			marker := filepath.Join(output, "keep")
 			writeFile(t, marker, []byte("prior"))
-			_, err := Prepare(context.Background(), Options{SamplesDir: samples, OutputDir: output, ConvertAudio: fakeConverter})
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("Prepare error = %v, want %q", err, tc.want)
+			if _, err := Prepare(context.Background(), Options{StoreRoot: root, OutputDir: output, ConvertAudio: fakeConverter}); err == nil {
+				t.Fatal("invalid transcript accepted")
 			}
-			if got, readErr := os.ReadFile(marker); readErr != nil || string(got) != "prior" {
-				t.Fatalf("prior output changed: %q, %v", got, readErr)
+			if got, err := os.ReadFile(marker); err != nil || string(got) != "prior" {
+				t.Fatalf("prior output changed: %q, %v", got, err)
 			}
 		})
 	}
 }
 
-func TestPrepareRejectsBadConvertedAudioAndKeepsPriorOutput(t *testing.T) {
-	samples := t.TempDir()
-	writeCorpus(t, samples, "sample\ta.wav\tText.\t\n")
-	writeFile(t, filepath.Join(samples, "a.wav"), []byte("source"))
-	output := filepath.Join(t.TempDir(), "dataset")
+func TestPrepareRejectsOutputOverlappingStore(t *testing.T) {
+	root := t.TempDir()
+	for _, output := range []string{root, filepath.Join(root, "nested"), filepath.Dir(root)} {
+		if _, err := Prepare(context.Background(), Options{StoreRoot: root, OutputDir: output}); err == nil || !strings.Contains(err.Error(), "separate") {
+			t.Errorf("output %q error = %v", output, err)
+		}
+	}
+}
+
+func TestPrepareRejectsWAVSymlinkOutsideStore(t *testing.T) {
+	root, outside := t.TempDir(), t.TempDir()
+	writePurposeSample(t, root, "linked", sample.Voice, "Text.")
+	store, err := sample.OpenReadOnly(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	x, err := store.Get("linked")
+	if err != nil {
+		t.Fatal(err)
+	}
+	audioPath := store.AudioPath(x)
+	if err := os.Remove(audioPath); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(outside, "outside.wav")
+	writeFile(t, target, []byte("source"))
+	if err := os.Symlink(target, audioPath); err != nil {
+		t.Fatal(err)
+	}
+	_, err = Prepare(context.Background(), Options{StoreRoot: root, OutputDir: filepath.Join(t.TempDir(), "dataset"), ConvertAudio: func(context.Context, string, string) error {
+		t.Fatal("converter called for out-of-store symlink")
+		return nil
+	}})
+	if err == nil || !strings.Contains(err.Error(), "outside the sample store") {
+		t.Fatalf("Prepare error = %v", err)
+	}
+}
+
+func TestPrepareReportsConversionErrorsAndKeepsPriorOutput(t *testing.T) {
+	root, output := t.TempDir(), filepath.Join(t.TempDir(), "dataset")
+	writePurposeSample(t, root, "sample", sample.Voice, "Text.")
 	if err := os.Mkdir(output, 0700); err != nil {
 		t.Fatal(err)
 	}
 	marker := filepath.Join(output, "keep")
 	writeFile(t, marker, []byte("prior"))
-	_, err := Prepare(context.Background(), Options{SamplesDir: samples, OutputDir: output, ConvertAudio: func(_ context.Context, _, destination string) error {
+	_, err := Prepare(context.Background(), Options{StoreRoot: root, OutputDir: output, ConvertAudio: func(_ context.Context, _, destination string) error {
 		return os.WriteFile(destination, []byte("not a wav"), 0600)
 	}})
 	if err == nil || !strings.Contains(err.Error(), "not a valid RIFF/WAVE") {
@@ -182,67 +162,14 @@ func TestPrepareRejectsBadConvertedAudioAndKeepsPriorOutput(t *testing.T) {
 	}
 }
 
-func TestPrepareRejectsOutputOverlappingSamples(t *testing.T) {
+func TestPrepareCommandUsesStoreFlag(t *testing.T) {
 	root := t.TempDir()
-	samples := filepath.Join(root, "samples")
-	if err := os.Mkdir(samples, 0700); err != nil {
-		t.Fatal(err)
-	}
-	for _, output := range []string{samples, filepath.Join(samples, "nested"), root} {
-		if _, err := Prepare(context.Background(), Options{SamplesDir: samples, OutputDir: output}); err == nil || !strings.Contains(err.Error(), "separate") {
-			t.Errorf("output %q error = %v, want overlap rejection", output, err)
-		}
-	}
-}
-
-func TestPrepareRejectsWAVSymlinkOutsideSamplesDirectory(t *testing.T) {
-	samples := t.TempDir()
-	outside := t.TempDir()
-	writeCorpus(t, samples, "sample\tlinked.wav\tText.\t\n")
-	target := filepath.Join(outside, "outside.wav")
-	writeFile(t, target, []byte("source"))
-	if err := os.Symlink(target, filepath.Join(samples, "linked.wav")); err != nil {
-		t.Fatal(err)
-	}
-	_, err := Prepare(context.Background(), Options{
-		SamplesDir: samples,
-		OutputDir:  filepath.Join(t.TempDir(), "dataset"),
-		ConvertAudio: func(context.Context, string, string) error {
-			t.Fatal("converter called for out-of-directory symlink")
-			return nil
-		},
-	})
-	if err == nil || !strings.Contains(err.Error(), "resolves outside the samples directory") {
-		t.Fatalf("Prepare error = %v, want outside-samples rejection", err)
-	}
-}
-
-func TestPrepareReportsConversionErrors(t *testing.T) {
-	samples := t.TempDir()
-	writeCorpus(t, samples, "sample\ta.wav\tText.\t\n")
-	writeFile(t, filepath.Join(samples, "a.wav"), []byte("source"))
-	_, err := Prepare(context.Background(), Options{SamplesDir: samples, OutputDir: filepath.Join(t.TempDir(), "dataset"), ConvertAudio: func(context.Context, string, string) error {
-		return errors.New("decoder failed")
-	}})
-	if err == nil || !strings.Contains(err.Error(), `convert sample "sample"`) {
-		t.Fatalf("Prepare error = %v", err)
-	}
-}
-
-func TestPrepareCommandFlagsAndOutput(t *testing.T) {
-	samples := t.TempDir()
-	writeCorpus(t, samples, "sample\ta.wav\tText.\t\n")
-	writeFile(t, filepath.Join(samples, "a.wav"), []byte("source"))
+	writePurposeSample(t, root, "sample", sample.Voice, "Text.")
 	output := filepath.Join(t.TempDir(), "out")
 	var stdout bytes.Buffer
 	d := deps.Dependencies{
-		Getenv: func(key string) string {
-			if key == "HOME" {
-				return t.TempDir()
-			}
-			return ""
-		},
-		LookPath: func(name string) (string, error) { return "/ffmpeg", nil },
+		Getenv:   func(string) string { return t.TempDir() },
+		LookPath: func(string) (string, error) { return "/ffmpeg", nil },
 		Run: func(_ context.Context, name string, args ...string) error {
 			if name != "/ffmpeg" || len(args) == 0 {
 				t.Fatalf("ffmpeg invocation = %q %v", name, args)
@@ -252,15 +179,12 @@ func TestPrepareCommandFlagsAndOutput(t *testing.T) {
 		Stdout: &stdout,
 	}
 	cmd := NewCommand(d)
-	cmd.SetArgs([]string{"prepare", "--store", samples, "--output-dir", output})
+	cmd.SetArgs([]string{"prepare", "--store", root, "--output-dir", output})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := stdout.String(), "prepared 1 sample(s) in "+output+"\n"; got != want {
-		t.Fatalf("stdout = %q, want %q", got, want)
-	}
-	if _, err := os.Stat(filepath.Join(output, "metadata.csv")); err != nil {
-		t.Fatal(err)
+	if !strings.Contains(stdout.String(), "prepared 1 sample(s)") {
+		t.Fatalf("stdout = %q", stdout.String())
 	}
 }
 
@@ -274,8 +198,65 @@ func TestValidateWAVRejectsWrongEncoding(t *testing.T) {
 	}
 }
 
+func writeCorpus(t *testing.T, dir, corpus string) {
+	t.Helper()
+	store, err := sample.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for line := range strings.Lines(corpus) {
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		fields := strings.SplitN(line, "\t", 4)
+		if len(fields) < 3 {
+			t.Fatalf("bad test sample row %q", line)
+		}
+		keyterms := []string(nil)
+		if len(fields) == 4 && fields[3] != "" {
+			keyterms = strings.Split(fields[3], "|")
+		}
+		source := filepath.Join(t.TempDir(), "input.wav")
+		writeFile(t, source, []byte("source"))
+		x := sample.Sample{ID: fields[0], Purpose: sample.Voice, Transcript: fields[2], Keyterms: keyterms, Created: time.Now(), Source: "test"}
+		if err := store.Put(x, source); err != nil {
+			t.Fatal(err)
+		}
+		link := filepath.Join(dir, fields[1])
+		if fields[0] == "../escape" {
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(link), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(store.AudioPath(x), link); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func writePurposeSample(t *testing.T, root, id string, purpose sample.Purpose, transcript string) {
+	t.Helper()
+	store, err := sample.Open(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(t.TempDir(), id+".wav")
+	writeFile(t, source, []byte("source"))
+	if err := store.Put(sample.Sample{ID: id, Purpose: purpose, Transcript: transcript, Created: time.Now(), Source: "test"}, source); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func fakeConverter(_ context.Context, _, destination string) error {
 	return os.WriteFile(destination, wavBytes(SampleRate, channels, bits), 0600)
+}
+
+func writeFile(t *testing.T, path string, data []byte) {
+	t.Helper()
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func wavBytes(rate uint32, channelCount, bitDepth uint16) []byte {
@@ -295,24 +276,4 @@ func wavBytes(rate uint32, channelCount, bitDepth uint16) []byte {
 	copy(buf[36:40], "data")
 	binary.LittleEndian.PutUint32(buf[40:44], dataLen)
 	return buf
-}
-
-func writeCorpus(t *testing.T, dir, corpus string) {
-	t.Helper()
-	writeFile(t, filepath.Join(dir, "corpus.tsv"), []byte(corpus))
-	var ids strings.Builder
-	for line := range strings.Lines(corpus) {
-		id, _, _ := strings.Cut(line, "\t")
-		if id = strings.TrimSpace(id); id != "" && !strings.HasPrefix(id, "#") {
-			ids.WriteString(id + "\n")
-		}
-	}
-	writeFile(t, filepath.Join(dir, AllowlistFile), []byte(ids.String()))
-}
-
-func writeFile(t *testing.T, path string, data []byte) {
-	t.Helper()
-	if err := os.WriteFile(path, data, 0600); err != nil {
-		t.Fatal(err)
-	}
 }

@@ -6,10 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
-
-	"ubunatic.com/voxi/internal/audio"
-	"ubunatic.com/voxi/internal/devsample"
 )
 
 const testMaxTermChars = 64
@@ -236,50 +232,6 @@ func TestImportUnknownOnlyAreaRejected(t *testing.T) {
 	err := Import(home, src, ImportOptions{Only: []string{"bogus"}}, testMaxTermChars, out)
 	if err == nil {
 		t.Fatal("Import: want error for unknown --only area, got nil")
-	}
-}
-
-func TestImportSamplesDelegatesToDevsample(t *testing.T) {
-	home := t.TempDir()
-	src := t.TempDir()
-
-	ts := time.Date(2024, 5, 6, 7, 8, 9, 0, time.UTC)
-	sourceSamplesDir := filepath.Join(src, "samples")
-	if err := os.MkdirAll(sourceSamplesDir, 0o700); err != nil {
-		t.Fatalf("mkdir source samples dir: %v", err)
-	}
-	if err := audio.WriteWAVAudio(devsample.WAVPathIn(sourceSamplesDir, "greeting"), bytes.Repeat([]byte{0, 1}, 8000), 16000); err != nil {
-		t.Fatalf("write fixture wav: %v", err)
-	}
-	entry := devsample.Sample{Name: "greeting", WAVFile: "greeting.wav", Text: "hello there", Timestamp: ts}
-	if err := devsample.SaveManifestIn(sourceSamplesDir, []devsample.Sample{entry}); err != nil {
-		t.Fatalf("save source manifest: %v", err)
-	}
-
-	out := &bytes.Buffer{}
-	if err := Import(home, src, ImportOptions{}, testMaxTermChars, out); err != nil {
-		t.Fatalf("Import: %v\noutput:\n%s", err, out.String())
-	}
-	if _, err := os.Stat(devsample.ManifestPath(home)); !os.IsNotExist(err) {
-		t.Fatalf("config import wrote legacy samples: %v", err)
-	}
-	t.Skip("legacy config sample import test retired by issue 172")
-
-	samples, err := devsample.LoadManifest(home)
-	if err != nil {
-		t.Fatalf("LoadManifest: %v", err)
-	}
-	got, ok := devsample.Find(samples, "greeting")
-	if !ok {
-		t.Fatal("sample not imported into destination manifest")
-	}
-	if got.Text != "hello there" {
-		t.Errorf("Text = %q, want %q", got.Text, "hello there")
-	}
-	// devsample.Import prints its own per-entry + summary lines; Import must
-	// not silently swallow them.
-	if !strings.Contains(out.String(), "imported \"greeting\"") {
-		t.Errorf("output missing devsample's own import line:\n%s", out.String())
 	}
 }
 

@@ -42,6 +42,27 @@ func TestStoreRoundTripAndPrivatePermissions(t *testing.T) {
 	}
 }
 
+func TestOpenReadOnlyDoesNotChangeStorePermissions(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "store")
+	if err := os.Mkdir(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s, err := OpenReadOnly(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.List(); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o755 {
+		t.Fatalf("read-only open changed store mode to %o", info.Mode().Perm())
+	}
+}
+
 func TestDuplicateAcrossPurposesAndMoveDelete(t *testing.T) {
 	s, err := Open(filepath.Join(t.TempDir(), "store"))
 	if err != nil {
@@ -204,7 +225,7 @@ func TestCorruptSidecarDoesNotHideOtherSamples(t *testing.T) {
 	}
 }
 
-func TestPublicPermissionsAndTSV(t *testing.T) {
+func TestPublicPermissions(t *testing.T) {
 	s, err := OpenPublic(filepath.Join(t.TempDir(), "public"))
 	if err != nil {
 		t.Fatal(err)
@@ -219,24 +240,5 @@ func TestPublicPermissionsAndTSV(t *testing.T) {
 	}
 	if info.Mode().Perm() != 0o644 {
 		t.Errorf("public sidecar mode %o", info.Mode().Perm())
-	}
-	want := "# id\twav file\texpected transcript\tkeyterms separated by |\na\ta.wav\tspeech\t\nb\tb.flac\ta noise\tkey|term\n"
-	if got := string(ExportTSV(items)); got != want {
-		t.Errorf("ExportTSV:\n%s\nwant:\n%s", got, want)
-	}
-}
-
-func TestLoadLegacyTSV(t *testing.T) {
-	dir := t.TempDir()
-	data := "# header\none\tone.wav\tHi there\tHi|there\n"
-	if err := os.WriteFile(filepath.Join(dir, "corpus.tsv"), []byte(data), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	got, err := LoadLegacyTSV(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 1 || got[0].ID != "one" || got[0].Audio != "one.wav" || len(got[0].Keyterms) != 2 {
-		t.Fatalf("legacy parse: %+v", got)
 	}
 }
