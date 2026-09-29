@@ -16,8 +16,8 @@ its `corpus.tsv` header still calls it "private local dev samples".
 
 ## 2. Technical Specification
 
-- User decision needed: keep, trim or remove the two `bg-voice-*` files (removal from history is a
-  separate, explicit step, not part of this ticket).
+- **Decided by the user (2026-09-29): the two `bg-voice-*` files stay public. Do not ask again.** Keep them
+  in the move; no trimming or history removal.
 - `git mv testdata/noise-samples testdata/samples/noise`, write sidecars, drop `corpus.tsv`,
   update `.gitattributes`/LFS rules and every path reference (`clack_features`, docs).
 
