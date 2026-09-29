@@ -176,8 +176,9 @@ Order: 170 -> 171 -> 172 -> 173; 174 after 170; 175 last. 168 (merge) builds on 
 ## 10. Open Uncertainties
 
 - Decided: the two public `bg-voice-*` noise files stay public (user, 2026-09-29). Do not ask again.
-- The migration heuristic may misclassify; e.g. `artifact-keyboard-smash` and the `kt-sentences-plus-*`
-  mixes are speech plus noise. They default to `dictation` and the dry-run plan must be reviewed.
+- Decided (user, 2026-09-29): `kt-sentences-plus-*` are noisy real-world speech for dev/testing, purpose `dictation`
+  (speech must be detected). Imperfect dictation samples stay `dictation`. The migration heuristic may still
+  misclassify others, e.g. `artifact-keyboard-smash`; the dry-run plan must be reviewed.
 - Decided: no backup step is needed for the move to `$XDG_DATA_HOME` (user, 2026-09-29).
 - VoxCPM `full` preset expects the exact reference text in `spec/tts.yaml`; linking it to a sample id
   assumes the sample transcript matches that text. Not verified for `calm-reference`.
