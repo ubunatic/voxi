@@ -431,8 +431,17 @@ func (b *Buffer) Update(c Chunk) (Chunk, error) {
 
 // List returns the most recent chunks up to the buffer's capacity, ordered oldest-first
 // (or newest-first if reverse is true). Chunks beyond capacity that are still on disk
-// (shadow-deleted) are not included; use Get with an explicit index to access them.
+// (shadow-deleted) are not included; use ListAll to include them or Get with an explicit index.
 func (b *Buffer) List(reverse bool) ([]Chunk, error) {
+	return b.list(reverse, false)
+}
+
+// ListAll is like List but also returns shadow-deleted chunks that are still on disk.
+func (b *Buffer) ListAll(reverse bool) ([]Chunk, error) {
+	return b.list(reverse, true)
+}
+
+func (b *Buffer) list(reverse, includeShadow bool) ([]Chunk, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -442,7 +451,7 @@ func (b *Buffer) List(reverse bool) ([]Chunk, error) {
 	}
 	all := m.Chunks
 	// Apply the list-view capacity window: show only the most recent `capacity` entries.
-	if len(all) > b.capacity {
+	if !includeShadow && len(all) > b.capacity {
 		all = all[len(all)-b.capacity:]
 	}
 	chunks := make([]Chunk, len(all))

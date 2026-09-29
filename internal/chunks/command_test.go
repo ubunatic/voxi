@@ -3,6 +3,7 @@ package chunks
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -379,5 +380,52 @@ func TestChunksCommandPlay(t *testing.T) {
 	}
 	if !strings.HasPrefix(played, "aplay ") || !strings.HasSuffix(played, "chunk_0001.wav") {
 		t.Fatalf("unexpected play invocation: %q", played)
+	}
+}
+
+func TestChunksListAllIncludesShadowChunks(t *testing.T) {
+	buf := NewBuffer(t.TempDir(), 2)
+	for i := 0; i < 5; i++ {
+		if _, err := buf.Add(Chunk{CleanedTranscript: string(rune('a' + i))}, []byte{1, 2, 3}, 16000); err != nil {
+			t.Fatal(err)
+		}
+	}
+	count := func(args ...string) int {
+		t.Helper()
+		out := &bytes.Buffer{}
+		cmd := NewCommand(deps.Dependencies{Stdout: out}, buf)
+		cmd.SetArgs(append([]string{"list", "--format", "json"}, args...))
+		if err := cmd.Execute(); err != nil {
+			t.Fatal(err)
+		}
+		var got []Chunk
+		if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+			t.Fatalf("decode %q: %v", out.String(), err)
+		}
+		return len(got)
+	}
+	if n := count(); n != 2 {
+		t.Errorf("default list shows %d chunks, want 2", n)
+	}
+	if n := count("--all"); n != 5 {
+		t.Errorf("list --all shows %d chunks, want 5", n)
+	}
+}
+
+func TestChunksDeleteAllReportsShadowChunks(t *testing.T) {
+	buf := NewBuffer(t.TempDir(), 2)
+	for i := 0; i < 5; i++ {
+		if _, err := buf.Add(Chunk{CleanedTranscript: string(rune('a' + i))}, []byte{1, 2, 3}, 16000); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out := &bytes.Buffer{}
+	cmd := NewCommand(deps.Dependencies{Stdout: out}, buf)
+	cmd.SetArgs([]string{"delete", "--all", "--yes"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if want := "Deleted 5 chunks.\n"; out.String() != want {
+		t.Errorf("output = %q, want %q", out.String(), want)
 	}
 }

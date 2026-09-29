@@ -26,6 +26,7 @@ func NewCommand(d deps.Dependencies, buf *Buffer) *cobra.Command {
 	}
 
 	var reverse bool
+	var listAll bool
 	var listFormat string
 	var colorMode string
 	listCmd := &cobra.Command{
@@ -36,7 +37,11 @@ func NewCommand(d deps.Dependencies, buf *Buffer) *cobra.Command {
 			if !listing.IsValidColorMode(colorMode) {
 				return fmt.Errorf("invalid --color value %q: must be one of %s", colorMode, strings.Join(listing.ValidColorModes, ", "))
 			}
-			chunks, err := buf.List(reverse)
+			list := buf.List
+			if listAll {
+				list = buf.ListAll
+			}
+			chunks, err := list(reverse)
 			if err != nil {
 				return err
 			}
@@ -111,6 +116,7 @@ func NewCommand(d deps.Dependencies, buf *Buffer) *cobra.Command {
 		},
 	}
 	listCmd.Flags().BoolVarP(&reverse, "reverse", "r", false, "list newest chunks first")
+	listCmd.Flags().BoolVarP(&listAll, "all", "a", false, "include older chunks that are kept on disk but hidden by default")
 	listCmd.Flags().StringVar(&listFormat, "format", "text", "output format (text or json)")
 	listCmd.Flags().StringVar(&colorMode, "color", listing.ColorAuto, "colorize the LEVEL sparkline by loudness: auto, always, or never")
 
@@ -169,7 +175,7 @@ func NewCommand(d deps.Dependencies, buf *Buffer) *cobra.Command {
 			}
 			if deleteAll {
 				if !deleteYes && isInteractiveInput(d.Stdin) {
-					chunks, err := buf.List(false)
+					chunks, err := buf.ListAll(false)
 					if err != nil {
 						return err
 					}
@@ -187,7 +193,7 @@ func NewCommand(d deps.Dependencies, buf *Buffer) *cobra.Command {
 						return nil
 					}
 				}
-				all, err := buf.List(false)
+				all, err := buf.ListAll(false)
 				if err != nil {
 					return err
 				}
