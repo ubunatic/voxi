@@ -187,9 +187,25 @@ func NewCommand(d deps.Dependencies, buf *Buffer) *cobra.Command {
 						return nil
 					}
 				}
-				return buf.Delete("all")
+				all, err := buf.List(false)
+				if err != nil {
+					return err
+				}
+				if err := buf.Delete("all"); err != nil {
+					return err
+				}
+				fmt.Fprintf(d.Stdout, "Deleted %d chunks.\n", len(all))
+				return nil
 			}
-			return buf.Delete(args[0])
+			chunk, err := buf.Get(args[0])
+			if err != nil {
+				return err
+			}
+			if err := buf.Delete(args[0]); err != nil {
+				return err
+			}
+			fmt.Fprintf(d.Stdout, "Deleted chunk %d.\n", chunk.Index)
+			return nil
 		},
 	}
 	deleteCmd.Flags().BoolVar(&deleteAll, "all", false, "delete every stored chunk")

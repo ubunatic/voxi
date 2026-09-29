@@ -135,10 +135,14 @@ func TestChunksCommandDelete(t *testing.T) {
 	t.Run("single and last", func(t *testing.T) {
 		buf := newBuffer(t)
 		for i, selector := range []string{"2", "last"} {
-			cmd := NewCommand(deps.Dependencies{Stdout: &bytes.Buffer{}}, buf)
+			out := &bytes.Buffer{}
+			cmd := NewCommand(deps.Dependencies{Stdout: out}, buf)
 			cmd.SetArgs([]string{"delete", selector})
 			if err := cmd.Execute(); err != nil {
 				t.Fatalf("delete %s: %v", selector, err)
+			}
+			if want := []string{"Deleted chunk 2.\n", "Deleted chunk 3.\n"}[i]; out.String() != want {
+				t.Errorf("delete %s output = %q, want %q", selector, out.String(), want)
 			}
 			if i == 0 {
 				got, err := buf.List(false)
@@ -168,10 +172,14 @@ func TestChunksCommandDelete(t *testing.T) {
 
 	t.Run("all", func(t *testing.T) {
 		buf := newBuffer(t)
-		cmd := NewCommand(deps.Dependencies{Stdout: &bytes.Buffer{}}, buf)
+		out := &bytes.Buffer{}
+		cmd := NewCommand(deps.Dependencies{Stdout: out}, buf)
 		cmd.SetArgs([]string{"delete", "--all", "--yes"})
 		if err := cmd.Execute(); err != nil {
 			t.Fatal(err)
+		}
+		if want := "Deleted 3 chunks.\n"; out.String() != want {
+			t.Errorf("delete --all output = %q, want %q", out.String(), want)
 		}
 		got, err := buf.List(false)
 		if err != nil || len(got) != 0 {
