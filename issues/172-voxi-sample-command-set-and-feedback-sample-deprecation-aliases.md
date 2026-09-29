@@ -1,6 +1,6 @@
 # 172 — voxi sample command set and feedback sample deprecation aliases
 
-**Status**: Open
+**Status**: Closed — M1-M3 delivered: voxi sample list|show|play|add|record|edit|move|delete, feedback sample removed, empty noise transcripts allowed; tests pass, installed; import/publish/merge deferred to 173/174/168
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: CLI
