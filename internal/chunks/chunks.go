@@ -487,6 +487,105 @@ func (b *Buffer) Get(selector string) (Chunk, error) {
 	return Chunk{}, fmt.Errorf("chunk %d not found in recent chunks buffer", idx)
 }
 
+// Delete removes one chunk selected by its stable index, or every chunk when
+// selector is "all". Files are first moved out of the live namespace, then the
+// manifest is atomically replaced; a manifest error restores the staged files.
+func (b *Buffer) Delete(selector string) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	m, err := b.loadManifestLocked()
+	if err != nil {
+		return err
+	}
+	if len(m.Chunks) == 0 {
+		return fmt.Errorf("no chunks recorded yet")
+	}
+
+	var deleted []Chunk
+	if selector == "all" {
+		deleted = append(deleted, m.Chunks...)
+		m.Chunks = nil
+	} else {
+		chunk, err := findChunk(m.Chunks, selector)
+		if err != nil {
+			return err
+		}
+		deleted = append(deleted, chunk)
+		kept := make([]Chunk, 0, len(m.Chunks)-1)
+		for _, existing := range m.Chunks {
+			if existing.Index != chunk.Index {
+				kept = append(kept, existing)
+			}
+		}
+		m.Chunks = kept
+	}
+
+	stageDir, err := os.MkdirTemp(b.dir, ".delete-*")
+	if err != nil {
+		return fmt.Errorf("stage chunk deletion: %w", err)
+	}
+	var staged []struct{ original, staged string }
+	rollback := func() error {
+		var rollbackErr error
+		for i := len(staged) - 1; i >= 0; i-- {
+			if err := os.Rename(staged[i].staged, staged[i].original); err != nil && rollbackErr == nil {
+				rollbackErr = err
+			}
+		}
+		_ = os.RemoveAll(stageDir)
+		return rollbackErr
+	}
+	for _, chunk := range deleted {
+		paths := []string{b.WAVPath(chunk), filepath.Join(b.dir, fmt.Sprintf("chunk_%04d.json", chunk.Index))}
+		for _, original := range paths {
+			if _, err := os.Lstat(original); os.IsNotExist(err) {
+				continue
+			} else if err != nil {
+				_ = rollback()
+				return fmt.Errorf("inspect chunk file %s: %w", original, err)
+			}
+			stagedPath := filepath.Join(stageDir, filepath.Base(original))
+			if err := os.Rename(original, stagedPath); err != nil {
+				rollbackErr := rollback()
+				if rollbackErr != nil {
+					return fmt.Errorf("stage chunk file %s: %w (rollback failed: %v)", original, err, rollbackErr)
+				}
+				return fmt.Errorf("stage chunk file %s: %w", original, err)
+			}
+			staged = append(staged, struct{ original, staged string }{original, stagedPath})
+		}
+	}
+	if err := b.saveManifestLocked(m); err != nil {
+		rollbackErr := rollback()
+		if rollbackErr != nil {
+			return fmt.Errorf("save chunk manifest: %w (rollback failed: %v)", err, rollbackErr)
+		}
+		return err
+	}
+	if err := os.RemoveAll(stageDir); err != nil {
+		return fmt.Errorf("remove deleted chunk files: %w", err)
+	}
+	return nil
+}
+
+func findChunk(chunks []Chunk, selector string) (Chunk, error) {
+	selector = strings.TrimSpace(selector)
+	if selector == "last" {
+		return chunks[len(chunks)-1], nil
+	}
+	idx, err := strconv.Atoi(selector)
+	if err != nil {
+		return Chunk{}, fmt.Errorf("invalid chunk selector %q (want integer index or 'last')", selector)
+	}
+	for _, chunk := range chunks {
+		if chunk.Index == idx {
+			return chunk, nil
+		}
+	}
+	return Chunk{}, fmt.Errorf("chunk %d not found in recent chunks buffer", idx)
+}
+
 // ReadWAV reads and returns the audio bytes of the chunk's WAV file.
 func (b *Buffer) ReadWAV(c Chunk) ([]byte, error) {
 	path := b.WAVPath(c)

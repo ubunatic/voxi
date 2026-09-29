@@ -3,7 +3,9 @@ package chunks
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -118,6 +120,100 @@ func TestChunksCommandListAndShow(t *testing.T) {
 	}
 }
 
+func TestChunksCommandDelete(t *testing.T) {
+	newBuffer := func(t *testing.T) *Buffer {
+		t.Helper()
+		buf := NewBuffer(t.TempDir(), 10)
+		for i := 0; i < 3; i++ {
+			if _, err := buf.Add(Chunk{CleanedTranscript: string(rune('a' + i))}, []byte{1, 2, 3}, 16000); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return buf
+	}
+
+	t.Run("single and last", func(t *testing.T) {
+		buf := newBuffer(t)
+		for i, selector := range []string{"2", "last"} {
+			cmd := NewCommand(deps.Dependencies{Stdout: &bytes.Buffer{}}, buf)
+			cmd.SetArgs([]string{"delete", selector})
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("delete %s: %v", selector, err)
+			}
+			if i == 0 {
+				got, err := buf.List(false)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(got) != 2 || got[0].Index != 1 || got[1].Index != 3 {
+					t.Fatalf("list after deleting index 2 = %#v, want indices 1 and 3", got)
+				}
+			}
+		}
+		got, err := buf.List(false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 1 || got[0].Index != 1 {
+			t.Fatalf("remaining chunks = %#v, want only index 1", got)
+		}
+		for _, index := range []int{2, 3} {
+			for _, suffix := range []string{"wav", "json"} {
+				if _, err := os.Stat(filepath.Join(buf.Dir(), fmt.Sprintf("chunk_%04d.%s", index, suffix))); !os.IsNotExist(err) {
+					t.Errorf("chunk %d %s remains or stat failed: %v", index, suffix, err)
+				}
+			}
+		}
+	})
+
+	t.Run("all", func(t *testing.T) {
+		buf := newBuffer(t)
+		cmd := NewCommand(deps.Dependencies{Stdout: &bytes.Buffer{}}, buf)
+		cmd.SetArgs([]string{"delete", "--all", "--yes"})
+		if err := cmd.Execute(); err != nil {
+			t.Fatal(err)
+		}
+		got, err := buf.List(false)
+		if err != nil || len(got) != 0 {
+			t.Fatalf("remaining chunks = %d, err = %v; want empty", len(got), err)
+		}
+	})
+
+	t.Run("bad index", func(t *testing.T) {
+		buf := newBuffer(t)
+		cmd := NewCommand(deps.Dependencies{Stdout: &bytes.Buffer{}}, buf)
+		cmd.SetArgs([]string{"delete", "99"})
+		if err := cmd.Execute(); err == nil {
+			t.Fatal("delete bad index succeeded")
+		}
+		got, _ := buf.List(false)
+		if len(got) != 3 {
+			t.Fatalf("bad index changed store: %d chunks remain", len(got))
+		}
+	})
+
+	t.Run("empty store", func(t *testing.T) {
+		cmd := NewCommand(deps.Dependencies{Stdout: &bytes.Buffer{}}, NewBuffer(t.TempDir(), 10))
+		cmd.SetArgs([]string{"delete", "last"})
+		if err := cmd.Execute(); err == nil {
+			t.Fatal("delete from empty store succeeded")
+		}
+	})
+
+	t.Run("selector required", func(t *testing.T) {
+		buf := newBuffer(t)
+		cmd := NewCommand(deps.Dependencies{Stdout: &bytes.Buffer{}}, buf)
+		cmd.SetArgs([]string{"delete"})
+		if err := cmd.Execute(); err == nil {
+			t.Fatal("delete without selector succeeded")
+		}
+		got, _ := buf.List(false)
+		if len(got) != 3 {
+			t.Fatalf("missing selector changed store: %d chunks remain", len(got))
+		}
+	})
+}
+
 func TestFormatStatusBadges(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -203,20 +299,20 @@ func TestFormatStatusBadges(t *testing.T) {
 
 func TestFormatChunkDetailsTrace(t *testing.T) {
 	chunk := Chunk{
-		Index:                  209,
-		Timestamp:              time.Date(2026, 9, 13, 17, 7, 26, 0, time.Local),
-		AudioDurationSecs:      2.36,
-		RTF:                    0.44,
-		Model:                  "cohere-transcribe-03-2026",
-		Engine:                 "cohere-transcribe",
-		Accepted:               true,
-		RawTranscript:          "This is Chunk One with Voxy.",
-		CleanedTranscript:      "This is Chunk 1 with Voxi.",
-		AppliedReplacements:    []ReplacementSummary{{From: "Voxy", To: "voxi"}},
-		LLMCleanup:             &LLMCleanupRecord{Enabled: true, Model: "qwen3-4b-instruct-2507-q4", Output: "This is Chunk 1 with Voxi.", Modified: true},
-		TranscribeDurationSec:  1.04,
-		TypingStartedAt:        time.Unix(100, 0),
-		TypingEndedAt:          time.Unix(100, 8*int64(time.Millisecond)),
+		Index:                 209,
+		Timestamp:             time.Date(2026, 9, 13, 17, 7, 26, 0, time.Local),
+		AudioDurationSecs:     2.36,
+		RTF:                   0.44,
+		Model:                 "cohere-transcribe-03-2026",
+		Engine:                "cohere-transcribe",
+		Accepted:              true,
+		RawTranscript:         "This is Chunk One with Voxy.",
+		CleanedTranscript:     "This is Chunk 1 with Voxi.",
+		AppliedReplacements:   []ReplacementSummary{{From: "Voxy", To: "voxi"}},
+		LLMCleanup:            &LLMCleanupRecord{Enabled: true, Model: "qwen3-4b-instruct-2507-q4", Output: "This is Chunk 1 with Voxi.", Modified: true},
+		TranscribeDurationSec: 1.04,
+		TypingStartedAt:       time.Unix(100, 0),
+		TypingEndedAt:         time.Unix(100, 8*int64(time.Millisecond)),
 	}
 
 	var buf bytes.Buffer

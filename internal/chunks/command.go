@@ -1,12 +1,15 @@
 package chunks
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 	"ubunatic.com/voxi/internal/deps"
 	"ubunatic.com/voxi/internal/listing"
 )
@@ -150,8 +153,55 @@ func NewCommand(d deps.Dependencies, buf *Buffer) *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(listCmd, showCmd, playCmd)
+	var deleteAll bool
+	var deleteYes bool
+	deleteCmd := &cobra.Command{
+		Use:   "delete [INDEX|last]",
+		Short: "Delete recorded chunk audio and transcript metadata",
+		Long:  "Delete one recorded chunk by index or 'last', or use --all to delete every stored chunk.",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if deleteAll && len(args) != 0 {
+				return fmt.Errorf("delete accepts either INDEX|last or --all, not both; see --help for usage")
+			}
+			if !deleteAll && len(args) != 1 {
+				return fmt.Errorf("delete requires INDEX|last or --all; see --help for usage")
+			}
+			if deleteAll {
+				if !deleteYes && isInteractiveInput(d.Stdin) {
+					chunks, err := buf.List(false)
+					if err != nil {
+						return err
+					}
+					promptOut := d.Stderr
+					if promptOut == nil {
+						promptOut = os.Stderr
+					}
+					fmt.Fprintf(promptOut, "Delete all %d recorded chunks? [y/N] ", len(chunks))
+					answer, err := bufio.NewReader(d.Stdin).ReadString('\n')
+					if err != nil && len(answer) == 0 {
+						return fmt.Errorf("read delete confirmation: %w", err)
+					}
+					if answer = strings.TrimSpace(answer); !strings.EqualFold(answer, "y") && !strings.EqualFold(answer, "yes") {
+						fmt.Fprintln(promptOut, "Deletion cancelled.")
+						return nil
+					}
+				}
+				return buf.Delete("all")
+			}
+			return buf.Delete(args[0])
+		},
+	}
+	deleteCmd.Flags().BoolVar(&deleteAll, "all", false, "delete every stored chunk")
+	deleteCmd.Flags().BoolVarP(&deleteYes, "yes", "y", false, "skip the interactive confirmation for --all")
+
+	cmd.AddCommand(listCmd, showCmd, playCmd, deleteCmd)
 	return cmd
+}
+
+func isInteractiveInput(r io.Reader) bool {
+	f, ok := r.(*os.File)
+	return ok && term.IsTerminal(int(f.Fd()))
 }
 
 // FormatStatusBadges formats the outcome (✓ or ✗) and effective pipeline stage badges for a chunk.
