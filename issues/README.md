@@ -149,3 +149,4 @@
 | 165 | [165-voxi-chunks-delete.md](165-voxi-chunks-delete.md) | voxi chunks delete | Closed — M1 (delete command) delivered: chunks delete INDEX\|last\|--all with confirmation, tests pass, installed |
 | 166 | [166-use-visual-editor-to-correct-sample-transcripts.md](166-use-visual-editor-to-correct-sample-transcripts.md) | Use $VISUAL/$EDITOR to correct sample transcripts | Closed — M1 (editor prompt) delivered: VISUAL/EDITOR opens for transcript correction on a terminal; VOXI_SAMPLE_EDITOR=off restores inline prompt; tests pass, installed |
 | 167 | [167-chunks-delete-flags-for-low-energy-empty-unvoiced-chunks.md](167-chunks-delete-flags-for-low-energy-empty-unvoiced-chunks.md) | chunks delete: flags for low-energy, empty, unvoiced chunks | Open |
+| 168 | [168-merge-chunks-samples-into-longer-clean-voice-material.md](168-merge-chunks-samples-into-longer-clean-voice-material.md) | Merge chunks/samples into longer clean voice material | Open |
