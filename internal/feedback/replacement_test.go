@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"ubunatic.com/voxi/internal/deps"
 )
 
 func TestApplyReplacements(t *testing.T) {
@@ -43,7 +41,7 @@ func TestReplacementPersistenceValidationAndCommands(t *testing.T) {
 	path := ReplacementPath(home)
 	var out bytes.Buffer
 	run := func(args ...string) error {
-		cmd := NewCommand(&out, home, rules, 64, nil, deps.Dependencies{}, nil)
+		cmd := NewCommand(&out, home, rules, 64, nil)
 		cmd.SetArgs(args)
 		return cmd.Execute()
 	}
@@ -150,7 +148,7 @@ func TestReplacementCleanupCommand(t *testing.T) {
 	var out bytes.Buffer
 	run := func(args ...string) error {
 		out.Reset()
-		cmd := NewCommand(&out, home, rules, 64, nil, deps.Dependencies{}, nil)
+		cmd := NewCommand(&out, home, rules, 64, nil)
 		cmd.SetArgs(args)
 		return cmd.Execute()
 	}

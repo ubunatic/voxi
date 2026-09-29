@@ -1,10 +1,7 @@
-// Package devsample implements a private, local-only developer sample
-// recorder behind `voxi feedback sample record|list|play|remove`. It lets a
-// developer build a small library of real microphone utterances, each paired
-// with a manually corrected ground-truth transcript, for offline accuracy
-// canaries (see issues 032, 040, 041). It is a separate, isolated dev-only
-// capture path: it never touches eager dictation's typing output,
-// hallucination filtering, or history.
+// Package devsample contains legacy corpus helpers used by migration and
+// voice-training code, plus shared capture, editor, and playback primitives
+// used by the private `voxi sample` command. Sample persistence lives in
+// internal/sample.
 package devsample
 
 import (
@@ -161,7 +158,7 @@ func FormatManifest(samples []Sample) []byte {
 
 	var b strings.Builder
 	b.WriteString("# id\twav file\texpected transcript\tkeyterms separated by |\n")
-	b.WriteString("# Private local dev samples recorded via `voxi feedback sample record`.\n")
+	b.WriteString("# Private local dev samples for legacy corpus readers.\n")
 	b.WriteString("# corpus.tsv-compatible: point scripts/speech_context_bench -corpus at this\n")
 	b.WriteString("# directory to include these real recordings in accuracy canaries.\n")
 	for _, s := range sorted {

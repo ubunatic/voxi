@@ -1,5 +1,5 @@
 // Package listing holds table-rendering and sparkline-colorizing code
-// shared by `voxi chunks list` and `voxi feedback sample list` (issue 098).
+// shared by `voxi chunks list` and `voxi sample list` (issue 098).
 // Both commands list recorded/stored audio items with transcripts and a
 // Braille loudness sparkline; this package factors that shared rendering
 // out of internal/chunks (its original, chunks-list-specific home) so both

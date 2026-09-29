@@ -16,10 +16,6 @@ import (
 	"ubunatic.com/voxi/spec"
 )
 
-// transcribeFn is transcribeRawTranscript by default; tests override it to
-// avoid depending on a real voxtype binary / model being installed.
-var transcribeFn = transcribeRawTranscript
-
 // transcribeRawTranscript runs pcm through Voxi's existing small.en
 // transcription path with no --initial-prompt / speech-context bias: this
 // recorder exists to sample real-world ASR error, so priming the decoder
@@ -78,6 +74,21 @@ func transcribeRawTranscript(ctx context.Context, d deps.Dependencies, pcm []byt
 		return "", fmt.Errorf("transcribe with voxtype: %w", err)
 	}
 	return asr.CleanWhisperTranscript(outBuf.String(), modelSpec.StopWords(modelName)), nil
+}
+
+// TranscribeRawTranscript runs the legacy unprimed dev-sample ASR suggestion.
+func TranscribeRawTranscript(ctx context.Context, d deps.Dependencies, pcm []byte) (string, error) {
+	return transcribeRawTranscript(ctx, d, pcm)
+}
+
+// SuggestKeyterms finds known vocabulary terms present in text.
+func SuggestKeyterms(text string, vocabulary []string, maxTermChars int) []string {
+	return suggestKeyterms(text, vocabulary, maxTermChars)
+}
+
+// CandidateVocabulary returns the user's configured and bundled vocabulary.
+func CandidateVocabulary(home string, modelSpec *spec.ModelSpec) []string {
+	return candidateVocabulary(home, modelSpec)
 }
 
 // candidateVocabulary is the same two speech-context term sources eager's

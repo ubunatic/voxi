@@ -41,9 +41,7 @@ type ImportOptions struct {
 	Only []string
 }
 
-// ImportAreaSummary tallies one area's merge outcome, mirroring
-// devsample.ImportSummary's field names for a consistent report shape
-// across `sample import` and `config import`.
+// ImportAreaSummary tallies one area's merge outcome.
 type ImportAreaSummary struct {
 	Imported int
 	Skipped  int // already present locally (or, for replacements, a collision left alone because --overwrite was not set)
@@ -51,8 +49,7 @@ type ImportAreaSummary struct {
 }
 
 // Import merges stop-words, replacements, and vocabulary from
-// sourceDir -- a local, previously-copied ~/.config/voxi-shaped directory,
-// the same way sample import's sourceDir mirrors SamplesDir's layout --
+// sourceDir -- a local, previously-copied ~/.config/voxi-shaped directory --
 // into home's local Voxi state. It never performs any transfer of its own.
 //
 // Each area is independent: a missing file/subdir for an area is not an
@@ -61,8 +58,8 @@ type ImportAreaSummary struct {
 // bad file can't corrupt local state or silently drop entries. Area
 // failures are reported to out and accumulated; Import returns a non-nil
 // error if any area failed, but only after every requested area has been
-// attempted, so a bad stop-words.json does not prevent replacements,
-// vocabulary, or samples from importing.
+// attempted, so a bad stop-words.json does not prevent replacements or
+// vocabulary from importing.
 func Import(home, sourceDir string, opts ImportOptions, maxVocabularyTermChars int, out io.Writer) error {
 	if info, err := os.Stat(sourceDir); err != nil {
 		return fmt.Errorf("source directory: %w", err)

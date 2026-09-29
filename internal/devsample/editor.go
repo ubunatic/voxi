@@ -20,7 +20,7 @@ var editTranscriptFn = editTranscriptInEditor
 
 // resolveEditor returns the editor command from $VISUAL, then $EDITOR, or ""
 // when none is configured or VOXI_SAMPLE_EDITOR=off.
-func resolveEditor(d deps.Dependencies) string {
+func ResolveEditor(d deps.Dependencies) string {
 	if d.Getenv == nil {
 		return ""
 	}
@@ -35,15 +35,18 @@ func resolveEditor(d deps.Dependencies) string {
 	return ""
 }
 
+// resolveEditor retains the package-local name used by devsample tests.
+func resolveEditor(d deps.Dependencies) string { return ResolveEditor(d) }
+
 // promptTranscript asks for the corrected transcript, using the user's editor
 // when one is configured and stdin is a terminal, and the inline prompt otherwise.
 func promptTranscript(ctx context.Context, d deps.Dependencies, rawDefault string, inline func() (string, error)) (string, error) {
-	editor := resolveEditor(d)
+	editor := ResolveEditor(d)
 	stdinFile, _ := d.Stdin.(*os.File)
 	if editor == "" || d.Stdout == nil || !stdinIsTerminal(stdinFile) {
 		return inline()
 	}
-	text, err := editTranscriptFn(ctx, editor, rawDefault)
+	text, err := EditTranscript(ctx, editor, rawDefault)
 	if err != nil {
 		return "", err
 	}
@@ -51,6 +54,16 @@ func promptTranscript(ctx context.Context, d deps.Dependencies, rawDefault strin
 		return "", fmt.Errorf("corrected transcript text must not be empty")
 	}
 	return text, nil
+}
+
+// PromptTranscript uses the configured editor on a terminal and otherwise calls inline.
+func PromptTranscript(ctx context.Context, d deps.Dependencies, rawDefault string, inline func() (string, error)) (string, error) {
+	return promptTranscript(ctx, d, rawDefault, inline)
+}
+
+// EditTranscript runs the configured editor on text and returns its content.
+func EditTranscript(ctx context.Context, editor, text string) (string, error) {
+	return editTranscriptFn(ctx, editor, text)
 }
 
 // editTranscriptInEditor writes text to a private temp file, runs editor on it

@@ -18,7 +18,7 @@ import (
 // use if needed. It returns crispasr's raw (uncleaned) transcript text.
 //
 // This is a standalone entry point for CLI dev-tooling spot checks (`voxi
-// feedback sample list --process`, issue 098) -- it does not touch
+// sample list --process`, issue 098) -- it does not touch
 // RunEagerDictation/runEagerDaemon's continuous capture path at all, and
 // deliberately skips that path's asr.CleanWhisperTranscript hallucination/
 // stop-word cleanup (which needs live feedback overrides and spec model

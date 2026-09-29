@@ -63,6 +63,11 @@ func captureUtteranceWithReader(ctx context.Context, d deps.Dependencies, in *bu
 	return captureFromCommand(ctx, name, args, in)
 }
 
+// CaptureUtteranceWithReader captures audio using a caller's shared input buffer.
+func CaptureUtteranceWithReader(ctx context.Context, d deps.Dependencies, in *bufio.Reader) ([]byte, time.Duration, error) {
+	return captureUtteranceWithReader(ctx, d, in)
+}
+
 func captureFromCommand(ctx context.Context, name string, args []string, in *bufio.Reader) ([]byte, time.Duration, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	stdout, err := cmd.StdoutPipe()

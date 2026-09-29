@@ -38,9 +38,9 @@ Stores and files:
 Commands and packages:
 
 - `voxi chunks list|show|play|delete` — `internal/chunks`.
-- `voxi feedback sample list|play|record|remove|save-chunk|save-last|promote|import` —
-  `internal/devsample` (store, capture, editor) and `internal/feedback` (command, list, import).
-- `voxi feedback import` area `samples` — `internal/feedback/import.go`.
+- `voxi sample list|show|play|record|add|edit|move|delete` — `internal/sample` plus shared
+  capture, editor, and playback helpers in `internal/devsample`.
+- `voxi config import` handles stop-words, replacements, and vocabulary only.
 - `voxi voice prepare|train|clone` with `--samples-dir` — `internal/tts/clone`.
 - Scripts reading `corpus.tsv`: `scripts/speech_context_bench`, `scripts/clack_features`.
 - Docs/website mentioning these words: README.md, docs/{ChunkDiagnostics,TTSReading,VoiceInput,ASREngines,
@@ -90,8 +90,8 @@ testdata/samples/noise/<id>.flac <id>.json   (public store, 0644, git-lfs)
   store, merge conflicts on import). Sidecars make import, delete and publish per-file atomic.
   This **supersedes issue 099**.
 - **IDs** stay `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$` and are unique across all purposes.
-- `corpus.tsv` becomes an export format only (`voxi sample export --tsv`) for scripts that still
-  want it; the scripts are switched to the store reader.
+- `corpus.tsv` remains only for the legacy migration/scripts until issue 171 removes its reader;
+  issue 172 does not provide a sample export command.
 - `voice-training.txt` is retired: membership in `voice/` replaces it.
 - **Derived files stay copies but record provenance:** Piper datasets, `voices/cloned.wav` and
   VoxCPM presets are caches regenerated from `voice/` samples. `config.yaml` records the sample id
@@ -102,7 +102,7 @@ testdata/samples/noise/<id>.flac <id>.json   (public store, 0644, git-lfs)
 ## 5. Command Map
 
 ```
-voxi sample list [--purpose P] [--public] [--recent]   --recent lists chunks as candidates
+voxi sample list [--purpose P]
 voxi sample show ID
 voxi sample play ID
 voxi sample record [--purpose P] ID                    default purpose: dictation
@@ -110,11 +110,9 @@ voxi sample add ID --chunk N|--last [--purpose P]      replaces save-chunk / sav
 voxi sample edit ID                                    transcript in $VISUAL/$EDITOR (166)
 voxi sample move ID PURPOSE                            consent gate for voice
 voxi sample delete ID...                               replaces remove
-voxi sample merge ID --from A B C                      samples or --chunks (168)
-voxi sample import PATH                                other machine's store (117)
-voxi sample export --tsv                               legacy manifest for scripts
-voxi sample publish ID                                 noise only; replaces promote
 ```
+
+`merge` (168), import, publish, public/recent listing, and export are not part of issue 172.
 
 Kept as they are: `voxi chunks ...` (diagnostics of ephemeral recordings, different lifetime and
 fields; 165/167 filters stay there), `voxi voice prepare|train|clone` (they produce voices; only
@@ -131,7 +129,6 @@ mic --eager--> chunk (runtime, last 100) --sample add --chunk N--> sample (dicta
 mic --sample record------------------------------------------------^
 chunks/samples --sample merge--> new sample (sources in sidecar; inputs untouched)
 sample --sample edit--> corrected transcript     sample --sample move--> other purpose
-noise sample --sample publish--> public store    store --sample import--> store
 voice samples --voice prepare/train/clone--> voices (derived copies)
 ```
 

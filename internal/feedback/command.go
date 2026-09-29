@@ -7,10 +7,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"ubunatic.com/voxi/internal/chunks"
-	"ubunatic.com/voxi/internal/deps"
-	"ubunatic.com/voxi/internal/devsample"
-	"ubunatic.com/voxi/internal/listing"
 	"ubunatic.com/voxi/internal/speechcontext"
 	"ubunatic.com/voxi/spec"
 )
@@ -18,16 +14,8 @@ import (
 // NewCommand creates the local feedback command. home is injected to keep the
 // CLI testable and to avoid relying on a global process home directory.
 // staticVocabularyTerms is the shipped spec/models.yaml speech-context term
-// list, reported (as a count) by `voxi feedback status`. d is used only for
-// the `sample` subcommands, which need real microphone capture / audio
-// playback and stdin prompting; the rest of this command tree stays
-// deps-free by design.
-// sampleTranscribe transcribes samples for `sample list --process` (issue
-// 098). It is passed in explicitly (rather than imported directly from
-// internal/eager) to avoid an import cycle: internal/eager already imports
-// internal/feedback. A nil value disables --process with a clear error
-// rather than a panic.
-func NewCommand(out io.Writer, home string, builtins []spec.StopWord, maxVocabularyTermChars int, staticVocabularyTerms []string, d deps.Dependencies, sampleTranscribe SampleTranscribeFunc) *cobra.Command {
+// list, reported (as a count) by `voxi feedback status`.
+func NewCommand(out io.Writer, home string, builtins []spec.StopWord, maxVocabularyTermChars int, staticVocabularyTerms []string) *cobra.Command {
 	path := Path(home)
 	load := func() (Overrides, error) { return Load(path) }
 	cmd := &cobra.Command{Use: "feedback", Short: "Manage local dictation feedback"}
@@ -311,159 +299,11 @@ func NewCommand(out io.Writer, home string, builtins []spec.StopWord, maxVocabul
 	}
 	cmd.AddCommand(status)
 
-	sample := &cobra.Command{Use: "sample", Short: "Manage private local dev/testing speech samples (not used by dictation)"}
-	recordCmd := &cobra.Command{
-		Use:   "record NAME",
-		Short: "Record one microphone utterance and its manually corrected transcript",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, a []string) error {
-			force, _ := cmd.Flags().GetBool("force")
-			return devsample.Record(cmd.Context(), d, home, a[0], force)
-		},
-	}
-	recordCmd.Flags().Bool("force", false, "overwrite an existing sample without confirmation")
-	listCmd := &cobra.Command{
-		Use:   "list",
-		Short: "List recorded dev samples (private, and public/promoted with --all)",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			all, _ := cmd.Flags().GetBool("all")
-			full, _ := cmd.Flags().GetBool("full")
-			short, _ := cmd.Flags().GetBool("short")
-			process, _ := cmd.Flags().GetBool("process")
-			color, _ := cmd.Flags().GetString("color")
-			if short && full {
-				return fmt.Errorf("--full and --short are mutually exclusive")
-			}
-			if short {
-				full = false
-			}
-			return runSampleList(cmd.Context(), out, d, home, sampleListOptions{
-				All:     all,
-				Full:    full,
-				Process: process,
-				Color:   color,
-			}, sampleTranscribe)
-		},
-	}
-	listCmd.Flags().Bool("all", false, "include the public/promoted corpus (testdata/noise-samples) alongside the private one")
-	listCmd.Flags().Bool("full", false, "show a richer, chunks-list-style table (timestamp, on-the-fly duration/RMS/sparkline, full transcript)")
-	listCmd.Flags().Bool("short", false, "show the compact table (default; explicit form of the default)")
-	listCmd.Flags().Bool("process", false, "also run each listed sample through the cohere-transcribe engine and show the fresh transcript next to the stored ground truth (requires --full)")
-	listCmd.Flags().String("color", listing.ColorAuto, "colorize the LEVEL sparkline by loudness in --full output: auto, always, or never")
-	sample.AddCommand(
-		recordCmd,
-		listCmd,
-		&cobra.Command{
-			Use:   "play NAME",
-			Short: "Replay a recorded dev sample",
-			Args:  cobra.ExactArgs(1),
-			RunE: func(cmd *cobra.Command, a []string) error {
-				return devsample.Play(cmd.Context(), d, home, a[0])
-			},
-		},
-		&cobra.Command{
-			Use:   "remove NAME",
-			Short: "Delete a recorded dev sample and its transcript",
-			Args:  cobra.ExactArgs(1),
-			RunE: func(_ *cobra.Command, a []string) error {
-				if err := devsample.Remove(home, a[0]); err != nil {
-					return err
-				}
-				fmt.Fprintf(out, "Removed sample %q\n", a[0])
-				return nil
-			},
-		},
-		func() *cobra.Command {
-			saveChunk := func(cmd *cobra.Command, selector, name string) error {
-				force, _ := cmd.Flags().GetBool("force")
-				chunkBuf := chunks.NewBuffer(chunks.StorageDir(d.Getenv("XDG_RUNTIME_DIR"), d.Getenv("HOME")), chunks.DefaultBufferSize)
-				chunk, err := chunkBuf.Get(selector)
-				if err != nil {
-					return fmt.Errorf("retrieve chunk %s: %w", selector, err)
-				}
-				wavPath := chunkBuf.WAVPath(chunk)
-				defaultText := chunk.CleanedTranscript
-				if defaultText == "" {
-					defaultText = chunk.RawTranscript
-				}
-				return devsample.SaveChunkAsSample(cmd.Context(), d, home, name, wavPath, defaultText, force)
-			}
-
-			saveChunkCmd := &cobra.Command{
-				Use:   "save-chunk [INDEX] NAME",
-				Short: "Save a recorded audio chunk from the ring buffer into the sample library",
-				Long:  "Save a recorded audio chunk from the ring buffer into the sample library. " + "Transcript correction opens $VISUAL (else $EDITOR) on the ASR text when set and stdin is a terminal; lines starting with # are ignored. Set VOXI_SAMPLE_EDITOR=off to use the inline prompt instead.",
-				Args:  cobra.RangeArgs(1, 2),
-				RunE: func(cmd *cobra.Command, a []string) error {
-					selector := "last"
-					name := a[0]
-					if len(a) == 2 {
-						selector = a[0]
-						name = a[1]
-					}
-					return saveChunk(cmd, selector, name)
-				},
-			}
-			saveChunkCmd.Flags().Bool("force", false, "overwrite an existing sample without confirmation")
-
-			saveLastCmd := &cobra.Command{
-				Use:   "save-last NAME",
-				Short: "Save the most recent recorded audio chunk into the sample library",
-				Long:  "Save the most recent recorded audio chunk into the sample library. " + "Transcript correction opens $VISUAL (else $EDITOR) on the ASR text when set and stdin is a terminal; lines starting with # are ignored. Set VOXI_SAMPLE_EDITOR=off to use the inline prompt instead.",
-				Args:  cobra.ExactArgs(1),
-				RunE: func(cmd *cobra.Command, a []string) error {
-					return saveChunk(cmd, "last", a[0])
-				},
-			}
-			saveLastCmd.Flags().Bool("force", false, "overwrite an existing sample without confirmation")
-
-			sample.AddCommand(saveChunkCmd)
-			return saveLastCmd
-		}(),
-	)
-
-	promoteCmd := &cobra.Command{
-		Use:   "promote NAME",
-		Short: "Move a noise-only private sample into the public, git-tracked corpus (testdata/noise-samples)",
-		Long: "Move a private dev sample into the public, git-tracked corpus at testdata/noise-samples,\n" +
-			"FLAC-encoding its audio for git-lfs. Only promote samples confirmed to contain no real\n" +
-			"speech (keyboard/mouse/ambient noise) -- this command does not and cannot verify that.",
-		Args: cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, a []string) error {
-			publicDir, _ := cmd.Flags().GetString("to")
-			if err := devsample.Promote(cmd.Context(), home, publicDir, a[0]); err != nil {
-				return err
-			}
-			fmt.Fprintf(out, "Promoted sample %q to %s\n", a[0], publicDir)
-			return nil
-		},
-	}
-	promoteCmd.Flags().String("to", devsample.PublicSamplesDir(""), "public samples directory to promote into (run from the repo root)")
-	sample.AddCommand(promoteCmd)
-
-	importCmd := &cobra.Command{
-		Use:   "import PATH",
-		Short: "Merge samples from another machine's local sample directory into this one",
-		Long: "Merge every sample listed in PATH's corpus.tsv-compatible manifest into this\n" +
-			"machine's private sample library, copying each referenced WAV. PATH must already\n" +
-			"be a local directory (e.g. copied over with scp/rsync/USB beforehand) -- import\n" +
-			"performs no transfer of its own.",
-		Args: cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, a []string) error {
-			overwrite, _ := cmd.Flags().GetBool("overwrite")
-			_, err := devsample.Import(home, a[0], overwrite, out)
-			return err
-		},
-	}
-	importCmd.Flags().Bool("overwrite", false, "replace an existing local sample with the same name instead of skipping it")
-	sample.AddCommand(importCmd)
-
 	return cmd
 }
 
 // NewConfigImportCommand builds the `voxi config import DIR` command,
-// merging stop-words, replacements, vocabulary, and dev samples from
+// merging stop-words, replacements, and vocabulary from
 // another machine's ~/.config/voxi-shaped directory into this one. It is
 // wired as a subcommand of voxi's top-level `config` command (cmd/voxi's
 // existing voxtype-config.toml command) rather than a competing top-level
@@ -472,13 +312,13 @@ func NewCommand(out io.Writer, home string, builtins []spec.StopWord, maxVocabul
 //
 // config.yaml and env are deliberately not covered here -- they are
 // machine-specific (paths, device IDs) in ways stop-words/replacements/
-// vocabulary/samples aren't, so a blind merge risks importing settings that
+// vocabulary aren't, so a blind merge risks importing settings that
 // don't apply to the target machine (see issue 118 and 119).
 func NewConfigImportCommand(out io.Writer, home string, maxVocabularyTermChars int) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "import DIR",
-		Short: "Merge stop-words, replacements, vocabulary, and dev samples from another machine's local Voxi state",
-		Long: "Merge stop-words.json, replacements.json, vocabulary.txt, and samples/ from DIR --\n" +
+		Short: "Merge stop-words, replacements, and vocabulary from another machine's local Voxi state",
+		Long: "Merge stop-words.json, replacements.json, and vocabulary.txt from DIR --\n" +
 			"a local, previously-copied ~/.config/voxi-shaped directory -- into this machine's\n" +
 			"local Voxi state. DIR must already be a local directory (e.g. copied over with\n" +
 			"scp/rsync/USB beforehand) -- import performs no transfer of its own.\n\n" +
@@ -491,7 +331,7 @@ func NewConfigImportCommand(out io.Writer, home string, maxVocabularyTermChars i
 			return Import(home, a[0], ImportOptions{Overwrite: overwrite, Only: only}, maxVocabularyTermChars, out)
 		},
 	}
-	cmd.Flags().Bool("overwrite", false, "replace a colliding replacement entry instead of skipping it (stop-words, vocabulary, and samples are always additive/skip-on-collision)")
+	cmd.Flags().Bool("overwrite", false, "replace a colliding replacement entry instead of skipping it (stop-words and vocabulary are always additive)")
 	cmd.Flags().StringSlice("only", nil, "import only these areas: "+strings.Join(AreaNames, ",")+" (default: all found in DIR)")
 	return cmd
 }

@@ -76,10 +76,24 @@ func (s *Store) AudioPath(x Sample) string { return filepath.Join(s.dir(x.Purpos
 
 // Put copies audio into the store and writes its sidecar.
 func (s *Store) Put(x Sample, source string) error {
+	if !validID(x.ID) {
+		return fmt.Errorf("invalid sample id %q", x.ID)
+	}
+	if !validPurpose(x.Purpose) {
+		return fmt.Errorf("invalid sample purpose %q", x.Purpose)
+	}
+	if _, err := s.Get(x.ID); err == nil {
+		return fmt.Errorf("sample id %q already exists", x.ID)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
 	if filepath.Ext(source) == "" {
 		return fmt.Errorf("sample audio %q has no extension", source)
 	}
 	if err := os.MkdirAll(s.dir(x.Purpose), s.dirMode); err != nil {
+		return err
+	}
+	if err := os.Chmod(s.dir(x.Purpose), s.dirMode); err != nil {
 		return err
 	}
 	x.Audio = x.ID + filepath.Ext(source)
@@ -88,6 +102,10 @@ func (s *Store) Put(x Sample, source string) error {
 		return err
 	}
 	if err = os.WriteFile(s.AudioPath(x), data, s.fileMode); err != nil {
+		return err
+	}
+	if err = os.Chmod(s.AudioPath(x), s.fileMode); err != nil {
+		_ = os.Remove(s.AudioPath(x))
 		return err
 	}
 	if err = s.Add(x); err != nil {
@@ -99,12 +117,27 @@ func (s *Store) Put(x Sample, source string) error {
 
 // UpdateTranscript replaces a sample's transcript.
 func (s *Store) UpdateTranscript(id, transcript string) error {
+	if strings.TrimSpace(transcript) == "" {
+		return errors.New("sample transcript must not be empty")
+	}
 	x, err := s.Get(id)
 	if err != nil {
 		return err
 	}
 	x.Transcript = strings.TrimSpace(transcript)
 	return s.write(x)
+}
+
+// Has reports whether id exists in the store.
+func (s *Store) Has(id string) (bool, error) {
+	_, err := s.Get(id)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	return false, err
 }
 func validID(id string) bool          { return idPattern.MatchString(id) }
 func validPurpose(p Purpose) bool     { return purposes[p] }
