@@ -393,6 +393,7 @@ func NewCommand(out io.Writer, home string, builtins []spec.StopWord, maxVocabul
 			saveChunkCmd := &cobra.Command{
 				Use:   "save-chunk [INDEX] NAME",
 				Short: "Save a recorded audio chunk from the ring buffer into the sample library",
+				Long:  "Save a recorded audio chunk from the ring buffer into the sample library. " + "Transcript correction opens $VISUAL (else $EDITOR) on the ASR text when set and stdin is a terminal; lines starting with # are ignored. Set VOXI_SAMPLE_EDITOR=off to use the inline prompt instead.",
 				Args:  cobra.RangeArgs(1, 2),
 				RunE: func(cmd *cobra.Command, a []string) error {
 					selector := "last"
@@ -409,6 +410,7 @@ func NewCommand(out io.Writer, home string, builtins []spec.StopWord, maxVocabul
 			saveLastCmd := &cobra.Command{
 				Use:   "save-last NAME",
 				Short: "Save the most recent recorded audio chunk into the sample library",
+				Long:  "Save the most recent recorded audio chunk into the sample library. " + "Transcript correction opens $VISUAL (else $EDITOR) on the ASR text when set and stdin is a terminal; lines starting with # are ignored. Set VOXI_SAMPLE_EDITOR=off to use the inline prompt instead.",
 				Args:  cobra.ExactArgs(1),
 				RunE: func(cmd *cobra.Command, a []string) error {
 					return saveChunk(cmd, "last", a[0])

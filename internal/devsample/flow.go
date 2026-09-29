@@ -227,7 +227,9 @@ func Record(ctx context.Context, d deps.Dependencies, home, rawName string, forc
 		rawTranscript = raw
 	}
 
-	text, err := promptText(d.Stdout, in, stdinFile, "Enter the corrected transcript (what you actually said): ", rawTranscript)
+	text, err := promptTranscript(ctx, d, rawTranscript, func() (string, error) {
+		return promptText(d.Stdout, in, stdinFile, "Enter the corrected transcript (what you actually said): ", rawTranscript)
+	})
 	if err != nil {
 		return err
 	}
@@ -385,7 +387,9 @@ func SaveChunkAsSample(ctx context.Context, d deps.Dependencies, home, rawName, 
 		}
 	}
 
-	text, err := promptText(d.Stdout, in, stdinFile, "Enter the corrected transcript (what you actually said): ", defaultTranscript)
+	text, err := promptTranscript(ctx, d, defaultTranscript, func() (string, error) {
+		return promptText(d.Stdout, in, stdinFile, "Enter the corrected transcript (what you actually said): ", defaultTranscript)
+	})
 	if err != nil {
 		return err
 	}
