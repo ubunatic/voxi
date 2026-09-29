@@ -55,13 +55,15 @@ func main() {
 
 	var samples []sample
 	if *private != "" {
-		if store, err := samplestore.OpenReadOnly(*private); err == nil {
+		store, err := samplestore.OpenReadOnly(*private)
+		if err == nil {
 			items, listErr := store.List()
 			if listErr != nil {
 				fmt.Fprintf(os.Stderr, "list sample store %s: %v\n", *private, listErr)
 			}
 			for _, item := range items {
 				samples = append(samples, sample{name: item.ID, wav: store.AudioPath(item)})
+			}
 		}
 		if err != nil && !os.IsNotExist(err) {
 			fmt.Fprintf(os.Stderr, "open sample store %s: %v\n", *private, err)

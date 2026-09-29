@@ -8,6 +8,7 @@ import (
 
 	"ubunatic.com/voxi/internal/config"
 	"ubunatic.com/voxi/internal/deps"
+	"ubunatic.com/voxi/internal/sample"
 )
 
 func newCloneCommand(t *testing.T, home string) (*bytes.Buffer, func(args ...string) error) {
@@ -35,8 +36,7 @@ func TestVoiceCloneInstallsSingleAllowlistedSample(t *testing.T) {
 	if err := os.MkdirAll(samples, 0700); err != nil {
 		t.Fatal(err)
 	}
-	writeCorpus(t, samples, "only-one\tonly-one.wav\tHello there.\t\n")
-	writeFile(t, filepath.Join(samples, "only-one.wav"), []byte("RIFF-fake-reference-wav"))
+	writeSampleData(t, samples, "only-one", sample.Voice, "Hello there.", []byte("RIFF-fake-reference-wav"))
 
 	out, run := newCloneCommand(t, home)
 	if err := run(); err != nil {
@@ -67,9 +67,8 @@ func TestVoiceCloneRequiresSampleFlagWhenMultipleAllowlisted(t *testing.T) {
 	if err := os.MkdirAll(samples, 0700); err != nil {
 		t.Fatal(err)
 	}
-	writeCorpus(t, samples, "first\tfirst.wav\tFirst.\t\nsecond\tsecond.wav\tSecond.\t\n")
-	writeFile(t, filepath.Join(samples, "first.wav"), []byte("first-wav"))
-	writeFile(t, filepath.Join(samples, "second.wav"), []byte("second-wav"))
+	writeSampleData(t, samples, "first", sample.Voice, "First.", []byte("first-wav"))
+	writeSampleData(t, samples, "second", sample.Voice, "Second.", []byte("second-wav"))
 
 	_, run := newCloneCommand(t, home)
 	if err := run(); err == nil {
@@ -95,8 +94,7 @@ func TestVoiceCloneRejectsUnknownSample(t *testing.T) {
 	if err := os.MkdirAll(samples, 0700); err != nil {
 		t.Fatal(err)
 	}
-	writeCorpus(t, samples, "only-one\tonly-one.wav\tHello there.\t\n")
-	writeFile(t, filepath.Join(samples, "only-one.wav"), []byte("reference"))
+	writeSampleData(t, samples, "only-one", sample.Voice, "Hello there.", []byte("reference"))
 
 	_, run := newCloneCommand(t, home)
 	if err := run("--sample", "missing"); err == nil {

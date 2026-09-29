@@ -3,7 +3,7 @@ set -euo pipefail
 
 cache_dir="$HOME/.cache/voxi"
 output_dir="$HOME/.local/share/voxi/voice-demo"
-sample_dir="$HOME/.config/voxi/samples"
+voice_dir="${XDG_DATA_HOME:-$HOME/.local/share}/voxi/samples/voice"
 sherpa_version="1.13.8"
 model_version="2026-01-26"
 sherpa_archive="sherpa-onnx-v${sherpa_version}-linux-x64-static.tar.bz2"
@@ -14,7 +14,7 @@ sherpa_root="$cache_dir/sherpa-onnx-v${sherpa_version}-linux-x64-static"
 model_root="$cache_dir/sherpa-onnx-pocket-tts-int8-${model_version}"
 binary="$sherpa_root/bin/sherpa-onnx-offline-tts"
 reference_id="llama-lo-route"
-reference_wav="$sample_dir/$reference_id.wav"
+reference_wav="$voice_dir/$reference_id.wav"
 
 fail() {
    printf 'ERROR: %s\n' "$*" >&2
@@ -43,14 +43,9 @@ download_pinned() {
 }
 
 mkdir -p "$cache_dir" "$output_dir"
-if ! test -f "$sample_dir/voice-training.txt"
-then fail "missing sample allowlist: $sample_dir/voice-training.txt"
-fi
-if ! grep -Fxq "$reference_id" "$sample_dir/voice-training.txt"
-then fail "reference ID is not in voice-training.txt: $reference_id"
-fi
+# Only voice-purpose store samples may be cloned (issue 171).
 if ! test -f "$reference_wav"
-then fail "missing allowlisted reference WAV: $reference_wav"
+then fail "missing voice-purpose reference WAV: $reference_wav (see voxi sample list)"
 fi
 
 download_pinned "$sherpa_archive" \

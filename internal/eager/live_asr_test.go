@@ -6,11 +6,11 @@ import (
 	"net"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"ubunatic.com/voxi/internal/sample"
 	"ubunatic.com/voxi/spec"
 )
 
@@ -18,7 +18,7 @@ import (
 // the same function runEagerCaptureSessionAt's runTranscribe closure calls
 // for engine == openai-transcribe) against a genuinely running llama-server
 // serving the r2t2-confucius4 spec entry, using the private local sample
-// corpus at ~/.config/voxi/samples/corpus.tsv (issue 134).
+// store at ~/.local/share/voxi/samples (issues 134, 171).
 //
 // This test never starts llama-server itself (see issue 134's Canary-first
 // rule: don't build/download/launch the external dependency from inside a
@@ -33,7 +33,7 @@ import (
 // It only asserts what's safe to assert unconditionally: a non-empty
 // transcript, and that the "<asr_text>" envelope marker (issue 134 §6,
 // strip_before_marker) never leaks into the final text. Per-clip wall time
-// and a simple word-level similarity/WER against corpus.tsv's expected
+// and a simple word-level similarity/WER against each sample's expected
 // transcript are printed in a table for a human to read.
 func TestLiveASR_R2T2Corpus(t *testing.T) {
 	if os.Getenv("VOXI_LIVE_ASR") != "1" {
@@ -57,14 +57,13 @@ func TestLiveASR_R2T2Corpus(t *testing.T) {
 		t.Skipf("llama-server not reachable at %s; skipping live ASR corpus test", baseURL)
 	}
 
-	home, err := os.UserHomeDir()
+	store, err := sample.OpenReadOnly(sample.Root(""))
 	if err != nil {
-		t.Fatalf("UserHomeDir: %v", err)
+		t.Fatalf("open sample store: %v", err)
 	}
-	corpusDir := filepath.Join(home, ".config", "voxi", "samples")
-	clips, err := loadCorpus(filepath.Join(corpusDir, "corpus.tsv"))
+	clips, err := store.List()
 	if err != nil {
-		t.Fatalf("loadCorpus: %v", err)
+		t.Fatalf("list sample store: %v", err)
 	}
 
 	type result struct {
@@ -78,13 +77,14 @@ func TestLiveASR_R2T2Corpus(t *testing.T) {
 	var results []result
 	usable := 0
 	for _, clip := range clips {
-		if clip.expected == "" {
+		expected := strings.TrimSpace(clip.Transcript)
+		if expected == "" {
 			continue // no expected transcript to compare against -- skip (per issue 134 instructions)
 		}
 		usable++
-		wavPath := filepath.Join(corpusDir, clip.wavFile)
+		wavPath := store.AudioPath(clip)
 		if _, statErr := os.Stat(wavPath); statErr != nil {
-			t.Errorf("clip %s: wav file missing: %v", clip.id, statErr)
+			t.Errorf("clip %s: wav file missing: %v", clip.ID, statErr)
 			continue
 		}
 
@@ -92,21 +92,21 @@ func TestLiveASR_R2T2Corpus(t *testing.T) {
 		got, transcribeErr := transcribeOpenAIWAV(context.Background(), wavPath, baseURL, m.APIModel, m.ResponseFormat, m.StripBeforeMarker)
 		elapsed := time.Since(start)
 
-		r := result{id: clip.id, wallTime: elapsed, want: clip.expected, got: got, err: transcribeErr}
+		r := result{id: clip.ID, wallTime: elapsed, want: expected, got: got, err: transcribeErr}
 		if transcribeErr == nil {
-			r.similarity = wordSimilarity(clip.expected, got)
+			r.similarity = wordSimilarity(expected, got)
 		}
 		results = append(results, r)
 
 		if transcribeErr != nil {
-			t.Errorf("clip %s: transcribeOpenAIWAV: %v", clip.id, transcribeErr)
+			t.Errorf("clip %s: transcribeOpenAIWAV: %v", clip.ID, transcribeErr)
 			continue
 		}
 		if strings.TrimSpace(got) == "" {
-			t.Errorf("clip %s: transcript is empty", clip.id)
+			t.Errorf("clip %s: transcript is empty", clip.ID)
 		}
 		if strings.Contains(got, "<asr_text>") {
-			t.Errorf("clip %s: transcript leaks the <asr_text> envelope marker: %q", clip.id, got)
+			t.Errorf("clip %s: transcript leaks the <asr_text> envelope marker: %q", clip.ID, got)
 		}
 	}
 
@@ -144,40 +144,6 @@ func isReachable(baseURL string, timeout time.Duration) bool {
 	}
 	_ = conn.Close()
 	return true
-}
-
-// corpusClip is one row of corpus.tsv: tab-separated id, wav file,
-// expected transcript, keyterms (pipe-separated, unused by this test).
-type corpusClip struct {
-	id       string
-	wavFile  string
-	expected string
-}
-
-// loadCorpus parses corpus.tsv, skipping blank lines and lines starting
-// with "#" (comments and the "#ts <id> <timestamp>" recording markers seen
-// in ~/.config/voxi/samples/corpus.tsv).
-func loadCorpus(path string) ([]corpusClip, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	var clips []corpusClip
-	for _, line := range strings.Split(string(data), "\n") {
-		if strings.TrimSpace(line) == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		fields := strings.Split(line, "\t")
-		if len(fields) < 2 {
-			continue
-		}
-		clip := corpusClip{id: fields[0], wavFile: fields[1]}
-		if len(fields) >= 3 {
-			clip.expected = strings.TrimSpace(fields[2])
-		}
-		clips = append(clips, clip)
-	}
-	return clips, nil
 }
 
 // wordSimilarity returns a 0..1 score (1 - normalized word-level Levenshtein

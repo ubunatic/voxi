@@ -198,51 +198,19 @@ func TestValidateWAVRejectsWrongEncoding(t *testing.T) {
 	}
 }
 
-func writeCorpus(t *testing.T, dir, corpus string) {
+func writePurposeSample(t *testing.T, root, id string, purpose sample.Purpose, transcript string) {
 	t.Helper()
-	store, err := sample.Open(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for line := range strings.Lines(corpus) {
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		fields := strings.SplitN(line, "\t", 4)
-		if len(fields) < 3 {
-			t.Fatalf("bad test sample row %q", line)
-		}
-		keyterms := []string(nil)
-		if len(fields) == 4 && fields[3] != "" {
-			keyterms = strings.Split(fields[3], "|")
-		}
-		source := filepath.Join(t.TempDir(), "input.wav")
-		writeFile(t, source, []byte("source"))
-		x := sample.Sample{ID: fields[0], Purpose: sample.Voice, Transcript: fields[2], Keyterms: keyterms, Created: time.Now(), Source: "test"}
-		if err := store.Put(x, source); err != nil {
-			t.Fatal(err)
-		}
-		link := filepath.Join(dir, fields[1])
-		if fields[0] == "../escape" {
-			continue
-		}
-		if err := os.MkdirAll(filepath.Dir(link), 0700); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Symlink(store.AudioPath(x), link); err != nil {
-			t.Fatal(err)
-		}
-	}
+	writeSampleData(t, root, id, purpose, transcript, []byte("source"))
 }
 
-func writePurposeSample(t *testing.T, root, id string, purpose sample.Purpose, transcript string) {
+func writeSampleData(t *testing.T, root, id string, purpose sample.Purpose, transcript string, data []byte) {
 	t.Helper()
 	store, err := sample.Open(root)
 	if err != nil {
 		t.Fatal(err)
 	}
 	source := filepath.Join(t.TempDir(), id+".wav")
-	writeFile(t, source, []byte("source"))
+	writeFile(t, source, data)
 	if err := store.Put(sample.Sample{ID: id, Purpose: purpose, Transcript: transcript, Created: time.Now(), Source: "test"}, source); err != nil {
 		t.Fatal(err)
 	}

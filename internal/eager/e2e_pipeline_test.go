@@ -53,9 +53,9 @@ func e2eSkipReason() string {
 }
 
 // e2eCorpusDir resolves the corpus directory: VOXI_E2E_CORPUS overrides the
-// committed public fixture directory, e.g. to point at a private
-// ~/.config/voxi/samples directory recorded via `voxi feedback sample record`
-// (see testdata/speech-context/README.md "Using recorded dev samples").
+// committed public fixture directory with another directory holding a
+// corpus.tsv manifest in the same format. Samples in the private sample
+// store (~/.local/share/voxi/samples) have no corpus.tsv and are not read here.
 func e2eCorpusDir() string {
 	if dir := os.Getenv("VOXI_E2E_CORPUS"); dir != "" {
 		return dir

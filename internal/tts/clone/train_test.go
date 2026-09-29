@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"ubunatic.com/voxi/internal/deps"
+	"ubunatic.com/voxi/internal/sample"
 )
 
 func TestEnsureCheckpointDownloadsAndCachesURL(t *testing.T) {
@@ -153,8 +154,7 @@ func TestTrainCommandPreparesRunsUVAndInstallsVoice(t *testing.T) {
 	if err := os.MkdirAll(samples, 0700); err != nil {
 		t.Fatal(err)
 	}
-	writeCorpus(t, samples, "sample\ta.wav\tText.\t\n")
-	writeFile(t, filepath.Join(samples, "a.wav"), []byte("source"))
+	writePurposeSample(t, samples, "sample", sample.Voice, "Text.")
 	base := filepath.Join(home, "base.ckpt")
 	writeFile(t, base, []byte("base checkpoint"))
 	var stdout strings.Builder
