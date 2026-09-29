@@ -500,6 +500,22 @@ func (b *Buffer) Get(selector string) (Chunk, error) {
 // selector is "all". Files are first moved out of the live namespace, then the
 // manifest is atomically replaced; a manifest error restores the staged files.
 func (b *Buffer) Delete(selector string) error {
+	if selector == "all" {
+		return b.deleteSelected(nil, true)
+	}
+	return b.deleteSelected([]string{selector}, false)
+}
+
+// DeleteIndices atomically deletes the chunks with the given stable indices.
+func (b *Buffer) DeleteIndices(indices []int) error {
+	selectors := make([]string, len(indices))
+	for i, index := range indices {
+		selectors[i] = strconv.Itoa(index)
+	}
+	return b.deleteSelected(selectors, false)
+}
+
+func (b *Buffer) deleteSelected(selectors []string, all bool) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -512,18 +528,23 @@ func (b *Buffer) Delete(selector string) error {
 	}
 
 	var deleted []Chunk
-	if selector == "all" {
+	if all {
 		deleted = append(deleted, m.Chunks...)
 		m.Chunks = nil
 	} else {
-		chunk, err := findChunk(m.Chunks, selector)
-		if err != nil {
-			return err
+		selected := make(map[int]bool, len(selectors))
+		for _, selector := range selectors {
+			chunk, err := findChunk(m.Chunks, selector)
+			if err != nil {
+				return err
+			}
+			selected[chunk.Index] = true
 		}
-		deleted = append(deleted, chunk)
-		kept := make([]Chunk, 0, len(m.Chunks)-1)
+		kept := make([]Chunk, 0, len(m.Chunks)-len(selected))
 		for _, existing := range m.Chunks {
-			if existing.Index != chunk.Index {
+			if selected[existing.Index] {
+				deleted = append(deleted, existing)
+			} else {
 				kept = append(kept, existing)
 			}
 		}

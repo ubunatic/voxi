@@ -429,3 +429,89 @@ func TestChunksDeleteAllReportsShadowChunks(t *testing.T) {
 		t.Errorf("output = %q, want %q", out.String(), want)
 	}
 }
+
+func TestChunksDeleteFilters(t *testing.T) {
+	if got, want := deletePrompt(3, true), "Delete 3 matching chunks? [y/N] "; got != want {
+		t.Fatalf("filtered prompt = %q, want %q", got, want)
+	}
+	newBuffer := func(t *testing.T) *Buffer {
+		t.Helper()
+		buf := NewBuffer(t.TempDir(), 2)
+		chunks := []Chunk{
+			{RejectionReason: "low_energy_transient", RawTranscript: "quiet", CleanedTranscript: "quiet"},
+			{RejectionReason: "unvoiced_transient", RawTranscript: "noise", CleanedTranscript: "noise"},
+			{RawTranscript: "", CleanedTranscript: ""},
+			{RawTranscript: "keep", CleanedTranscript: "keep"},
+			{RejectionReason: "low_energy_transient", RawTranscript: "older", CleanedTranscript: "older"},
+		}
+		for _, chunk := range chunks {
+			if _, err := buf.Add(chunk, []byte{1, 2}, 16000); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return buf
+	}
+	run := func(t *testing.T, args ...string) (*Buffer, string, error) {
+		t.Helper()
+		buf := newBuffer(t)
+		out := &bytes.Buffer{}
+		cmd := NewCommand(deps.Dependencies{Stdout: out}, buf)
+		cmd.SetArgs(append([]string{"delete"}, args...))
+		err := cmd.Execute()
+		return buf, out.String(), err
+	}
+	t.Run("single and combined filters include shadows", func(t *testing.T) {
+		for _, tc := range []struct {
+			args []string
+			want []int
+		}{
+			{[]string{"--low-energy", "--yes"}, []int{1, 5}},
+			{[]string{"--unvoiced", "--yes"}, []int{2}},
+			{[]string{"--empty", "--yes"}, []int{3}},
+			{[]string{"--low-energy", "--empty", "--yes"}, []int{1, 3, 5}},
+		} {
+			buf, out, err := run(t, tc.args...)
+			if err != nil {
+				t.Fatalf("delete %v: %v", tc.args, err)
+			}
+			if want := fmt.Sprintf("Deleted %d chunks.\n", len(tc.want)); out != want {
+				t.Errorf("delete %v output = %q, want %q", tc.args, out, want)
+			}
+			got, err := buf.ListAll(false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(got) != 5-len(tc.want) {
+				t.Errorf("remaining chunks = %d, want %d", len(got), 5-len(tc.want))
+			}
+		}
+	})
+	t.Run("no match", func(t *testing.T) {
+		buf := NewBuffer(t.TempDir(), 2)
+		for _, transcript := range []string{"first", "second"} {
+			if _, err := buf.Add(Chunk{RawTranscript: transcript, CleanedTranscript: transcript}, []byte{1, 2}, 16000); err != nil {
+				t.Fatal(err)
+			}
+		}
+		outBuffer := &bytes.Buffer{}
+		cmd := NewCommand(deps.Dependencies{Stdout: outBuffer}, buf)
+		cmd.SetArgs([]string{"delete", "--unvoiced", "--empty", "--yes"})
+		err := cmd.Execute()
+		out := outBuffer.String()
+		if err != nil || out != "No matching chunks.\n" {
+			t.Fatalf("output = %q, err = %v", out, err)
+		}
+		got, _ := buf.ListAll(false)
+		if len(got) != 2 {
+			t.Fatalf("no-match deletion changed store: %d chunks", len(got))
+		}
+	})
+	t.Run("selector and all conflicts", func(t *testing.T) {
+		for _, args := range [][]string{{"1", "--empty"}, {"--all", "--empty"}} {
+			_, _, err := run(t, args...)
+			if err == nil {
+				t.Errorf("delete %v succeeded", args)
+			}
+		}
+	})
+}

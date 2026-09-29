@@ -161,29 +161,52 @@ func NewCommand(d deps.Dependencies, buf *Buffer) *cobra.Command {
 
 	var deleteAll bool
 	var deleteYes bool
+	var deleteLowEnergy bool
+	var deleteUnvoiced bool
+	var deleteEmpty bool
 	deleteCmd := &cobra.Command{
 		Use:   "delete [INDEX|last]",
 		Short: "Delete recorded chunk audio and transcript metadata",
-		Long:  "Delete one recorded chunk by index or 'last', or use --all to delete every stored chunk.",
+		Long:  "Delete one recorded chunk, every stored chunk, or chunks matching selected categories.",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if deleteAll && len(args) != 0 {
-				return fmt.Errorf("delete accepts either INDEX|last or --all, not both; see --help for usage")
+			filters := deleteLowEnergy || deleteUnvoiced || deleteEmpty
+			if (deleteAll || filters) && len(args) != 0 {
+				return fmt.Errorf("delete accepts either INDEX|last or --all/category filters, not both; see --help for usage")
 			}
-			if !deleteAll && len(args) != 1 {
-				return fmt.Errorf("delete requires INDEX|last or --all; see --help for usage")
+			if deleteAll && filters {
+				return fmt.Errorf("delete --all cannot be combined with category filters; see --help for usage")
 			}
-			if deleteAll {
-				if !deleteYes && isInteractiveInput(d.Stdin) {
-					chunks, err := buf.ListAll(false)
-					if err != nil {
-						return err
+			if !deleteAll && !filters && len(args) != 1 {
+				return fmt.Errorf("delete requires INDEX|last, --all, or a category filter; see --help for usage")
+			}
+			if deleteAll || filters {
+				chunks, err := buf.ListAll(false)
+				if err != nil {
+					return err
+				}
+				var selected []Chunk
+				if deleteAll {
+					selected = chunks
+				} else {
+					for _, chunk := range chunks {
+						if (deleteLowEnergy && chunk.RejectionReason == "low_energy_transient") ||
+							(deleteUnvoiced && chunk.RejectionReason == "unvoiced_transient") ||
+							(deleteEmpty && strings.TrimSpace(chunk.CleanedTranscript) == "") {
+							selected = append(selected, chunk)
+						}
 					}
+					if len(selected) == 0 {
+						fmt.Fprintln(d.Stdout, "No matching chunks.")
+						return nil
+					}
+				}
+				if !deleteYes && isInteractiveInput(d.Stdin) {
 					promptOut := d.Stderr
 					if promptOut == nil {
 						promptOut = os.Stderr
 					}
-					fmt.Fprintf(promptOut, "Delete all %d recorded chunks? [y/N] ", len(chunks))
+					fmt.Fprint(promptOut, deletePrompt(len(selected), filters))
 					answer, err := bufio.NewReader(d.Stdin).ReadString('\n')
 					if err != nil && len(answer) == 0 {
 						return fmt.Errorf("read delete confirmation: %w", err)
@@ -193,14 +216,20 @@ func NewCommand(d deps.Dependencies, buf *Buffer) *cobra.Command {
 						return nil
 					}
 				}
-				all, err := buf.ListAll(false)
-				if err != nil {
-					return err
+				if deleteAll {
+					if err := buf.Delete("all"); err != nil {
+						return err
+					}
+				} else {
+					indices := make([]int, 0, len(selected))
+					for _, chunk := range selected {
+						indices = append(indices, chunk.Index)
+					}
+					if err := buf.DeleteIndices(indices); err != nil {
+						return err
+					}
 				}
-				if err := buf.Delete("all"); err != nil {
-					return err
-				}
-				fmt.Fprintf(d.Stdout, "Deleted %d chunks.\n", len(all))
+				fmt.Fprintf(d.Stdout, "Deleted %d chunks.\n", len(selected))
 				return nil
 			}
 			chunk, err := buf.Get(args[0])
@@ -216,9 +245,19 @@ func NewCommand(d deps.Dependencies, buf *Buffer) *cobra.Command {
 	}
 	deleteCmd.Flags().BoolVar(&deleteAll, "all", false, "delete every stored chunk")
 	deleteCmd.Flags().BoolVarP(&deleteYes, "yes", "y", false, "skip the interactive confirmation for --all")
+	deleteCmd.Flags().BoolVar(&deleteLowEnergy, "low-energy", false, "delete chunks rejected for low energy")
+	deleteCmd.Flags().BoolVar(&deleteUnvoiced, "unvoiced", false, "delete chunks rejected as unvoiced")
+	deleteCmd.Flags().BoolVar(&deleteEmpty, "empty", false, "delete chunks with an empty transcript")
 
 	cmd.AddCommand(listCmd, showCmd, playCmd, deleteCmd)
 	return cmd
+}
+
+func deletePrompt(count int, filtered bool) string {
+	if filtered {
+		return fmt.Sprintf("Delete %d matching chunks? [y/N] ", count)
+	}
+	return fmt.Sprintf("Delete all %d recorded chunks? [y/N] ", count)
 }
 
 func isInteractiveInput(r io.Reader) bool {
