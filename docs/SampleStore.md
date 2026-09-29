@@ -121,9 +121,8 @@ fields; 165/167 filters stay there), `voxi voice prepare|train|clone` (they prod
 `--samples-dir` becomes `--store`, and `clone --sample` keeps its name). `voxi feedback` keeps only
 stop-word, replacement, silence-artifact, vocabulary, status, import (areas minus `samples`).
 
-Deprecation: `voxi feedback sample <verb>` stays one release as a hidden alias that prints
-`deprecated: use voxi sample <new verb>` on stderr and then runs the new command; removed in the
-release after. `--samples-dir` likewise.
+No compatibility layer (user decision, 2026-09-29: only one machine runs current Voxi): `voxi feedback sample`
+is removed outright and `--samples-dir` is renamed to `--store`, with no aliases or deprecation text.
 
 ## 6. Lifecycle
 
@@ -138,17 +137,15 @@ voice samples --voice prepare/train/clone--> voices (derived copies)
 
 ## 7. Migration
 
-`voxi sample migrate` (also run automatically, once, by the first `voxi sample` call that finds the
-legacy dir and no new store):
+`voxi sample migrate` (one-shot, run by hand once, then removed with the legacy code; no automatic trigger):
 
 1. Read `~/.config/voxi/samples/corpus.tsv` and `voice-training.txt`.
 2. Purpose assignment: allowlisted ids -> `voice`; ids whose transcript is empty or a bracketed
    `[...]` noise note -> `noise`; everything else -> `dictation`. Print the plan; `--dry-run` shows only.
 3. Copy (never move) WAV + write sidecar per sample into the new store with 0700/0600, verify size
-   and SHA-256, then write `~/.config/voxi/samples/MIGRATED` with the target path and timestamp.
-   The legacy dir is left in place; deleting it is a manual user step.
-4. Idempotent: existing target with same hash is skipped; different hash stops with an error.
-5. Reversible: `voxi sample export --tsv --to DIR` rebuilds a legacy dir.
+   and SHA-256. The legacy dir is left in place; deleting it is a manual user step.
+4. A different existing target stops with an error. No marker, no reverse export.
+5. Afterwards the TSV reader/exporter, the migrate command and the old `internal/devsample` store code are deleted.
 6. Public store: `testdata/noise-samples/` is converted in-repo with `git mv` to
    `testdata/samples/noise/` plus sidecars in one commit.
 7. Tests use `t.TempDir()` only; nothing touches the real store.
@@ -157,7 +154,7 @@ legacy dir and no new store):
 
 - 170 — Sample store package: layout, sidecars, purpose folders (supersedes 099)
 - 171 — Migrate legacy sample dir and allowlist into the new store
-- 172 — `voxi sample` command set and `feedback sample` deprecation aliases
+- 172 — `voxi sample` command set and `feedback sample` removal
 - 173 — Purpose guards: voice-only training/cloning, consent, noise-only publish
 - 174 — Public noise store review and move to `testdata/samples/noise`
 - 175 — Glossary, help text, man pages and website wording

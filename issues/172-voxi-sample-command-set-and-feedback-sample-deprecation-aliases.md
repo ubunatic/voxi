@@ -18,10 +18,10 @@
 - Top-level `voxi sample`: `list [--purpose] [--public] [--recent]`, `show`, `play`, `record [--purpose]`,
   `add --chunk N|--last`, `edit` ($EDITOR, 166), `move`, `delete`, `import`, `export --tsv`, `publish`.
   `merge` is added by 168 on top of this.
-- `voxi feedback sample <verb>` becomes a hidden alias for one release, printing a deprecation line on
-  stderr; `feedback import` drops the `samples` area in favour of `sample import`.
-- `voice prepare|train|clone --samples-dir` -> `--store` (old flag hidden alias).
+- **No compatibility layer** (user decision 2026-09-29: this is the only machine running current Voxi).
+  Remove `voxi feedback sample` outright, drop the `samples` area from `feedback import` in favour of
+  `sample import`, and rename `voice prepare|train|clone --samples-dir` to `--store`. No aliases, no deprecation text.
 
 ## 3. Implementation & Verification Plan
 
-Command tests for every verb and alias (stderr deprecation text), `voxi man` regenerated, `make install`.
+Command tests for every verb; a test that the removed `feedback sample` command is gone; docs and help mention only the new names; `voxi man` regenerated, `make install`.

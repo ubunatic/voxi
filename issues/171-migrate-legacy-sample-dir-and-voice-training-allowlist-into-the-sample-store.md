@@ -15,18 +15,15 @@ new store without data loss. Decision in docs/SampleStore.md §7.
 
 ## 2. Technical Specification
 
-- `voxi sample migrate [--dry-run]`, also triggered once automatically when the legacy dir exists
-  and the new store does not.
+- **One-shot, no compatibility layer** (user decision 2026-09-29: only this machine needs it). `voxi sample migrate [--dry-run]`, run by hand once; no automatic trigger, no `MIGRATED` marker.
 - Purpose: allowlisted -> `voice`; empty or `[...]` transcript -> `noise`; else `dictation`.
   Print the plan; the user reviews it (known edge cases: `artifact-keyboard-smash`; decided: `kt-sentences-plus-*` are `dictation`, see below).
-- Copy, never move; verify size + SHA-256; write `MIGRATED` marker in the legacy dir; leave legacy
-  files in place. Idempotent (same hash skipped, different hash is an error). Fix modes to 0600
-  (today `calm-reference.wav` and `voice-training.txt` are 0644).
-- Reversible via `voxi sample export --tsv --to DIR`.
+- Copy, verify size + SHA-256, leave legacy files in place until the user deletes them. A different existing target is an error. Modes 0600 (the two 0644 files are already fixed by hand).
+- After the user confirms the live run: delete `LoadLegacyTSV`, `ExportTSV`, `voxi sample migrate` and the old `internal/devsample` store code, and point `scripts/clack_features` and `scripts/speech_context_bench` at the store (`List`). No reverse export.
 
 ## 3. Implementation & Verification Plan
 
-Tests with a fake legacy dir in `t.TempDir()`: plan, idempotent rerun, hash conflict, marker, modes.
+Tests with a fake legacy dir in `t.TempDir()`: plan, hash conflict, modes.
 Live run on the dev machine only with `--dry-run` first and user approval of the plan.
 
 ## Decision (user, 2026-09-29)
