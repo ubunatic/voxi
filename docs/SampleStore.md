@@ -25,7 +25,7 @@ Stores and files:
   (31 entries). Dir 0700, files 0600, except `calm-reference.wav` and `voice-training.txt`, which are **0644**.
 - Allowlist: `voice-training.txt` (4 ids) — the only guard that keeps dev samples out of voice training
   (`internal/tts/clone/dataset.go`, `AllowlistFile`).
-- Public noise samples: `testdata/noise-samples/` (FLAC, git-lfs, own `corpus.tsv` whose header comment
+- Public noise samples (moved to `testdata/samples/noise/` in 174): `testdata/noise-samples/` (FLAC, git-lfs, own `corpus.tsv` whose header comment
   still says "Private local dev samples"). Contains two `bg-voice-*` files marked as distant background speech.
 - Speech-context bench: `testdata/speech-context/corpus.tsv` + README tracked, WAVs git-ignored and
   recorded locally (one local file: `artifact-keyboard-smash.wav`, a duplicate of a private sample).
@@ -144,7 +144,8 @@ voice samples --voice prepare/train/clone--> voices (derived copies)
 4. A different existing target stops with an error. No marker, no reverse export.
 5. Afterwards the TSV reader/exporter, the migrate command and the old `internal/devsample` store code are deleted.
 6. Public store: `testdata/noise-samples/` is converted in-repo with `git mv` to
-   `testdata/samples/noise/` plus sidecars in one commit.
+   `testdata/samples/noise/` plus sidecars in one commit (done in 174; transcripts are empty,
+   `created` comes from the old `#ts` lines).
 7. Tests use `t.TempDir()` only; nothing touches the real store.
 
 ## 8. Implementation Tickets

@@ -1,0 +1,6 @@
+{
+  "id": "bg-voice-hospital-hallucination",
+  "transcript": "",
+  "created": "2026-09-09T13:01:07Z",
+  "source": "migration:testdata/noise-samples/corpus.tsv"
+}

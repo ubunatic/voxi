@@ -1,6 +1,6 @@
 # 174 — Review public noise samples and move them to testdata/samples/noise
 
-**Status**: Open — filed from 169
+**Status**: Closed — resolved
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Privacy
@@ -24,3 +24,11 @@ its `corpus.tsv` header still calls it "private local dev samples".
 ## 3. Implementation & Verification Plan
 
 `go test ./...`, `git lfs ls-files` shows all FLACs, `voxi sample list --public` lists them.
+
+## Delivery (2026-09-29)
+
+- `git mv` of all 28 FLACs (including both `bg-voice-*`) to `testdata/samples/noise/`, one JSON sidecar
+  each (0644, empty transcript, `created` from the old `#ts` lines, `source` names the old manifest);
+  `corpus.tsv` removed. `.gitattributes` needed no change (`*.flac` rule); `git lfs ls-files` lists all 28.
+- `scripts/clack_features` reads the public store through `internal/sample` (`noise/` only).
+- `voxi sample list --public` lists all 28. Website/man page wording is left to 175.

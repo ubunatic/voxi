@@ -12,12 +12,11 @@
 //	go run ./scripts/clack_features [-private DIR] [-public DIR]
 //
 // -private defaults to the private sample store
-// (~/.local/share/voxi/samples); -public defaults to the public legacy corpus
-// (testdata/noise-samples, relative to the repo root).
+// (~/.local/share/voxi/samples); -public defaults to the public sample store
+// (testdata/samples, relative to the repo root), of which only noise/ exists.
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/binary"
 	"flag"
@@ -25,7 +24,6 @@ import (
 	"math"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -50,7 +48,7 @@ func main() {
 	defaultPrivate := samplestore.Root(os.Getenv("XDG_DATA_HOME"))
 
 	private := flag.String("private", defaultPrivate, "private sample store root")
-	public := flag.String("public", filepath.Join("testdata", "noise-samples"), "public (git-tracked) samples directory holding corpus.tsv and its FLAC files")
+	public := flag.String("public", samplestore.DefaultPublicRoot, "public (git-tracked) sample store root")
 	flag.Parse()
 
 	var samples []sample
@@ -69,17 +67,20 @@ func main() {
 			fmt.Fprintf(os.Stderr, "open sample store %s: %v\n", *private, err)
 		}
 	}
-	var publicSamples []sample
 	if *public != "" {
-		var err error
-		publicSamples, err = loadPublicManifest(filepath.Join(*public, "corpus.tsv"))
-		if err != nil && !os.IsNotExist(err) {
-			fmt.Fprintf(os.Stderr, "load public manifest %s: %v\n", *public, err)
+		store, err := samplestore.OpenReadOnly(*public)
+		if err == nil {
+			items, listErr := store.List(samplestore.Noise)
+			if listErr != nil {
+				fmt.Fprintf(os.Stderr, "list public store %s: %v\n", *public, listErr)
+			}
+			for _, item := range items {
+				samples = append(samples, sample{name: item.ID, wav: store.AudioPath(item)})
+			}
 		}
-	}
-	for _, item := range publicSamples {
-		item.wav = filepath.Join(*public, item.wav)
-		samples = append(samples, item)
+		if err != nil && !os.IsNotExist(err) {
+			fmt.Fprintf(os.Stderr, "open public store %s: %v\n", *public, err)
+		}
 	}
 	if len(samples) == 0 {
 		fmt.Fprintf(os.Stderr, "no samples found in %s or %s\n", *private, *public)
@@ -109,29 +110,6 @@ func main() {
 	for _, r := range rows {
 		fmt.Printf("%-26s  %8.4f  %8.1fHz  %6d\n", r.name, r.zcr, r.centroid, r.framesUsed)
 	}
-}
-
-// loadPublicManifest reads the still-legacy public noise manifest.
-func loadPublicManifest(path string) ([]sample, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	var samples []sample
-	sc := bufio.NewScanner(f)
-	for line := 1; sc.Scan(); line++ {
-		text := sc.Text()
-		if text == "" || strings.HasPrefix(text, "#") {
-			continue
-		}
-		fields := strings.SplitN(text, "\t", 4)
-		if len(fields) < 3 {
-			return nil, fmt.Errorf("%s:%d: malformed row", path, line)
-		}
-		samples = append(samples, sample{name: fields[0], wav: fields[1]})
-	}
-	return samples, sc.Err()
 }
 
 // readAudioPCM reads mono 16-bit PCM samples and the sample rate from either
