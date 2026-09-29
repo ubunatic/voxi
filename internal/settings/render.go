@@ -136,6 +136,11 @@ func RenderSummary(s *config.UserSettings, home string) string {
 	b.WriteString(fmt.Sprintf("  %-22s %s\n", "LLM Cleaner:", cleanerStatus))
 	b.WriteString(fmt.Sprintf("  %-22s %s\n", "Cleanup Model:", s.CleanupModel))
 	b.WriteString(fmt.Sprintf("  %-22s %s\n", "ASR Model:", s.ASRModel))
+	ttsBackend := s.TTSBackend
+	if ttsBackend == "" {
+		ttsBackend = "auto"
+	}
+	b.WriteString(fmt.Sprintf("  %-22s %s\n", "TTS Backend:", ttsBackend))
 	b.WriteString(fmt.Sprintf("  %-22s %dms\n", "Typing Delay:", s.TypeDelayMs))
 
 	histStatus := "[ ] Disabled"

@@ -59,6 +59,9 @@ var DefaultCleanupModels = []string{
 // DefaultCleanupBackends lists the supported cleanup transports.
 var DefaultCleanupBackends = []string{"local_http", "agy"}
 
+// DefaultTTSBackends lists the selectable text-to-speech backends.
+var DefaultTTSBackends = []string{"auto", "piper", "voxcpm", "festival", "espeak-ng"}
+
 // DefaultTypeDelays lists standard typing delay choices in milliseconds.
 var DefaultTypeDelays = []int{0, 1, 5, 12}
 
@@ -97,6 +100,17 @@ func NewMenuModel(s *config.UserSettings, availableASRModels []string) *MenuMode
 	asrIdx := indexOf(asrChoices, s.ASRModel)
 	if asrIdx < 0 {
 		asrIdx = 0
+	}
+
+	// Prepare TTS backend choices
+	ttsChoices := append([]string{}, DefaultTTSBackends...)
+	ttsBackend := s.TTSBackend
+	if ttsBackend == "" {
+		ttsBackend = "auto"
+	}
+	ttsIdx := indexOf(ttsChoices, ttsBackend)
+	if ttsIdx < 0 {
+		ttsIdx = 0
 	}
 
 	// Prepare typing delay choices
@@ -169,6 +183,14 @@ func NewMenuModel(s *config.UserSettings, availableASRModels []string) *MenuMode
 			Description: "Pause typing injection when physical Ctrl/Alt/Super/Shift are held (voxi-modifierd)",
 			Kind:        ItemBool,
 			BoolValue:   s.ModifierGating,
+		},
+		{
+			ID:          "tts_backend",
+			Title:       "TTS Backend",
+			Description: "Text-to-speech engine: piper, voxcpm (cloned voice), or fallbacks; Save restarts voxi-agent.service",
+			Kind:        ItemChoice,
+			Choices:     ttsChoices,
+			ChoiceIndex: ttsIdx,
 		},
 		{
 			ID:          "save",
@@ -335,6 +357,10 @@ func (m *MenuModel) ToUserSettings(base *config.UserSettings) *config.UserSettin
 		case "asr_model":
 			if item.ChoiceIndex >= 0 && item.ChoiceIndex < len(item.Choices) {
 				res.ASRModel = item.Choices[item.ChoiceIndex]
+			}
+		case "tts_backend":
+			if item.ChoiceIndex >= 0 && item.ChoiceIndex < len(item.Choices) {
+				res.TTSBackend = item.Choices[item.ChoiceIndex]
 			}
 		case "type_delay_ms":
 			if item.ChoiceIndex >= 0 && item.ChoiceIndex < len(item.Choices) {

@@ -46,6 +46,7 @@ func NewCommand(d deps.Dependencies, availableASRModels []string) *cobra.Command
 			"  • LLM Post-Processing Cleaner\n" +
 			"  • Cleanup Model Selection\n" +
 			"  • ASR Model Selection\n" +
+			"  • TTS Backend (tts_backend)\n" +
 			"  • Keystroke Delay (type_delay_ms)\n" +
 			"  • Dictation History\n" +
 			"  • Modifier Key Gating (voxi-modifierd)\n\n" +

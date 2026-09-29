@@ -10,8 +10,8 @@ func TestMenuModelNavigation(t *testing.T) {
 	s := config.DefaultUserSettings()
 	m := NewMenuModel(s, nil)
 
-	if len(m.Items) != 9 {
-		t.Fatalf("expected 9 items, got %d", len(m.Items))
+	if len(m.Items) != 10 {
+		t.Fatalf("expected 10 items, got %d", len(m.Items))
 	}
 	if m.Cursor != 0 {
 		t.Fatalf("expected initial cursor 0, got %d", m.Cursor)
@@ -107,8 +107,8 @@ func TestMenuModelTogglesAndCycles(t *testing.T) {
 		t.Errorf("next delay = %s, want 1ms", m.CurrentItem().Choices[m.CurrentItem().ChoiceIndex])
 	}
 
-	// 6. Save action (Cursor 7)
-	m.Cursor = 7
+	// 6. Save action (Cursor 8)
+	m.Cursor = 8
 	m.ToggleOrNext()
 	if !m.Saved || !m.Closed {
 		t.Errorf("expected Saved=true, Closed=true on Save row action")
@@ -151,5 +151,24 @@ func TestMenuModelKeyDispatch(t *testing.T) {
 	m2.HandleKey(KeyQuit)
 	if m2.Saved || !m2.Closed {
 		t.Errorf("KeyQuit should close without saving")
+	}
+}
+
+func TestMenuTTSBackendRoundTrip(t *testing.T) {
+	m := NewMenuModel(&config.UserSettings{TTSBackend: "piper"}, nil)
+	for i, item := range m.Items {
+		if item.ID == "tts_backend" {
+			m.Cursor = i
+		}
+	}
+	if got := m.CurrentItem().Choices[m.CurrentItem().ChoiceIndex]; got != "piper" {
+		t.Fatalf("initial backend = %q, want piper", got)
+	}
+	m.Next()
+	if got := m.ToUserSettings(nil).TTSBackend; got != "voxcpm" {
+		t.Errorf("TTSBackend after Next() = %q, want voxcpm", got)
+	}
+	if got := NewMenuModel(nil, nil).ToUserSettings(nil).TTSBackend; got != "auto" {
+		t.Errorf("default TTSBackend = %q, want auto", got)
 	}
 }
