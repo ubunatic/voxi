@@ -1,6 +1,6 @@
 # 167 — chunks delete: flags for low-energy, empty, unvoiced chunks
 
-**Status**: Open
+**Status**: Closed — M1 (filter flags) delivered and corrected: --low-energy, --unvoiced, --empty each match only their own rejection reason; tests pass, installed
 **Priority**: P3 (Low)
 **Severity**: Minor
 **Category**: Feature
