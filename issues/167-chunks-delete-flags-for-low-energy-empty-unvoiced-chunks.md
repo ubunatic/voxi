@@ -30,3 +30,16 @@ samples. `voxi chunks delete` can only remove one chunk by index or everything.
 
 M1 (filter flags): implement, help text, tests (each flag, combinations, no match, conflicts, shadow chunks, count in prompt), `make install`.
 Developer: re-verify against live code and recent commits before starting.
+
+## 4. Review Notes
+
+M1 (filter flags) delivered in 0f235c8: three combinable flags, shadow chunks included, atomic multi-index delete, tests pass.
+
+### Pre-Work / Required Refinements (M1 follow-up)
+
+Plausibility check on the live store (100 chunks): 23 `low_energy_transient`, 7 `empty`, 1 `unvoiced_transient`; all 31 have an empty `cleaned_transcript`. `--empty` currently matches on an empty transcript, so it would delete all 31, not just the 7 chunks that `voxi chunks list` shows as `(empty)`.
+
+1. `--empty` must match `RejectionReason == "empty"` only (the category the user sees in `chunks list`). Each flag then selects exactly its own category.
+2. Fix flag and help texts accordingly; update the `--yes` help to say it skips confirmation for `--all` and the category filters.
+3. Add a test with chunks of all three reasons (all with empty transcripts) proving each flag deletes only its own category and combinations delete the union.
+4. `make install`, commit as `fix(chunks): --empty matches the empty rejection reason only (issue 167)`.
