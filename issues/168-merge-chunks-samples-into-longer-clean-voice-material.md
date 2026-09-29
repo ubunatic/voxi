@@ -39,3 +39,7 @@ transcript still match exactly and provenance stays traceable.
 
 M1 (design and decision): answer §3 from live code, choose command shapes and record the decision here; if any item cannot be made safe, close as "not worth it" with the reason.
 M2 (implementation, only if M1 says yes): merge for chunks then samples, tests (format mismatch, cross-session refusal, order, gap, overwrite refusal, provenance), docs and `--help`, `make install`.
+
+## Note from 169 (2026-09-29)
+
+Command shape decided: `voxi sample merge ID --from A B C` (samples) or `--chunks` (chunk indices), writing a new sample whose sidecar `source` records the inputs; builds on 170/172. See docs/SampleStore.md §5.

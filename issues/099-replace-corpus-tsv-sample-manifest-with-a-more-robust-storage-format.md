@@ -110,3 +110,7 @@ replacement: `bg-voice-aye-you-did-that` and `bg-voice-hospital-hallucination` i
   (`bg-voice-aye-you-did-that`, `bg-voice-hospital-hallucination`).
 - `voxi feedback sample record/save-chunk/save-last/list/remove/promote` all continue to work
   against the new format.
+
+## Note from 169 (2026-09-29)
+
+Superseded by issue 170 (per-sample JSON sidecars, see docs/SampleStore.md §4). Close when 170 lands.

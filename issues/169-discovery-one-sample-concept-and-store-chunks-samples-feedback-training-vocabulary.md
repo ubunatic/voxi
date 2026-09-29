@@ -4,7 +4,7 @@
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Architecture
-**Related**: 099 (replace corpus.tsv), 119 (consolidate local config storage), 097 (external sample catalog), 098 (shared lister), 117 (sample import), 042/055 (recorder, save-chunk), 151/153 (voice training, allowlist), 165/167/168 (chunks delete, filters, merge), 166 ($EDITOR transcripts), docs/ChunkDiagnostics.md, docs/TTSReading.md
+**Related**: 170–175 (follow-ups), docs/SampleStore.md, 099 (replace corpus.tsv), 119 (consolidate local config storage), 097 (external sample catalog), 098 (shared lister), 117 (sample import), 042/055 (recorder, save-chunk), 151/153 (voice training, allowlist), 165/167/168 (chunks delete, filters, merge), 166 ($EDITOR transcripts), docs/ChunkDiagnostics.md, docs/TTSReading.md
 
 **Executor**: Opus (`claude-opus-5-5`). This is a research ticket for the strongest model, not for a low-cost developer.
 
@@ -46,3 +46,41 @@ strict separation between purposes, and a **minimal vocabulary** on the command 
 ## 4. Notes
 
 Re-verify all statements above against live code and recent commits before starting; issues 099 and 119 may already cover part of the storage question, so merge rather than duplicate. Record open uncertainties instead of inventing details.
+
+## 5. Findings and Decision (2026-09-29, verified against 627b143)
+
+Decision record: [docs/SampleStore.md](../docs/SampleStore.md) (glossary, inventory, purpose model,
+storage layout, command map, lifecycle, migration, not-changed list, open uncertainties).
+
+Answers in short:
+
+1. **Inventory:** docs/SampleStore.md §2. Stores: `~/.config/voxi/samples/` (29 WAVs + `corpus.tsv` +
+   `voice-training.txt`; two files 0644 instead of 0600), `testdata/noise-samples/` (public FLAC, header
+   wrongly says "private"), `testdata/speech-context/` (tracked TSV, ignored local WAVs),
+   `~/.local/share/voxi/{voice-training,voices,voxcpm/voices,voice-demo}`. Code: `internal/devsample`,
+   `internal/feedback`, `internal/chunks`, `internal/tts/clone`, `internal/install/voxcpm.go`, two scripts.
+2. **Vocabulary:** new top-level `voxi sample` (list, show, play, record, add, edit, move, delete, merge,
+   import, export, publish). `voxi chunks` stays (different lifetime); `feedback sample` becomes a hidden
+   deprecated alias for one release; `voice prepare|train|clone` keep their names.
+3. **Purposes:** `dictation`, `noise`, `voice`; one primary purpose per sample, expressed as the folder
+   (no tags). Voice tools read only `voice/`; publish only `noise/`.
+4. **Storage:** `$XDG_DATA_HOME/voxi/samples/<purpose>/<id>.wav` + `<id>.json` sidecar; supersedes 099;
+   samples stay out of 119; `voice-training.txt` retired; derived voice files stay copies with provenance.
+5. **Lifecycle:** §6 of the record; chunk -> `sample add --chunk N`; merge (168), edit (166), import (117),
+   publish are `voxi sample` verbs; delete filters (167) stay on `chunks`.
+6. **Migration:** copy-verify-marker, idempotent, reversible via TSV export, dry-run plan reviewed by user.
+7. **Safety:** 0700/0600, explicit own-voice consent stored per sample, wrong-purpose use refused.
+8. **Docs:** glossary in the record, help/man/website pass in 175.
+
+Follow-up tickets:
+
+- [170](170-sample-store-package-purpose-folders-and-per-sample-json-sidecars.md) — store package (supersedes 099)
+- [171](171-migrate-legacy-sample-dir-and-voice-training-allowlist-into-the-sample-store.md) — migration
+- [172](172-voxi-sample-command-set-and-feedback-sample-deprecation-aliases.md) — `voxi sample` commands, aliases
+- [173](173-sample-purpose-guards-voice-only-training-and-cloning-consent-noise-only-publish.md) — purpose guards, consent (P1)
+- [174](174-review-public-noise-samples-and-move-them-to-testdata-samples-noise.md) — public noise review and move
+- [175](175-sample-glossary-help-text-man-pages-and-website-wording.md) — glossary, help, man, website
+
+Open uncertainties (need user input, recorded in the record §10): the two public `bg-voice-*` files with
+real background speech; migration heuristic for mixed speech+noise samples; backup coverage of
+`$XDG_DATA_HOME`; whether `calm-reference` matches the VoxCPM `full` reference text.

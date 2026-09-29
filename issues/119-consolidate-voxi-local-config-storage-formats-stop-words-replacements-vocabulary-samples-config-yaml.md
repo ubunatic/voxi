@@ -67,3 +67,7 @@ short-lived.
 - The samples manifest format specifically (issue 099) — reference it, but
   let it stay its own decision unless the design pass concludes samples
   should be folded in too.
+
+## Note from 169 (2026-09-29)
+
+Open question answered: `samples/` does not join this consolidation; samples move to `$XDG_DATA_HOME/voxi/samples` (docs/SampleStore.md §4, tickets 170/171).
