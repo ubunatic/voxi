@@ -1,6 +1,6 @@
 # 171 — Migrate legacy sample dir and voice-training allowlist into the sample store
 
-**Status**: Open — filed from 169
+**Status**: Closed — resolved
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Migration
@@ -51,3 +51,13 @@ The developer was stopped mid-way through M2 (legacy cleanup). The WIP is commit
 - Live migration is DONE and verified (29 samples in `~/.local/share/voxi/samples`); the legacy dir is untouched and must stay so.
 
 Resume point: finish M2 items 1-5 above. First `go build ./... && go vet ./...`, fix `clack_features`, then check each M2 item against the diff; run `make test-q1` once, `make install`. Do not close the ticket until the build and tests are green.
+
+## M2 (legacy cleanup) delivered — ticket closed
+
+Delivered in 8319c75 (interrupted WIP) and adda4ef (finish). Build, vet and `make test-q1` pass; installed.
+
+1. `LoadLegacyTSV`, `ExportTSV`, `PlanMigration`/`Migrate`, `voxi sample migrate` and `sample export` are gone, with their tests.
+2. `scripts/clack_features` and `scripts/speech_context_bench` read the store. Real-store run: speech_context_bench finds 29 samples; clack_features prints 57 rows (29 store + 28 public noise fixtures).
+3. `internal/devsample` keeps only helpers with live callers: capture, editor, line editor, prompts/player (`flow.go`), transcribe/keyterms.
+4. `voice prepare|train|clone` read only `voice/` store samples; `voice-training.txt` is no longer read. Also moved onto the store after review: `scripts/canary_voiceclone/run.sh` and the opt-in `TestLiveASR_R2T2Corpus`.
+5. Nothing writes under `~/.config/voxi/samples`; the user can delete that dir by hand.
