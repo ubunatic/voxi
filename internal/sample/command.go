@@ -15,6 +15,7 @@ import (
 	"ubunatic.com/voxi/internal/chunks"
 	"ubunatic.com/voxi/internal/deps"
 	"ubunatic.com/voxi/internal/devsample"
+	"ubunatic.com/voxi/internal/glossary"
 	"ubunatic.com/voxi/spec"
 )
 
@@ -25,7 +26,7 @@ func NewCommand(d deps.Dependencies) *cobra.Command {
 		dataHome = d.Getenv("XDG_DATA_HOME")
 	}
 	root := Root(dataHome)
-	cmd := &cobra.Command{Use: "sample", Short: "Manage persistent audio samples", SilenceUsage: true}
+	cmd := &cobra.Command{Use: "sample", Short: "Manage persistent audio samples", Long: "Record, save, edit, merge, and publish persistent audio samples.\n\n" + glossary.Audio, SilenceUsage: true}
 	open := func() (*Store, error) { return Open(root) }
 	publicRoot := DefaultPublicRoot
 	cmd.PersistentFlags().StringVar(&publicRoot, "public-store", publicRoot, "public (git-tracked) sample store root, relative to the repository root")

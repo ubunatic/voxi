@@ -90,7 +90,7 @@ parallel llama.cpp builds pushed the desktop into swap.
 | R2T2 cold (CLI, reloads model) | 0.55 |
 | whisper large-v3-turbo | 0.45 |
 
-Corpus run over 24 labelled clips: short clips 0.5–1.0 s, sentences 1.4–2.0 s.
+Run over 24 labelled dictation samples: short clips 0.5–1.0 s, sentences 1.4–2.0 s.
 Startup is ~25 s, so a resident server is mandatory; per-utterance CLI invocation
 throws that away.
 
@@ -104,13 +104,13 @@ engine, like crispasr. Native streaming would need NetEase's own runtime
 
 ## Accuracy and vocabulary biasing
 
-Measured on the private corpus (`~/.config/voxi/samples/corpus.tsv`, see
-`AGENTS.md`). R2T2 is fluent but mangles project jargon: Voxi→"Foxy",
+Measured on the private dictation samples (then `~/.config/voxi/samples/corpus.tsv`, now
+the sample store, see `docs/SampleStore.md`). R2T2 is fluent but mangles project jargon: Voxi→"Foxy",
 voxtype→"box type", PipeWire→"pipe wire", harnez→"harness", uman→"human".
 
 **The fix exists and is verified**: `/v1/audio/transcriptions` accepts a `prompt`
 field which llama.cpp uses as the literal ASR instruction
-(`tools/server/server-chat.cpp:653`). Passing the corpus `keyterms` column as the
+(`tools/server/server-chat.cpp:653`). Passing the samples' `keyterms` as the
 prompt corrected Voxi, voxtype and PipeWire in one shot; "dotool"→"two tool"
 survived, so biasing is partial and the prompt *shape* matters (bare
 pipe-separated terms may be weaker than a wrapping instruction).
@@ -127,8 +127,8 @@ marker stripping this becomes `""`, indistinguishable from a failed transcriptio
 It is not a duration effect: `short-yes` (0.92 s) transcribes, `short-uh` (1.06 s)
 does not.
 
-Corollary for corpus work: check clip duration against the expected text before
-blaming the model. `bug-d-etc.wav` is 0.64 s long while its corpus row claims a
+Corollary for sample work: check clip duration against the expected text before
+blaming the model. `bug-d-etc.wav` is 0.64 s long while its transcript claims a
 7-word sentence — a mislabelled sample masquerading as a model bug.
 
 ## Monitor must not stay silent about the backend

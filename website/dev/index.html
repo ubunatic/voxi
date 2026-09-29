@@ -150,20 +150,23 @@
 
       <div class="code-block">
         <button class="copy-code-btn" title="Copy code">copy</button>
-        <pre><code><span class="prompt">$</span> voxi feedback sample record &lt;name&gt;   <span class="comment"># Record one utterance + corrected transcript</span>
-<span class="prompt">$</span> voxi feedback sample list             <span class="comment"># List recorded dev samples</span>
-<span class="prompt">$</span> voxi feedback sample play &lt;name&gt;      <span class="comment"># Replay a recorded sample</span>
-<span class="prompt">$</span> voxi feedback sample promote &lt;name&gt;   <span class="comment"># Promote a noise-only sample into the public corpus</span>
-<span class="prompt">$</span> voxi config import &lt;dir&gt; --only samples  <span class="comment"># Bring a sample set over from another machine</span></code></pre>
+        <pre><code><span class="prompt">$</span> voxi sample record &lt;id&gt;               <span class="comment"># Record one utterance + corrected transcript</span>
+<span class="prompt">$</span> voxi sample add &lt;id&gt; --last            <span class="comment"># Keep the last dictation chunk as a sample</span>
+<span class="prompt">$</span> voxi sample list                       <span class="comment"># List samples by purpose</span>
+<span class="prompt">$</span> voxi sample play &lt;id&gt;                 <span class="comment"># Replay a sample</span>
+<span class="prompt">$</span> voxi sample merge &lt;id&gt; &lt;a&gt; &lt;b&gt;         <span class="comment"># Join samples into one longer sample</span>
+<span class="prompt">$</span> voxi sample publish &lt;id&gt;              <span class="comment"># Publish a noise-only sample to the repository</span></code></pre>
       </div>
 
       <p class="section-desc" style="margin-top: 1.5rem; text-align: left;">
-        Each sample pairs a WAV recording with a manually corrected ground-truth transcript,
-        stored privately under <code>~/.config/voxi/samples/</code> &mdash; never swept into any
-        sync or backup tooling, since it holds real recorded speech. A sample confirmed to
-        contain no real speech (keyboard clacks, mouse or ambient noise) can be deliberately
-        promoted into <code>testdata/noise-samples/</code>, the repository's public, git-tracked
-        corpus used for noise-vs-speech classification fixtures.
+        Each sample pairs a WAV recording with a manually corrected ground-truth transcript and
+        one purpose: <em>dictation</em> (accuracy checks), <em>noise</em> (must yield no text) or
+        <em>voice</em> (your own voice for cloning, only with your consent). Samples are stored
+        privately under <code>~/.local/share/voxi/samples/</code>, since they hold real recorded
+        speech. Only a noise sample confirmed to contain no intelligible speech (keyboard clacks,
+        mouse or ambient noise) can be published into <code>testdata/samples/noise/</code>, the
+        repository's public, git-tracked store used for noise-vs-speech fixtures. A
+        <em>chunk</em> is different: one recording cut by live dictation; only the last 100 are kept.
       </p>
     </section>
   </main>

@@ -85,7 +85,7 @@ rewriting.
 ## Known limits
 
 The current acoustic gate detects sustained voiced energy, not speaker identity.
-The promoted distant-background fixtures overlap ordinary noise and plausible
+The published distant-background noise samples overlap ordinary noise and plausible
 quiet speech in simple energy metrics. One duplicated-sentence fixture is now
 covered, but the non-repetitive `Aye, you did that.` fixture still needs a
 validated speaker-distance, confidence, or equivalent signal. No unsupported

@@ -9,12 +9,13 @@ import (
 
 	"github.com/spf13/cobra"
 	"ubunatic.com/voxi/internal/deps"
+	"ubunatic.com/voxi/internal/glossary"
 	"ubunatic.com/voxi/internal/sample"
 )
 
 // NewCommand creates the voice management command.
 func NewCommand(d deps.Dependencies) *cobra.Command {
-	voice := &cobra.Command{Use: "voice", Short: "Prepare and train custom Piper voices"}
+	voice := &cobra.Command{Use: "voice", Short: "Prepare and train custom Piper voices", Long: "Build TTS voices from your voice-purpose samples. Only samples in the voice purpose, stored with your own-voice consent, are ever read.\n\n" + glossary.Audio}
 	voice.AddCommand(NewPrepareCommand(d), NewTrainCommand(d), NewCloneCommand(d))
 	return voice
 }

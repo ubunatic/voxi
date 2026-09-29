@@ -68,9 +68,12 @@ Project website publishes from `website/` via `uman website sync voxi`.
 
 ## Speech Samples
 
-`~/.config/voxi/samples/` usually holds a developer machine's private `corpus.tsv`
-(id, wav, expected transcript, keyterms) plus its WAVs — a local, uncommitted
-labelled corpus for ASR accuracy checks.
+`~/.local/share/voxi/samples/{dictation,noise,voice}/` holds a developer machine's private
+samples: one WAV plus one JSON sidecar (id, transcript, keyterms, source, consent) each, used
+for ASR accuracy checks (`dictation`), no-speech checks (`noise`) and voice cloning (`voice`).
+Use `voxi sample` to manage them and `internal/sample` to read them; never write them from
+tests (use `t.TempDir()`). Terms and rules: `docs/SampleStore.md`. The legacy
+`~/.config/voxi/samples/` (corpus.tsv) is read by nothing and must not be modified.
 <!-- harnez:begin Repo Setup -->
 ## Repo Setup
 - Solo/hobby repo — single default branch, no PR workflow.

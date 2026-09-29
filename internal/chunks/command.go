@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 	"ubunatic.com/voxi/internal/deps"
+	"ubunatic.com/voxi/internal/glossary"
 	"ubunatic.com/voxi/internal/listing"
 )
 
@@ -23,6 +24,7 @@ func NewCommand(d deps.Dependencies, buf *Buffer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "chunks",
 		Short: "Inspect, play, and debug recent recorded audio chunks and transcription metadata",
+		Long:  "Inspect, play, and debug the recordings cut by live dictation. Save a chunk permanently with `voxi sample add ID --chunk N`.\n\n" + glossary.Audio,
 	}
 
 	var reverse bool

@@ -1,6 +1,6 @@
 # Sample Store: One Sample Concept, Purposes, Command Map
 
-Decision record from issue 169 (2026-09-29). Status: **decided, not yet implemented**.
+Decision record from issue 169 (2026-09-29). Status: **implemented** (170–175, 168).
 Implementation tickets: 170–175 (see §8).
 
 ## 1. Glossary
@@ -11,7 +11,7 @@ Implementation tickets: 170–175 (see §8).
 | **sample** | One persistent WAV/FLAC plus its metadata (expected transcript, keyterms, purpose, provenance). The only persistent audio unit. |
 | **purpose** | The one thing a sample may be used for: `dictation`, `noise` or `voice` (§3). |
 | **store** | The directory tree holding samples: the private store (per user) and the public store (git-tracked in the repo). |
-| **publish** | Copy a sample from the private into the public store (today: `promote`). Only `noise`. |
+| **publish** | Copy a sample from the private into the public store (`voxi sample publish`). Only `noise`. |
 | **import** | Merge samples from another machine's private store. |
 | **voice** | An installed TTS voice (Piper `.onnx` or a VoxCPM/cloned reference WAV). Built *from* `voice` samples; not a sample itself. |
 | **feedback** | Rules that change dictation output: stop words, replacements, silence artifacts, vocabulary. No audio. |
