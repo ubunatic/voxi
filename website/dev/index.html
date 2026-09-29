@@ -142,8 +142,9 @@
       <div class="section-heading">
         <h2>Dev Samples &amp; Accuracy Canaries</h2>
         <p class="section-desc">
-          Accuracy work on voxi's ASR defaults is backed by real recorded speech, not just
-          synthesized fixtures. This is a private, contributor-only capability &mdash; it plays
+          Samples are saved audio for accuracy checks, no-speech checks, and voice cloning. Chunks
+          are temporary recordings cut by live dictation, kept with diagnostics; use them directly
+          or save them as samples. This is a private, contributor-only capability &mdash; it plays
           no part in everyday dictation.
         </p>
       </div>
@@ -154,14 +155,15 @@
 <span class="prompt">$</span> voxi sample add &lt;id&gt; --last            <span class="comment"># Keep the last dictation chunk as a sample</span>
 <span class="prompt">$</span> voxi sample list                       <span class="comment"># List samples by purpose</span>
 <span class="prompt">$</span> voxi sample play &lt;id&gt;                 <span class="comment"># Replay a sample</span>
-<span class="prompt">$</span> voxi sample merge &lt;id&gt; &lt;a&gt; &lt;b&gt;         <span class="comment"># Join samples into one longer sample</span>
+<span class="prompt">$</span> voxi sample merge &lt;id&gt; &lt;a&gt; &lt;b&gt;         <span class="comment"># Join samples; 20s default limit</span>
 <span class="prompt">$</span> voxi sample publish &lt;id&gt;              <span class="comment"># Publish a noise-only sample to the repository</span></code></pre>
       </div>
 
       <p class="section-desc" style="margin-top: 1.5rem; text-align: left;">
-        Each sample pairs a WAV recording with a manually corrected ground-truth transcript and
-        one purpose: <em>dictation</em> (accuracy checks), <em>noise</em> (must yield no text) or
-        <em>voice</em> (your own voice for cloning, only with your consent). Samples are stored
+        Each sample pairs a recording with metadata and one purpose: <em>dictation</em> (ASR accuracy
+        checks), <em>noise</em> (must yield no text) or <em>voice</em> (your own voice for cloning and
+        training, with explicit own-voice consent required when adding or moving it into that purpose).
+        Samples are stored
         privately under <code>~/.local/share/voxi/samples/</code>, since they hold real recorded
         speech. Only a noise sample confirmed to contain no intelligible speech (keyboard clacks,
         mouse or ambient noise) can be published into <code>testdata/samples/noise/</code>, the

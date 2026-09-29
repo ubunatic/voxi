@@ -235,6 +235,21 @@
       </p>
     </section>
 
+    <section id="samples" class="wrap section-wrap" aria-label="Persistent Audio Samples">
+      <div class="section-heading">
+        <h2>Samples</h2>
+        <p class="section-desc">
+          Chunks are temporary recordings from live dictation, kept with diagnostics in a ring buffer;
+          samples are saved audio with metadata and one purpose: <code>dictation</code> for ASR accuracy
+          checks, <code>noise</code> for audio expected to yield no text, or <code>voice</code> for your own
+          clean speech used for voice cloning and training. Adding or moving a sample into <code>voice</code>
+          requires confirming that it is your own voice. <code>voxi sample merge</code> joins samples or
+          chunks into a new sample, with a 20-second default limit. <code>voxi sample publish</code> publishes
+          noise samples to the public store.
+        </p>
+      </div>
+    </section>
+
     <section class="wrap section-wrap" aria-labelledby="why-title">
       <div class="section-heading">
         <h2 id="why-title">Why Cohere Transcribe?</h2>
@@ -423,6 +438,7 @@
 <b>voxi eager</b> [--type] [--history] [--daemon] [--model <i>name</i>] [<i>flags</i>...]
 <b>voxi monitor</b> [-w|--watch] [-i <i>seconds</i>] [-s <i>sections</i>]
 <b>voxi chunks</b> {list|show|play} [<i>INDEX</i>|last] [--color auto|always|never]
+<b>voxi sample</b> {list|show|play|record|add|edit|move|delete|merge|publish} ...
 <b>voxi bench</b> [--models <i>list</i>] [--backends cpu,gpu] [--record] [--file <i>wav</i>] [--json <i>path</i>]
 <b>voxi history</b> {list|clear|copy <i>ID</i>|retype <i>ID</i>}
 <b>voxi shortcut</b> {setup|remove}
@@ -451,6 +467,9 @@
 
           <dt>chunks {list|show|play} [<i>INDEX</i>|last]</dt>
           <dd>Inspect the ring buffer of recently recorded audio chunks and their acoustic-gate outcome. <b>list</b> shows a colorized RMS/LEVEL sparkline table; <b>show</b> prints one chunk's full detail; <b>play</b> replays its captured audio.</dd>
+
+          <dt>sample {list|show|play|record|add|edit|move|delete|merge|publish}</dt>
+          <dd>Manage persistent audio samples for dictation checks, no-speech checks, and voice cloning. <b>merge</b> joins samples or chunks into a new sample (20-second default limit); <b>publish</b> publishes noise samples only.</dd>
 
           <dt>bench [flags]</dt>
           <dd>Benchmark transcription speed (RTF &amp; speedup) for models declared in <code>spec/models.yaml</code> across <b>cpu</b> and <b>gpu</b> backends against standard reference samples.</dd>
