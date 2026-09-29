@@ -238,17 +238,33 @@ func (s *Store) Move(id string, p Purpose) error {
 	if err = os.Chmod(target, s.dirMode); err != nil {
 		return err
 	}
-	if x.Audio != "" {
-		if err = os.Rename(filepath.Join(old, x.Audio), filepath.Join(target, x.Audio)); err != nil {
-			return err
-		}
-	}
-	if err = os.Remove(filepath.Join(old, id+".json")); err != nil {
+	newSidecar := filepath.Join(target, id+".json")
+	if _, err = os.Lstat(newSidecar); err == nil {
+		return fmt.Errorf("sample id %q already exists in %s", id, p)
+	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	x.Purpose = p
 	if err = s.write(x); err != nil {
 		return err
+	}
+	rollback := func(cause error, audioMoved bool) error {
+		var rollbackErr error
+		if audioMoved {
+			rollbackErr = errors.Join(rollbackErr, os.Rename(filepath.Join(target, x.Audio), filepath.Join(old, x.Audio)))
+		}
+		rollbackErr = errors.Join(rollbackErr, os.Remove(newSidecar))
+		return errors.Join(cause, rollbackErr)
+	}
+	audioMoved := false
+	if x.Audio != "" {
+		if err = os.Rename(filepath.Join(old, x.Audio), filepath.Join(target, x.Audio)); err != nil {
+			return rollback(err, false)
+		}
+		audioMoved = true
+	}
+	if err = os.Remove(filepath.Join(old, id+".json")); err != nil {
+		return rollback(err, audioMoved)
 	}
 	return nil
 }

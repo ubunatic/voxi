@@ -23,7 +23,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/binary"
 	"flag"
@@ -34,6 +33,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	samplestore "ubunatic.com/voxi/internal/sample"
 )
 
 // frameSize is the analysis window in samples: 25ms at 16kHz, rounded up to
@@ -105,26 +106,15 @@ func main() {
 // skipping blank and comment lines (mirrors internal/devsample.ParseManifest
 // without pulling in that private package for a throwaway analysis tool).
 func loadManifest(path string) ([]sample, error) {
-	f, err := os.Open(path)
+	entries, err := samplestore.LoadLegacyTSV(filepath.Dir(path))
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
-
 	var samples []sample
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		fields := strings.SplitN(line, "\t", 4)
-		if len(fields) < 2 {
-			continue
-		}
-		samples = append(samples, sample{name: fields[0], wav: fields[1]})
+	for _, entry := range entries {
+		samples = append(samples, sample{name: entry.ID, wav: entry.Audio})
 	}
-	return samples, scanner.Err()
+	return samples, nil
 }
 
 // readAudioPCM reads mono 16-bit PCM samples and the sample rate from either

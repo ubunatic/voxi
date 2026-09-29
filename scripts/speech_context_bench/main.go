@@ -3,7 +3,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -19,6 +18,7 @@ import (
 	"unicode"
 
 	"ubunatic.com/voxi/internal/asr"
+	"ubunatic.com/voxi/internal/sample"
 	"ubunatic.com/voxi/internal/speechcontext"
 	"ubunatic.com/voxi/spec"
 )
@@ -133,29 +133,13 @@ func run(ctx context.Context, corpus, model string, threads int) error {
 }
 
 func loadManifest(path string) ([]fixture, error) {
-	data, err := os.ReadFile(path)
+	samples, err := sample.LoadLegacyTSV(filepath.Dir(path))
 	if err != nil {
 		return nil, err
 	}
 	var fixtures []fixture
-	scanner := bufio.NewScanner(bytes.NewReader(data))
-	for line := 1; scanner.Scan(); line++ {
-		text := scanner.Text()
-		if text == "" || strings.HasPrefix(text, "#") {
-			continue
-		}
-		fields := strings.Split(text, "\t")
-		if len(fields) != 4 {
-			return nil, fmt.Errorf("%s:%d: want four tab-separated fields", path, line)
-		}
-		var keyterms []string
-		if fields[3] != "" {
-			keyterms = strings.Split(fields[3], "|")
-		}
-		fixtures = append(fixtures, fixture{ID: fields[0], File: fields[1], Expected: fields[2], Keyterms: keyterms})
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
+	for _, item := range samples {
+		fixtures = append(fixtures, fixture{ID: item.ID, File: item.Audio, Expected: item.Transcript, Keyterms: item.Keyterms})
 	}
 	if len(fixtures) == 0 {
 		return nil, fmt.Errorf("%s has no fixtures", path)
