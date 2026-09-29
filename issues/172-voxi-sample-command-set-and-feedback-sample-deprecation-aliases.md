@@ -1,6 +1,6 @@
 # 172 — voxi sample command set and feedback sample deprecation aliases
 
-**Status**: Closed — M2 delivered; deferred features remain out of scope
+**Status**: Open
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: CLI
