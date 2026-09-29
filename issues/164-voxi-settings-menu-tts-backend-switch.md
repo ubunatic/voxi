@@ -1,6 +1,6 @@
 # 164 — Voxi settings menu: TTS backend switch
 
-**Status**: Open
+**Status**: Closed — TTS Backend row added to voxi settings menu and dump; tests pass, installed
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Feature
