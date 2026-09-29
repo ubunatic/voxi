@@ -1,6 +1,6 @@
 # 166 — Use $VISUAL/$EDITOR to correct sample transcripts
 
-**Status**: Open
+**Status**: Closed — M1 (editor prompt) delivered: VISUAL/EDITOR opens for transcript correction on a terminal; VOXI_SAMPLE_EDITOR=off restores inline prompt; tests pass, installed
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Feature
