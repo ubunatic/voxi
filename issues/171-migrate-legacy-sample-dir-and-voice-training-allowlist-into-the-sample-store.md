@@ -19,7 +19,7 @@ new store without data loss. Decision in docs/SampleStore.md §7.
 - Purpose: allowlisted -> `voice`; empty or `[...]` transcript -> `noise`; else `dictation`.
   Print the plan; the user reviews it (known edge cases: `artifact-keyboard-smash`; decided: `kt-sentences-plus-*` are `dictation`, see below).
 - Copy, verify size + SHA-256, leave legacy files in place until the user deletes them. A different existing target is an error. Modes 0600 (the two 0644 files are already fixed by hand).
-- After the user confirms the live run: delete `LoadLegacyTSV`, `ExportTSV`, `voxi sample migrate` and the old `internal/devsample` store code, and point `scripts/clack_features` and `scripts/speech_context_bench` at the store (`List`). No reverse export.
+- After the user confirms the live run: delete `LoadLegacyTSV`, `ExportTSV`, `voxi sample migrate`, `voxi sample export` and the old `internal/devsample` store code, and point `scripts/clack_features` and `scripts/speech_context_bench` at the store (`List`). No reverse export.
 
 ## 3. Implementation & Verification Plan
 
