@@ -1,6 +1,6 @@
 # 177 — Self-heal a missing or dead mic when recording starts
 
-**Status**: Closed — implemented and verified live 2026-09-30
+**Status**: Closed — implemented and verified live
 **Priority**: P2 (Medium)
 **Severity**: Major
 **Category**: Feature
