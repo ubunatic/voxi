@@ -113,6 +113,8 @@ voxi shortcut remove              # GNOME: remove only Voxi's owned shortcut
 voxi eager [--type] [--history] [--daemon] [--model <name>]  # run eager dictation directly
 voxi monitor                  # print daemon health, memory, GPU Vulkan accel, and processes
 voxi monitor --watch          # live updating resource monitor (aliases: top, resources, stats)
+voxi mic                      # show the PipeWire mic setup and any problems (issue 177)
+voxi mic --fix                # repair it by hand, see MicSelfCheck.md
 voxi telemetry query          # correlated Eager chunk lifecycles (text; add --format json)
 voxi telemetry stats          # aggregate latency, backlog, audio, and outcome statistics
 voxi bench [--models list] [--backends cpu,gpu] [--record] [--file wav] [--json path]
