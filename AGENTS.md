@@ -77,6 +77,12 @@ for ASR accuracy checks (`dictation`), no-speech checks (`noise`) and voice clon
 Use `voxi sample` to manage them and `internal/sample` to read them; never write them from
 tests (use `t.TempDir()`). Terms and rules: `docs/SampleStore.md`. The legacy
 `~/.config/voxi/samples/` (corpus.tsv) is read by nothing and must not be modified.
+
+## Audio Stack Repairs
+
+Before building a repair for PipeWire, WirePlumber or BlueZ, check live how it behaves (e.g.
+record from the device and watch the profile), and save a `pw-dump` of any broken state as
+testdata while it lasts. WirePlumber policy can undo manual changes (see `docs/MicSelfCheck.md`).
 <!-- harnez:begin Repo Setup -->
 ## Repo Setup
 - Solo/hobby repo — single default branch, no PR workflow.
