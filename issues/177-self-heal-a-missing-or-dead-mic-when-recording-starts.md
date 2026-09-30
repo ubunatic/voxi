@@ -8,9 +8,9 @@
 
 ---
 
-/goal When Super+X starts a recording and PipeWire has no usable default input, voxi repairs the
-audio defaults, switches a connected Bluetooth headphone to headset mode, and shows a desktop
-notification if it changed anything. Verified live by reproducing the broken state. Stop and ask
+/goal When Super+X starts a recording and PipeWire has no usable default input, voxi stops that recording, repairs the
+audio defaults, switches a connected Bluetooth headphone to headset mode, and notifies the user to
+record again. Healthy starts stay as fast as today. Verified live by reproducing the broken state. Stop and ask
 the user if a repair step would change settings they did not agree to (see §4).
 
 ## 1. Problem & Motivation
@@ -29,19 +29,22 @@ Investigation on 2026-09-30 found that the laptop mics were still present. The a
 
 ## 2. Wanted behaviour
 
-On recording start (Super+X):
+The healthy path must stay fast, so the check runs in parallel with the recording:
 
-1. Detect "no usable input": no default source, the default names a node that does not exist, or
-   the default is a Bluetooth source whose card has no HFP/HSP profile active.
-2. Repair it:
-   - Clear the stale saved default (`wpctl clear-default` or the equivalent).
-   - Switch each connected Bluetooth headphone card that offers an HFP/HSP profile to that profile
-     (headphones only, not speakers).
-   - Re-check. If still nothing usable, fall back to the built-in mic as default.
-3. If any setting changed, send one desktop notification listing what changed (e.g. "Mic
-   repaired: Der Kopfhörer → headset mode"). No notification if nothing changed.
-4. Then start the recording as usual. The repair must not noticeably delay a healthy start: the
-   check runs first and is cheap.
+1. Super+X starts recording immediately on the current default source (fast path, unchanged).
+2. At the same time, a mic check runs. It detects "no usable input": no default source, the
+   default names a node that does not exist, or the default is a Bluetooth source whose card has
+   no HFP/HSP profile active.
+3. If the check finds a problem:
+   - Stop the running recording (it is likely capturing silence) and type nothing from it.
+   - Repair: clear the stale saved default (`wpctl clear-default` or the equivalent); switch each
+     connected Bluetooth headphone card that offers an HFP/HSP profile to that profile
+     (headphones only, not speakers); re-check, and if still nothing usable, make the built-in
+     mic the default.
+   - Send one desktop notification saying what changed and that the user must press Super+X again
+     (e.g. "Mic repaired: Der Kopfhörer → headset mode. Please record again."). The first chunk
+     is lost, so voxi does not try to restart or salvage it.
+4. If the check finds no problem, it does nothing and the recording continues.
 
 ## 3. Verification
 
