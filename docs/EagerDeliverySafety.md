@@ -53,6 +53,11 @@ injection; injection itself then runs under its own budget
 (`drain.injection_timeout_ms`) on a context detached from both the drain and the
 daemon root, since aborting mid-word is strictly worse than finishing.
 
+A session can also end itself: when the mic self-check finds the mic broken, it
+abandons the drain with drop reason `mic_repaired`, so nothing that session
+captured types, and stops only that session via `StopSession`, never a newer one
+(issue 177, see [MicSelfCheck.md](MicSelfCheck.md)).
+
 This distinction is important. Detaching every job would allow stale ASR output
 to type after stop; canceling every job drops the last words the user spoke. The
 explicit generation boundary expresses both policies without making the control
@@ -68,7 +73,7 @@ Buffered modifier-release flushes use the same diagnostic path as immediate
 typing.
 
 An accepted transcript that is never typed is also reported there, naming the
-drop reason (`superseded`, `drain_deadline`, `capture_boundary`) and pointing at
+drop reason (`superseded`, `drain_deadline`, `capture_boundary`, `mic_repaired`) and pointing at
 `voxi history retype`, which can recover it because history is appended for
 every accepted chunk regardless of the delivery path. The transcript text itself
 is not printed. Silence here was what made both issue 115 incidents invisible
