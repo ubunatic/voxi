@@ -3,12 +3,19 @@
   "title": "Voxi Eager Pipeline Injection-Safety Tuning",
   "description": "Modifier-release race guard (issue 101) and post-stop delivery drain (issue 115) tuning for internal/eager.",
   "type": "object",
-  "required": ["modifier_gate", "drain"],
+  "required": [
+    "modifier_gate",
+    "drain",
+    "mic_check"
+  ],
   "properties": {
     "drain": {
       "type": "object",
       "description": "Post-stop delivery drain bounds. The delivery policy itself is 'type unless a newer session has started'; these are only bounds around it.",
-      "required": ["delivery_deadline_ms", "injection_timeout_ms"],
+      "required": [
+        "delivery_deadline_ms",
+        "injection_timeout_ms"
+      ],
       "properties": {
         "delivery_deadline_ms": {
           "type": "integer",
@@ -28,7 +35,11 @@
     "modifier_gate": {
       "type": "object",
       "description": "Buffering/staleness tuning for the modifier-release typing race.",
-      "required": ["timeout_ms", "start_grace_ms", "notify_delay_ms"],
+      "required": [
+        "timeout_ms",
+        "start_grace_ms",
+        "notify_delay_ms"
+      ],
       "properties": {
         "timeout_ms": {
           "type": "integer",
@@ -47,6 +58,36 @@
           "minimum": 0,
           "maximum": 5000,
           "description": "Delay before playing the typing-paused notification after entering buffering; canceled if the session flushes before this elapses."
+        }
+      },
+      "additionalProperties": false
+    },
+    "mic_check": {
+      "type": "object",
+      "description": "Mic self-check run alongside each recording (issue 177).",
+      "required": [
+        "timeout_ms",
+        "dead_signal_ms",
+        "settle_ms"
+      ],
+      "properties": {
+        "timeout_ms": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 30000,
+          "description": "Budget in milliseconds for the whole check-and-repair run."
+        },
+        "dead_signal_ms": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 10000,
+          "description": "How long the first audio may be all-zero before the mic counts as dead."
+        },
+        "settle_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000,
+          "description": "How long to wait for WirePlumber to apply a profile or default change."
         }
       },
       "additionalProperties": false

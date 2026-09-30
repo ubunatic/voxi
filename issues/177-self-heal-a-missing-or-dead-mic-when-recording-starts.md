@@ -1,6 +1,6 @@
 # 177 — Self-heal a missing or dead mic when recording starts
 
-**Status**: Open
+**Status**: Closed — implemented and verified live 2026-09-30
 **Priority**: P2 (Medium)
 **Severity**: Major
 **Category**: Feature
@@ -63,3 +63,40 @@ The healthy path must stay fast, so the check runs in parallel with the recordin
   Check it before building our own.
 - Several headphones connected at once: which one gets headset mode? Probably the one that is the
   current default sink.
+
+## 5. Resolution
+
+Architecture (`internal/mic`, pure steps, each tested on captured `pw-dump` data):
+
+```
+pw-dump --ParseDump--> State --Diagnose--> []Problem --Plan--> []Action --Doctor.apply--> wpctl / pw-metadata
+                                          ^ DeadSignal from SignalMonitor (audio itself)
+```
+
+- `internal/eager/micwatch.go` runs alongside every recording: one state check at start, then the
+  audio is judged every 250ms for the whole session. On a problem: drop the session
+  (`sessionDrain.abandon`, `eagerSessionManager.StopSession`), wait until the stream is reaped,
+  repair, notify via `notify-send`.
+- `voxi mic` shows the setup; `voxi mic --fix` runs the same repair by hand.
+- Tuning in `spec/eager.yaml` `mic_check`.
+- Agent status now re-checks the daemon when cached as recording, since a session can end itself.
+
+Findings that changed the design (§4 answered):
+
+- WirePlumber 0.5 keeps a Bluetooth loopback input (`bluez5.loopback`) present in A2DP and switches
+  to headset mode by itself when recording, restoring A2DP 2s after the stream closes. So
+  "headphones in A2DP" is normal, not a fault, and a manual headset switch does not stick. voxi
+  does not switch profiles for the loopback; the headset-mode repair remains for plain
+  (non-loopback) Bluetooth inputs and for "no default mic at all".
+- The real failure seen live: the Bluetooth transport fails and the stream stalls (0.7s of audio
+  in 3s). Detected as a stall; repaired by making the built-in mic with an available port the
+  default (WirePlumber ignores a default whose port is unavailable, e.g. Mic2).
+- Bluetooth headsets emit exact zeros for 1-3s while switching, so all-zero audio only counts as
+  dead for built-in mics.
+- No full `wpctl` state reset; only the saved default source is cleared.
+
+Verified live: broken Bluetooth default → recording stopped within ~3s, default moved to the
+Digital Microphone, notification shown; a healthy built-in recording ran 7s untouched.
+
+Known limit: if 10 utterances queue up behind transcription, capture reads block and could look
+like a stall. Not seen; revisit if a false "Mic problem" appears.

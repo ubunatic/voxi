@@ -1,0 +1,46 @@
+[
+  {"id": 0, "type": "PipeWire:Interface:Metadata", "props": {"metadata.name": "default"},
+   "metadata": [
+     {"subject": 0, "key": "default.audio.source", "type": "Spa:String:JSON", "value": {"name": "bluez_input.00:11:22:33:44:55"}},
+     {"subject": 0, "key": "default.configured.audio.source", "type": "Spa:String:JSON", "value": {"name": "alsa_input.usb-Depstech_webcam-02.analog-stereo"}}
+   ]},
+  {"id": 46, "type": "PipeWire:Interface:Device", "info": {
+     "props": {"media.class": "Audio/Device", "device.api": "alsa", "device.name": "alsa_card.pci-0000_07_00.6", "device.description": "Ryzen HD Audio Controller"},
+     "params": {
+       "EnumProfile": [
+         {"index": 0, "name": "off", "available": "yes", "classes": [0]},
+         {"index": 2, "name": "HiFi (Mic1, Mic2, Speaker)", "available": "yes", "classes": [2, ["Audio/Source", 2, "card.profile.devices", [1, 2]], ["Audio/Sink", 1, "card.profile.devices", [0]]]}
+       ],
+       "Profile": [{"index": 2, "name": "HiFi (Mic1, Mic2, Speaker)"}],
+       "Route": [
+         {"index": 0, "direction": "Output", "available": "unknown", "device": 0, "priority": 100},
+         {"index": 2, "direction": "Input", "available": "unknown", "device": 2, "priority": 100}
+       ]
+     }}},
+  {"id": 65, "type": "PipeWire:Interface:Node", "info": {"props": {
+     "media.class": "Audio/Source", "node.name": "alsa_input.pci-0000_07_00.6.HiFi__Mic2__source", "node.description": "Stereo Microphone", "device.id": 46, "device.api": "alsa", "card.profile.device": 1}}},
+  {"id": 66, "type": "PipeWire:Interface:Node", "info": {"props": {
+     "media.class": "Audio/Source", "node.name": "alsa_input.pci-0000_07_00.6.HiFi__Mic1__source", "node.description": "Digital Microphone", "device.id": 46, "device.api": "alsa", "card.profile.device": 2}}},
+  {"id": 82, "type": "PipeWire:Interface:Device", "info": {
+     "props": {"media.class": "Audio/Device", "device.api": "bluez5", "device.name": "bluez_card.00_11_22_33_44_55", "device.description": "Der Kopfhörer", "device.form-factor": "headset"},
+     "params": {
+       "EnumProfile": [
+         {"index": 0, "name": "off", "available": "yes"},
+         {"index": 131076, "name": "a2dp-sink", "available": "yes", "classes": [["Audio/Sink", 1, "card.profile.devices", [1]]]},
+         {"index": 196864, "name": "headset-head-unit-cvsd", "available": "yes", "classes": [["Audio/Source", 1, "card.profile.devices", [0]], ["Audio/Sink", 1, "card.profile.devices", [1]]]},
+         {"index": 196865, "name": "headset-head-unit", "available": "yes", "classes": [["Audio/Source", 1, "card.profile.devices", [0]], ["Audio/Sink", 1, "card.profile.devices", [1]]]}
+       ],
+       "Profile": [{"index": 131076, "name": "a2dp-sink"}]
+     }}},
+  {"id": 74, "type": "PipeWire:Interface:Node", "info": {"props": {
+     "media.class": "Audio/Source", "node.name": "bluez_input.00:11:22:33:44:55", "node.description": "Der Kopfhörer", "device.id": 82, "bluez5.loopback": false}}},
+  {"id": 90, "type": "PipeWire:Interface:Device", "info": {
+     "props": {"media.class": "Audio/Device", "device.api": "bluez5", "device.name": "bluez_card.66_77", "device.description": "Die Soundbox", "device.form-factor": "speaker"},
+     "params": {
+       "EnumProfile": [
+         {"index": 131076, "name": "a2dp-sink", "available": "yes", "classes": [["Audio/Sink", 1, "card.profile.devices", [1]]]},
+         {"index": 196865, "name": "headset-head-unit", "available": "yes", "classes": [["Audio/Source", 1, "card.profile.devices", [0]]]}
+       ],
+       "Profile": [{"index": 131076, "name": "a2dp-sink"}]
+     }}}
+]

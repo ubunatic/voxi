@@ -22,6 +22,7 @@ import (
 	"ubunatic.com/voxi/internal/feedback"
 	"ubunatic.com/voxi/internal/history"
 	"ubunatic.com/voxi/internal/install"
+	"ubunatic.com/voxi/internal/mic"
 	"ubunatic.com/voxi/internal/mode"
 	"ubunatic.com/voxi/internal/modifiers"
 	"ubunatic.com/voxi/internal/monitor"
@@ -392,7 +393,7 @@ func main() {
 		panic(fmt.Sprintf("load embedded model specification: %v", err))
 	}
 	configCmd.AddCommand(feedback.NewConfigImportCommand(d.Stdout, d.Getenv("HOME"), modelSpec.SpeechContext.MaxTermChars))
-	root.AddCommand(modeCmd, recordCmd, eagerCmd, monitorCmd, historyCmd, configCmd, daemonCmd, benchCmd, settings.NewCommand(d, modelSpec.Names()), shortcut.NewCommand(d), telemetry.NewCommand(d.Stdout, d.Getenv), feedback.NewCommand(d.Stdout, d.Getenv("HOME"), modelSpec.BuiltinStopWords(modelSpec.DefaultModel), modelSpec.SpeechContext.MaxTermChars, modelSpec.SpeechContext.Terms), agent.NewCommand(d), chunks.NewCommand(d, nil), sample.NewCommand(d), tts.NewSayCommand(d), ttsclone.NewCommand(d), tts.NewSupervisorCommand())
+	root.AddCommand(modeCmd, recordCmd, eagerCmd, monitorCmd, historyCmd, configCmd, daemonCmd, benchCmd, settings.NewCommand(d, modelSpec.Names()), shortcut.NewCommand(d), telemetry.NewCommand(d.Stdout, d.Getenv), feedback.NewCommand(d.Stdout, d.Getenv("HOME"), modelSpec.BuiltinStopWords(modelSpec.DefaultModel), modelSpec.SpeechContext.MaxTermChars, modelSpec.SpeechContext.Terms), agent.NewCommand(d), chunks.NewCommand(d, nil), sample.NewCommand(d), tts.NewSayCommand(d), ttsclone.NewCommand(d), tts.NewSupervisorCommand(), newMicCmd(d))
 	installEffects := install.DefaultEffects()
 	installEffects.Home = d.Getenv("HOME")
 	installEffects.Executable = os.Executable
@@ -425,4 +426,13 @@ func printBenchReport(w io.Writer, report *bench.Report) {
 		}
 		fmt.Fprintf(w, "%-20s %-10s %8.2f %9.2fx %s\n", r.Model, r.Backend, r.RTF, r.Speedup, r.DetectedBackend)
 	}
+}
+
+// newMicCmd wires `voxi mic` with the settle time from spec/eager.yaml.
+func newMicCmd(d deps.Dependencies) *cobra.Command {
+	settle := time.Duration(0)
+	if es, err := spec.LoadEager(); err == nil {
+		settle = es.MicSettle()
+	}
+	return mic.NewCommand(d, settle)
 }

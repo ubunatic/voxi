@@ -54,3 +54,19 @@ drain:
   # Must exceed the 5s physical-modifier-release wait inside
   # typing.TypeTextObserved, which spends the same context.
   injection_timeout_ms: 15000
+
+# Mic self-check (issue 177). Recording starts at once on the current default
+# mic; this check runs alongside it. If PipeWire has no usable mic, or the first
+# audio is digital silence, voxi repairs the setup (internal/mic), stops the
+# broken recording and asks the user to record again.
+mic_check:
+  # Budget for the whole check-and-repair run (pw-dump + wpctl calls).
+  timeout_ms: 5000
+  # Window for judging the audio itself, at any point in the recording: the mic
+  # is dead if under a quarter of the expected audio arrived (a stalled
+  # Bluetooth transport), or, for a built-in mic, if every sample was exactly
+  # zero. Bluetooth headsets emit zeros for 1-3s while switching to headset
+  # mode (measured live), so zeros never count for them.
+  dead_signal_ms: 3000
+  # How long to wait for WirePlumber to apply a profile or default change.
+  settle_ms: 1500

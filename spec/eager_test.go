@@ -8,7 +8,11 @@ import (
 // validDrain is appended to the ad hoc modifier_gate documents below so a
 // rejection is attributable to the field under test rather than to the
 // unrelated, now also-required drain section.
-const validDrain = "\ndrain: {delivery_deadline_ms: 60000, injection_timeout_ms: 15000}\n"
+const validDrain = "\ndrain: {delivery_deadline_ms: 60000, injection_timeout_ms: 15000}\n" + validMicCheck
+
+// validMicCheck keeps the also-required mic_check section (issue 177) out of
+// the way of tests aimed at other fields.
+const validMicCheck = "\nmic_check: {timeout_ms: 5000, dead_signal_ms: 1500, settle_ms: 1500}\n"
 
 func TestLoadEager(t *testing.T) {
 	s, err := LoadEager()
@@ -89,7 +93,25 @@ func TestParseEagerSpecRejectsUnsafeDrain(t *testing.T) {
 		"injection below wait":    "drain: {delivery_deadline_ms: 60000, injection_timeout_ms: 1000}",
 	}
 	for name, drain := range cases {
-		if _, err := parseEagerSpec([]byte(gate + drain)); err == nil {
+		if _, err := parseEagerSpec([]byte(gate + drain + validMicCheck)); err == nil {
+			t.Errorf("parseEagerSpec(%s) expected an error, got nil", name)
+		}
+	}
+}
+
+func TestParseEagerSpecMicCheck(t *testing.T) {
+	const base = "modifier_gate: {timeout_ms: 10000, start_grace_ms: 750, notify_delay_ms: 500}\ndrain: {delivery_deadline_ms: 60000, injection_timeout_ms: 15000}\n"
+	if _, err := parseEagerSpec([]byte(base + validMicCheck)); err != nil {
+		t.Fatalf("valid mic_check rejected: %v", err)
+	}
+	cases := map[string]string{
+		"missing":          "",
+		"zero timeout":     "mic_check: {timeout_ms: 0, dead_signal_ms: 1500, settle_ms: 1500}",
+		"zero dead signal": "mic_check: {timeout_ms: 5000, dead_signal_ms: 0, settle_ms: 1500}",
+		"negative settle":  "mic_check: {timeout_ms: 5000, dead_signal_ms: 1500, settle_ms: -1}",
+	}
+	for name, doc := range cases {
+		if _, err := parseEagerSpec([]byte(base + doc)); err == nil {
 			t.Errorf("parseEagerSpec(%s) expected an error, got nil", name)
 		}
 	}

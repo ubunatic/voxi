@@ -36,10 +36,19 @@ type DrainSpec struct {
 	InjectionTimeoutMs int `yaml:"injection_timeout_ms"`
 }
 
+// MicCheckSpec tunes the mic self-check that runs alongside each recording
+// (issue 177, internal/mic).
+type MicCheckSpec struct {
+	TimeoutMs    int `yaml:"timeout_ms"`
+	DeadSignalMs int `yaml:"dead_signal_ms"`
+	SettleMs     int `yaml:"settle_ms"`
+}
+
 // EagerSpec is the parsed contents of spec/eager.yaml.
 type EagerSpec struct {
 	ModifierGate ModifierGateSpec `yaml:"modifier_gate"`
 	Drain        DrainSpec        `yaml:"drain"`
+	MicCheck     MicCheckSpec     `yaml:"mic_check"`
 }
 
 // minInjectionTimeoutMs is the physical-modifier-release wait inside
@@ -75,6 +84,9 @@ func parseEagerSpec(data []byte) (*EagerSpec, error) {
 	if s.Drain.InjectionTimeoutMs <= minInjectionTimeoutMs {
 		return nil, fmt.Errorf("spec: drain.injection_timeout_ms must exceed %dms, the modifier-release wait inside typing injection", minInjectionTimeoutMs)
 	}
+	if s.MicCheck.TimeoutMs <= 0 || s.MicCheck.DeadSignalMs <= 0 || s.MicCheck.SettleMs < 0 {
+		return nil, fmt.Errorf("spec: mic_check.timeout_ms and dead_signal_ms must be positive, settle_ms not negative")
+	}
 	return &s, nil
 }
 
@@ -101,4 +113,19 @@ func (s *EagerSpec) DeliveryDeadline() time.Duration {
 // InjectionTimeout converts Drain.InjectionTimeoutMs to a time.Duration.
 func (s *EagerSpec) InjectionTimeout() time.Duration {
 	return time.Duration(s.Drain.InjectionTimeoutMs) * time.Millisecond
+}
+
+// MicCheckTimeout converts MicCheck.TimeoutMs to a time.Duration.
+func (s *EagerSpec) MicCheckTimeout() time.Duration {
+	return time.Duration(s.MicCheck.TimeoutMs) * time.Millisecond
+}
+
+// MicDeadSignal converts MicCheck.DeadSignalMs to a time.Duration.
+func (s *EagerSpec) MicDeadSignal() time.Duration {
+	return time.Duration(s.MicCheck.DeadSignalMs) * time.Millisecond
+}
+
+// MicSettle converts MicCheck.SettleMs to a time.Duration.
+func (s *EagerSpec) MicSettle() time.Duration {
+	return time.Duration(s.MicCheck.SettleMs) * time.Millisecond
 }

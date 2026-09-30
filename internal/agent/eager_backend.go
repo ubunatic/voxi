@@ -162,9 +162,25 @@ func (b *EagerChildBackend) Record(ctx context.Context, action RecordAction) (Re
 
 func (b *EagerChildBackend) Status() BackendStatus {
 	b.mu.Lock()
-	defer b.mu.Unlock()
-	return BackendStatus{Running: b.running, Recording: b.recording}
+	st := BackendStatus{Running: b.running, Recording: b.recording}
+	b.mu.Unlock()
+	if st.Running && st.Recording == RecordingActive {
+		// The daemon can end a session itself (issue 177 mic check), so a
+		// cached "recording" is re-checked against the daemon.
+		ctx, cancel := context.WithTimeout(context.Background(), eagerStatusTimeout)
+		defer cancel()
+		if status, err := eager.GetEagerRecordingStatus(ctx, b.d); err == nil && status == "idle" {
+			st.Recording = RecordingIdle
+			b.mu.Lock()
+			b.recording = RecordingIdle
+			b.mu.Unlock()
+		}
+	}
+	return st
 }
+
+// eagerStatusTimeout bounds the status re-check round trip to the daemon.
+const eagerStatusTimeout = 500 * time.Millisecond
 
 func (b *EagerChildBackend) voxiPath() (string, error) {
 	if b.d.LookPath != nil {
