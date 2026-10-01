@@ -36,7 +36,7 @@ crash.
 
 ## Local development against an uncommitted loom checkout
 
-This module depends on a tagged `codeberg.org/ubunatic/loom` release by
+This module depends on a tagged `ubunatic.com/loom` release by
 default. To build against a sibling `../loom` working copy instead (e.g.
 testing an in-flight loom change before it's tagged), copy the tracked
 example workspace once:

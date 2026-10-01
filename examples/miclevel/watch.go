@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"codeberg.org/ubunatic/loom"
-	"codeberg.org/ubunatic/loom/graph"
+	"ubunatic.com/loom"
+	"ubunatic.com/loom/graph"
 	"ubunatic.com/voxi/audiolevel"
 )
 

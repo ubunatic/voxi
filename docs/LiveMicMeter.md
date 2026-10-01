@@ -212,7 +212,7 @@ every call — cheap enough to call once per redraw frame directly, no
 caching needed.
 
 `examples/miclevel` (issue 110) demonstrates this end to end against a real
-microphone via `codeberg.org/ubunatic/loom`'s TUI primitives
+microphone via `ubunatic.com/loom`'s TUI primitives
 (`Pane.RunWatch`, `Box.SetRowsValues`) — the first proof that `audiolevel`'s
 public API is consumable by an external Go program, not just voxi's own
 `internal/monitor`. It pins a real tagged `loom` release in `go.mod` (no
