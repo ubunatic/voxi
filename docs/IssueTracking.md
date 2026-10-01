@@ -1,7 +1,7 @@
 <!-- harnez:variant=lite -->
 # Issue Tracking Rules (Lite)
 
-In-repo tracker in `issues/`, one file per ticket (`issues/NNN-kebab-case-title.md`). Full doc in `docs/practices/IssueTracking.md`.
+In-repo tracker in `issues/`, one file per ticket (`issues/NNN-kebab-case-title.md`). Full doc in `docs/IssueTracking.md`.
 
 ## 1. Priority Schema — Scheduling Urgency
 

@@ -47,7 +47,7 @@ instead of `ls issues/`, `find`, or raw grep:
 ## Harnez Agent
 - Prefer loaded `mcp__harnez__*` tools for lifecycle actions; otherwise use `harnez agent` via Bash (see the local Subagent Policy).
 - A requested model such as `terra:low` or `luna` is a Harnez agent model (see `harnez agent models`); dispatch it with `harnez agent start --model <name>`, regardless of `subagent_mode`.
-- Start (run it in a background shell, e.g. Claude `run_in_background`): `harnez agent start --name <name> --role <role> --model <model> -p <prompt>`.
+- Start: `harnez agent start --name <name> --role <role> --model <model> -p <prompt>`. Wait on it with your host's own tool: Claude Bash `run_in_background: true`; agy a background task; Codex `exec_command`, then `write_stdin` on the returned `session_id` until an exit code. After 60s it may detach and print the same host-specific reattach steps.
 - List: `harnez agent list`.
 - Status: `harnez agent status --name <session>`.
 - Wait: `harnez agent wait <session>` (session is positional).
@@ -66,6 +66,13 @@ unless the user names it (e.g. `/scroll-craft`, "use scroll-craft") or picks it 
 
 ## Code and Documentation Search
 - Before broad shell searches, use `harnez find code|docs` or MCP `harnez_find`; see `@docs/Search.md`.
+
+## Background Tasks, Jobs & HTO=0
+- For long-running commands, test suites, or subagent waits executed in the
+  background as a Task/Job: always set `HTO=0` (e.g. `HTO=0 make test-q1`, `HTO=0 harnez ...`)
+  to prevent `harnez exec`'s ambient 60-second default execution timeout from killing the task.
+- When launching asynchronous background tasks, stop calling tools immediately and rely entirely
+  on reactive completion notifications. Do NOT poll status or run `sleep` commands.
 
 ## Agentic Loop Invariants
 Where `@docs/AgenticLoop.md` is present in this project, follow it rather than
