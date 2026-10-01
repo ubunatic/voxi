@@ -14,7 +14,7 @@ For TUI layout work, use a checked-in `.ansi` mockup under `docs/data/` as the v
 
 1. **Parallel Read, Sequential Write** — many may read/grep at once; one writer per workspace at a time. **Sequential dispatch is the default for every task type, not just file-overlapping code edits.** Includes read-then-write races on shared sequential resources (e.g. ticket numbers).
 2. **Canary & Test-Driven Verification** — verify with real test runs before declaring done; never assume an edit works.
-3. **Zero Zombie Guarantee** — track and terminate every background process, timer, and subagent before ending a session.
+3. **Zero Zombie Guarantee & Background Task Hygiene** — track and terminate every background process, timer, and subagent before ending a session; always set `HTO=0` for background tasks/jobs; rely on reactive completion notifications instead of polling or `sleep` loops.
 4. **Responsive Host Orchestrator** — stay available to the user; delegating ≠ blocking on the child unless asked or truly required.
 5. **In-Repository Single Source of Truth** — tickets/decisions/retros live in git (`issues/`, `docs/feedback/`, `docs/studies/`), not just chat.
 6. **Context Discipline & Range-Bounded Ingestion** — never whole-file-read `AGENTS.md`/active system rules; avoid native tool slices on >100 line files; use `harnez read -L`/`-n` via CLI (`harnez read -I` is paused until issue 543, a memory blow-up, is fixed).

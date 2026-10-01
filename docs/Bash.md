@@ -152,7 +152,11 @@ cd "$orig"
 
 See issue 095 (cwd leak, trust boundary), issue 222 (multi-repo wrong-repo failure).
 
-## 10. Awk Portability (rarely needed)
+## 10. Background Tasks, Jobs & `HTO=0`
+
+Always set `HTO=0` (e.g. `HTO=0 make test-q1`, `HTO=0 harnez ...`) when running background tasks/jobs to prevent `harnez exec` 60s timeout kills. Never poll status or run `sleep` loops; rely on reactive completion notifications.
+
+## 11. Awk Portability (rarely needed)
 
 Default is mawk, not gawk — no 3-arg `match(str, /re/, arr)` (use `split()`/`sub()`/`gsub()`),
 no `strtonum()` (write a manual `h2d()`), no `gensub()` (use `sub()`/`gsub()` + a temp var).
