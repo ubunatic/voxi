@@ -8,9 +8,9 @@
 
 ---
 
-/goal voxi finds its transcript-cleanup model on lmcoder whenever it is
-served and uses it without the user switching lmcoder's model or voxi's
-config, and degrades to raw ASR with a clear message when it is not served;
+/goal voxi sees all models lmcoder has loaded, with their capabilities and
+speed, picks one for transcript cleanup per request without switching what
+lmcoder serves, and degrades to raw ASR with a clear message when none fits;
 stop and report when blocked on a user decision or denied permission.
 
 ## 1. Problem & Motivation
@@ -32,14 +32,26 @@ voxi to find its model when lmcoder has it, with no switching.
   lmcoder issue 155 adds a way to tell live models apart. Until then voxi can
   only check that the name is known.
 
-## 3. Implementation & Verification Plan
-- Before cleanup (cached briefly, so it adds no per-chunk latency), look the
-  model up on the proxy's `/v1/models`; use it if live, otherwise fall back
-  to raw ASR and record why (existing `llmFallback` reasons).
-- `voxi settings check`: report "model served" vs "proxy reachable but model
-  not served", naming the model and the lmcoder command that would serve it.
+## 3. Decisions (2026-10-03)
+lmcoder keeps its main chat model as the default and, per lmcoder issue 155,
+lists every loaded model on `GET :8735/v1/models` with an extra `lmcoder`
+object: `live`, `default`, `capabilities`, `context` and measured `speed`
+(generation and prompt tokens per second); `?live=1` lists only live models.
+voxi chooses per request by model name. Choosing a model never changes what
+lmcoder runs.
+
+## 4. Implementation & Verification Plan
+- Read `/v1/models?live=1` from the proxy, cached briefly so cleanup adds no
+  per-chunk latency.
+- Use the configured `cleanup_model` when it is live. Otherwise pick the
+  fastest live model with the `chat` capability, and record which one was
+  used in the cleanup record. With no live model, fall back to raw ASR with
+  the existing `llmFallback` reasons.
+- `voxi settings check`: list the live models with capability and speed and
+  say which one cleanup will use.
 - Never load or switch lmcoder models from voxi.
 
-Verify: with lmcoder serving voxi's model plus another model on a second
-port, cleanup uses voxi's model; with voxi's model stopped, cleanup falls back
-and `voxi settings check` says the model is not served.
+Verify: with the 4B main and the 1.5B fast model live, cleanup uses the
+configured model; with `cleanup_model` set to a model that is not loaded, it
+uses the fastest live chat model and the check says so; with lmcoder down it
+falls back to raw ASR.
