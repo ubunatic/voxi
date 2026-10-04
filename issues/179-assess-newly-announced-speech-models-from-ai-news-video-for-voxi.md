@@ -9,12 +9,12 @@
 ---
 
 ## 1. Problem & Motivation
-The video [Gemini 4, GPT 6.1, Dots, Claude Sonnet 5.5, Ideogram 4.5, Flux 3: AI NEWS](https://www.youtube.com/watch?v=lHmZoRHMZyM) mentions recent speech models, including a very small CPU speech-to-text model (described as 16.9 MB) and ElevenLabs' V4 text-to-speech model. The captions do not reliably identify the tiny STT model. Determine whether any announced model is relevant to Voxi's Linux voice-input workflow.
+The video [Gemini 4, GPT 6.1, Dots, Claude Sonnet 5.5, Ideogram 4.5, Flux 3: AI NEWS](https://www.youtube.com/watch?v=lHmZoRHMZyM) mentions new speech models. Assess the two intended candidates: [Whistle](https://cactuscompute.com/blog/whistle) and [Phonon 2](https://www.fermionresearch.com/research/phonon-2/), for relevance to Voxi's Linux voice-input workflow.
 
 ## 2. Technical Specification / Findings
-Identify the models from primary sources and verify availability, licensing, supported languages, runtime/platform requirements, and reported accuracy/latency. Compare STT candidates with Voxi's current backend and existing findings in issues 039, 064, and 066. Record uncertainties and distinguish published results from the video's claims. Assess TTS only for any direct Voxi use case; do not assume it belongs in the dictation pipeline.
+Verify each model's task, availability, licensing, supported languages, runtime/platform requirements, and reported accuracy/latency from primary sources. Compare any STT capability with Voxi's current backend and existing findings in issues 039, 064, and 066. Record uncertainties and distinguish published results from the video's claims.
 
 ## 3. Implementation & Verification Plan
 No code changes. Recommend whether a candidate warrants a separate canary or implementation issue, with links to primary sources and a brief rationale.
 
-**Goal**: Identify and assess the video's relevant speech models against Voxi's needs, then record a source-backed recommendation or rule them out; stop and report if model identity or essential licensing/runtime facts cannot be verified from public sources.
+**Goal**: Assess Whistle and Phonon 2 against Voxi's needs and record a source-backed recommendation for each; stop and report if essential model, licensing, or runtime facts cannot be verified from public sources.
