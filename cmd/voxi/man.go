@@ -193,9 +193,8 @@ const htmlManualHead = `<!doctype html>
   <title>voxi &mdash; Full Command Reference</title>
   <meta name="description" content="Generated, always-in-sync voxi command reference, produced directly from the CLI's own Cobra command tree.">
 
-  <link rel="icon" type="image/svg+xml" href="../logo.svg">
-  <link rel="stylesheet" href="../index.css">
-  <script src="../index.js" defer></script>
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg">
+  <link rel="stylesheet" href="../assets/docs.css">
   <style>
     .manual-toc ul { list-style: none; margin: 0; padding-left: 1.1rem; }
     .manual-toc > ul { padding-left: 0; }
@@ -206,12 +205,12 @@ const htmlManualHead = `<!doctype html>
 <body>
   <header class="site-head">
     <nav class="wrap nav" aria-label="Main navigation">
-      <a class="brand" href="../index.html#top">
-        <img class="brand-icon" src="../logo.svg" alt="voxi logo" width="28" height="28">
+      <a class="brand" href="../#top">
+        <img class="brand-icon" src="../assets/logo.svg" alt="voxi logo" width="28" height="28">
         <span>voxi</span>
       </a>
       <div class="nav-links">
-        <a href="../index.html#top">Home</a>
+        <a href="../#top">Home</a>
         <a href="../dev/index.html">Developers</a>
         <a class="btn btn-outline" href="https://codeberg.org/ubunatic/voxi" rel="noopener" target="_blank">Codeberg</a>
       </div>
@@ -226,7 +225,7 @@ const htmlManualHead = `<!doctype html>
           Generated directly from voxi's own Cobra command tree (<code>voxi man --html</code>)
           &mdash; the same source that produces <code>voxi man --install</code>'s roff pages, so
           this page can't drift from the real CLI the way a hand-written summary can. For a
-          curated tour of the everyday commands, see the <a href="../index.html#manual">main
+          curated tour of the everyday commands, see the <a href="../#manual">main
           page's Command-Line Reference</a> instead.
         </p>
       </section>
@@ -241,12 +240,12 @@ const htmlManualFoot = `    </section>
   <footer class="site-foot">
     <div class="wrap foot-row">
       <div class="foot-brand">
-        <img class="brand-icon" src="../logo.svg" alt="voxi logo" width="20" height="20">
-        <span>voxi &mdash; &copy; <span id="year"></span> Uwe Jugel &lt;uwe@ubunatic.com&gt; &middot; AGPL-3.0-or-later</span>
+        <img class="brand-icon" src="../assets/logo.svg" alt="voxi logo" width="20" height="20">
+        <span>voxi &mdash; &copy; 2026 Uwe Jugel &lt;uwe@ubunatic.com&gt; &middot; AGPL-3.0-or-later</span>
       </div>
       <div class="foot-links">
         <a href="https://codeberg.org/ubunatic/voxi" rel="noopener" target="_blank">Codeberg Repository</a>
-        <a href="../index.html#top">Back to voxi &uarr;</a>
+        <a href="../#top">Back to voxi &uarr;</a>
       </div>
     </div>
   </footer>

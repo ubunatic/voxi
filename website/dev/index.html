@@ -6,19 +6,18 @@
   <title>voxi — Developer Docs</title>
   <meta name="description" content="voxi developer docs: spec-driven architecture, contribution workflow, and the private dev sample recorder used for accuracy canaries.">
 
-  <link rel="icon" type="image/svg+xml" href="../logo.svg">
-  <link rel="stylesheet" href="../index.css">
-  <script src="../index.js" defer></script>
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg">
+  <link rel="stylesheet" href="../assets/docs.css">
 </head>
 <body>
   <header class="site-head">
     <nav class="wrap nav" aria-label="Main navigation">
-      <a class="brand" href="../index.html#top">
-        <img class="brand-icon" src="../logo.svg" alt="voxi logo" width="28" height="28">
+      <a class="brand" href="../#top">
+        <img class="brand-icon" src="../assets/logo.svg" alt="voxi logo" width="28" height="28">
         <span>voxi</span>
       </a>
       <div class="nav-links">
-        <a href="../index.html#top">Home</a>
+        <a href="../#top">Home</a>
         <a href="#spec">Spec-Driven Architecture</a>
         <a href="#contributing">Contributing</a>
         <a href="#samples">Dev Samples &amp; Canaries</a>
@@ -37,7 +36,7 @@
           version-controlled YAML, not scattered constants, and the accuracy work behind its
           ASR defaults is backed by real recorded-speech fixtures rather than guesswork. This
           page covers the parts of voxi that matter to contributors, not to everyday dictation
-          &mdash; for that, see the <a href="../index.html#top">main voxi page</a>.
+          &mdash; for that, see the <a href="../#top">main voxi page</a>.
         </p>
         <div class="actions">
           <a class="btn btn-primary" href="https://codeberg.org/ubunatic/voxi" rel="noopener" target="_blank">Source Code</a>
@@ -126,7 +125,6 @@
       </div>
 
       <div class="code-block" style="margin-top: 1.5rem;">
-        <button class="copy-code-btn" title="Copy code">copy</button>
         <pre><code><span class="prompt">$</span> make help                  <span class="comment"># Show available make targets</span>
 <span class="prompt">$</span> make test                  <span class="comment"># go vet + go test across all packages</span>
 <span class="prompt">$</span> make validate-spec         <span class="comment"># Validate spec/*.yaml against embedded JSON schemas</span>
@@ -150,7 +148,6 @@
       </div>
 
       <div class="code-block">
-        <button class="copy-code-btn" title="Copy code">copy</button>
         <pre><code><span class="prompt">$</span> voxi sample record &lt;id&gt;               <span class="comment"># Record one utterance + corrected transcript</span>
 <span class="prompt">$</span> voxi sample add &lt;id&gt; --last            <span class="comment"># Keep the last dictation chunk as a sample</span>
 <span class="prompt">$</span> voxi sample list                       <span class="comment"># List samples by purpose</span>
@@ -176,12 +173,12 @@
   <footer class="site-foot">
     <div class="wrap foot-row">
       <div class="foot-brand">
-        <img class="brand-icon" src="../logo.svg" alt="voxi logo" width="20" height="20">
-        <span>voxi &mdash; &copy; <span id="year"></span> Uwe Jugel &lt;uwe@ubunatic.com&gt; &middot; AGPL-3.0-or-later</span>
+        <img class="brand-icon" src="../assets/logo.svg" alt="voxi logo" width="20" height="20">
+        <span>voxi &mdash; &copy; 2026 Uwe Jugel &lt;uwe@ubunatic.com&gt; &middot; AGPL-3.0-or-later</span>
       </div>
       <div class="foot-links">
         <a href="https://codeberg.org/ubunatic/voxi" rel="noopener" target="_blank">Codeberg Repository</a>
-        <a href="../index.html#top">Back to voxi ↑</a>
+        <a href="../#top">Back to voxi ↑</a>
       </div>
     </div>
   </footer>

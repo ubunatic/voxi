@@ -1,0 +1,142 @@
+# SPDX-FileCopyrightText: 2026 Uwe Jugel
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# yaml-language-server: $schema=../spec/schemas/page.schema.json
+#
+# Content for ubunatic.com/voxi. The project repo delivers this file and its
+# media under website/; make gen-tools renders the site-side index.html.
+
+title: voxi — local voice input for Linux
+kicker: Linux voice input
+title_lead: voxi
+title_main: types what you say, as you say it.
+lead: >-
+  High-quality speech-to-text dictation for Linux and Wayland, with continuous eager sentence
+  streaming, physical modifier-key safety and direct typing into the active window. Audio stays
+  on your machine; after a one-time model download, transcription runs locally on the CPU.
+logo:
+  src: assets/logo.svg
+  alt: voxi microphone logo
+go_package: true
+cta_primary:
+  label: Get started
+  href: "#install"
+cta_secondary:
+  label: View source
+  href: https://codeberg.org/ubunatic/voxi
+
+sections:
+  - id: demo
+    tag: Recorded demo
+    title: Voice input in action
+    blocks:
+      - video:
+          src: assets/voxi-demo.mp4
+          poster: assets/voxi-eager.png
+          label: voxi transcribing speech and typing into the focused Wayland window
+          caption: >-
+            Start dictation with a desktop shortcut. Voxi listens for speech, transcribes locally,
+            and types each sentence into the active window.
+
+  - id: workflow
+    tag: How it works
+    title: Dictation that stays out of your way
+    blocks:
+      - cards:
+          - title: Continuous eager streaming
+            text: >-
+              A circular pre-roll buffer preserves the first sounds. Voxi segments speech on natural
+              pauses and transcribes phrases in short bursts.
+          - title: Hotkey-safe typing
+            text: >-
+              Kernel-level monitoring detects held Ctrl, Alt, Super and Shift keys. Typed output is
+              buffered while a modifier is down, preventing collisions with desktop shortcuts.
+          - title: Local speech recognition
+            text: >-
+              The default Cohere Transcribe model runs on your CPU through crispasr. Audio remains
+              local; the model downloads once and then works offline.
+          - title: Direct Wayland input
+            text: >-
+              Voxi uses dotool for synthetic keystrokes, with clipboard fallback for layouts and
+              applications that need it.
+          - title: Live resource monitor
+            text: >-
+              Inspect audio levels, transcription latency, hardware load and daemon health in a
+              btop-style terminal dashboard.
+          - title: Transcript corrections
+            text: >-
+              Keep local replacement rules, stop words and silence artifacts to correct recognition
+              without sending personal vocabulary anywhere.
+
+  - id: monitor
+    tag: Screenshots
+    title: Inspect every part of a dictation session
+    blocks:
+      - gallery:
+          - title: Eager dictation
+            images:
+              - src: assets/voxi-eager.png
+                alt: voxi eager session showing audio source, speech detection and live transcription
+          - title: Resource monitor
+            images:
+              - src: assets/voxi-monitor.png
+                alt: voxi monitor with a live loudness meter, hardware load, transcript feed and daemon status
+          - title: Chunk diagnostics
+            caption: >-
+              Inspect recent chunks, their acoustic gate result and transcript without recording again.
+            images:
+              - src: assets/voxi-chunks.png
+                alt: voxi chunks list showing duration, real-time factor, RMS energy and acceptance status
+
+  - id: shortcuts
+    tag: Desktop controls
+    title: Start dictation from a keyboard shortcut
+    blocks:
+      - text: >-
+          Bind `voxi record toggle` to any desktop shortcut. On GNOME, `voxi shortcut setup`
+          configures the standard Super+X binding.
+      - gallery:
+          - title: GNOME custom shortcut
+            images:
+              - src: assets/voxi-shortcut-list.png
+                alt: GNOME Keyboard Shortcuts listing Voxi Toggle Dictation on Super+X
+              - src: assets/voxi-shortcut-edit.png
+                alt: GNOME shortcut editor showing the voxi record toggle command and Super+X binding
+
+  - id: install
+    tag: Quickstart
+    title: Install and start dictating
+    blocks:
+      - text: >-
+          Install the latest Linux release and configure the user services with the project installer.
+      - shell: curl -fsSL https://ubunatic.com/voxi/install.sh | bash
+      - text: >-
+          Check the background agent, then toggle recording or open the live monitor.
+      - shell: |
+          systemctl --user is-active voxi-agent.service
+          voxi record toggle
+          voxi monitor --watch
+
+  - id: requirements
+    tag: Requirements
+    title: Linux and Wayland components
+    blocks:
+      - facts:
+          - key: Speech recognition
+            value: crispasr with Cohere Transcribe by default; optional local Whisper models
+          - key: Audio capture
+            value: PipeWire (`parec`) or ALSA (`arecord`)
+          - key: Keyboard input
+            value: dotool and dotoold, with wl-clipboard as fallback
+          - key: Modifier gating
+            value: Optional voxi-modifierd system service for physical key state
+          - key: Developer docs
+            value: "[Architecture and contribution guide](/voxi/dev/) · [full command reference](/voxi/man/)"
+
+  - id: story
+    tag: Engineering story
+    title: Local dictation and the sample store
+    blocks:
+      - text: >-
+          The purpose-based sample store separates dictation, noise and consent-gated voice material.
+          Read the [engineering story](https://codeberg.org/ubunatic/voxi/src/branch/main/docs/studies/2026-10-04-linux-voice-input-and-sample-store-story.md)
+          for the design and microphone recovery work.

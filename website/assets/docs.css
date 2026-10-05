@@ -106,7 +106,7 @@ pre code {
   gap: 0.65rem;
   color: var(--ink);
   font-weight: 700;
-  
+
   letter-spacing: -0.01em;
 }
 .brand:hover { text-decoration: none; }
@@ -423,7 +423,7 @@ h1 .name {
 }
 
 .feature-card h3 {
-  
+
   font-weight: 700;
   margin: 0 0 0.6rem;
   color: var(--ink);
