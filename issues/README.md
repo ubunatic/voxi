@@ -161,3 +161,4 @@
 | 177 | [177-self-heal-a-missing-or-dead-mic-when-recording-starts.md](177-self-heal-a-missing-or-dead-mic-when-recording-starts.md) | Self-heal a missing or dead mic when recording starts | Closed — implemented and verified live |
 | 178 | [178-find-voxi-s-cleanup-model-on-the-lmcoder-proxy-instead-of-assuming-8734.md](178-find-voxi-s-cleanup-model-on-the-lmcoder-proxy-instead-of-assuming-8734.md) | Find voxi's cleanup model on the lmcoder proxy instead of assuming 8734 | Open |
 | 179 | [179-assess-newly-announced-speech-models-from-ai-news-video-for-voxi.md](179-assess-newly-announced-speech-models-from-ai-news-video-for-voxi.md) | Assess newly announced speech models from AI news video for Voxi | Open |
+| 180 | [180-speaking-pixel-avatar-in-the-loom-tui-using-voxi-tts.md](180-speaking-pixel-avatar-in-the-loom-tui-using-voxi-tts.md) | Speaking pixel avatar in the Loom TUI using Voxi TTS | Open |
