@@ -100,4 +100,6 @@ speaks. Sent to the lmcoder session; waiting for its contract (wake signal, cold
 - lmcoder 173 deployed on t14 (lmcoder 8f80539, config `upstream_first: [asr]`). Verified: wake
   answers 202; a transcription through 8735 is served by x600; voxi settings test passes. The lmcoder
   session ran the fallback (both asr servers stopped → local asr started in 2.5 s, request held and
-  answered). Open: a user dictation with x600 serving, the local asr stop after 5 min, the reboot check, §5.
+  answered). Verified by the user 2026-10-06: dictation (one and three chunks, RTF ~0.2) served by
+  x600, local asr unused; local asr stopped on its own at 20:27:38, ~5.5 min after its last start.
+  Open: the reboot check, §5.
