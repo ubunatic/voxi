@@ -78,5 +78,5 @@ Findings:
 - Verified: `voxi settings test` passes via 8735; live corpus (`VOXI_LIVE_ASR=1`) through lmcoder
   gives the same transcripts as 18131. Two clips (`bug-d-etc`, `short-uh`) return empty
   (`language None`) on both servers, so that test failure is model behaviour, not lmcoder.
-- Open: a dictation by the user and a check after the next reboot; §5 (voxi installs lmcoder when
+- Dictation confirmed by the user (2026-10-06). Open: a check after the next reboot; §5 (voxi installs lmcoder when
   it is missing) is not started.
