@@ -743,8 +743,7 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 			writeVoxtypeState("recording")
 			text, matchedStopWords := asr.CleanWhisperTranscriptWithAudit(rawText, stopWords)
 			var appliedReplacements []chunks.ReplacementSummary
-			var appliedRules []feedback.Replacement
-			text, appliedRules = applyTranscriptReplacements(text, replacements)
+			text, appliedRules := feedback.ApplyReplacementsWithAudit(text, replacements)
 			for _, r := range appliedRules {
 				appliedReplacements = append(appliedReplacements, chunks.ReplacementSummary{
 					From: r.From,
@@ -1393,10 +1392,6 @@ func cleanWithAGY(ctx context.Context, text, model, userData string, record *chu
 	record.Output = cleaned
 	record.Modified = cleaned != text
 	return cleaned, record
-}
-
-func applyTranscriptReplacements(text string, rules []feedback.Replacement) (string, []feedback.Replacement) {
-	return feedback.ApplyReplacementsWithAudit(text, rules)
 }
 
 func voxtypeTranscribeArgs(modelName, wavPath, initialPrompt string) []string {
