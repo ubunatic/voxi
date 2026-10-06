@@ -1,6 +1,6 @@
 # 075 — Align Documentation and Product Messaging with Cohere Transcribe as the Default ASR
 
-**Status**: Open
+**Status**: Closed — Superseded by 184: R2T2 replaces Cohere as the default ASR model (user decision 2026-10-06); 184 now covers docs and messaging for the new default.
 **Priority**: P1 (High)
 **Severity**: Minor
 **Category**: Documentation
