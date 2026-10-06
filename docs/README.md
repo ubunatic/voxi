@@ -51,6 +51,7 @@ In-depth references for architecture, decisions, and operations of the Voxi Linu
 | [studies/2026-09-26-ansi-design-tour-and-compact-monitor.md](studies/2026-09-26-ansi-design-tour-and-compact-monitor.md) | Terminal User Interface (TUI), ANSI design prototyping, `voxi monitor --compact`, visual CLI testing, display width calculation, Go text layout engines, and Web App comparative engineering effort. |
 | [studies/2026-09-26-linux-desktop-tts-reading-pipeline.md](studies/2026-09-26-linux-desktop-tts-reading-pipeline.md) | Text-to-Speech (TTS) engine, GNOME Wayland selection reading hotkeys, LLM document narration, pip-free native Piper ONNX runtime, multi-voice library, and persistent systemd daemon queue ownership with STT recording epoch muting. |
 | [studies/2026-09-27-local-voice-cloning-research.md](studies/2026-09-27-local-voice-cloning-research.md) | Local voice cloning research (2026-09-27) |
+| [studies/2026-10-04-linux-voice-input-and-sample-store-story.md](studies/2026-10-04-linux-voice-input-and-sample-store-story.md) | From voice typing to a maintainable sample store |
 
 
 <!-- End of studies index. -->
