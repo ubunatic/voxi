@@ -9,12 +9,12 @@
 ---
 
 ## 1. Problem & Motivation
-Configured feedback replacements do not appear to be applied consistently to recognized chunks. The reported examples include chunks transcribed as “news” and “Neos” while the replacement list contains `neos → neus` and `Neus → neus`. Determine why configured replacements are missed or produce unexpected casing, and make the resulting transcript follow the configured mapping.
+Configured feedback replacements do not appear to be applied consistently to recognized chunks. The reported chunk used model `r2t2-confucius4` with engine `openai-transcribe`, while eager dictation currently loads and applies replacements only for Cohere. Therefore the configured `neos → neus` mapping is skipped for this engine. The “news” transcript has no matching configured source and should remain unchanged under the exact-match rules unless the user adds that alias.
 
 **Goal**: Apply configured vocabulary replacements consistently to streamed transcripts and verify the reported examples, or stop and report when blocked on a user decision or denied permission.
 
 ## 2. Technical Specification / Findings
-Observed with `voxi chunks list` and `voxi feedback replacement list | grep -i neus`. Other displayed chunks include “Neus” and repeated “Neos”; the intended canonical spelling/capitalization is not specified, so confirm it from the replacement semantics and surrounding behavior before changing mappings.
+`voxi chunks show 3158 --format json` reports `model: r2t2-confucius4`, `engine: openai-transcribe`, and raw/cleaned transcript “The tool is called Neus. We are using Neus.” The nearby “Neos” chunk has the same engine and should exercise the configured mapping. Replacement matching is exact, case-insensitive, and case-adaptive; do not introduce fuzzy matching for “news.”
 
 ## 3. Implementation & Verification Plan
-Trace how replacement entries are loaded and applied to streamed transcripts. Add focused coverage for the reproduced mismatch and verify that configured replacements are applied with the intended casing.
+Load and apply configured replacements for every eager ASR engine. Add focused regression coverage for the R2T2/OpenAI transcription path and verify exact matching remains unchanged for unconfigured forms.
