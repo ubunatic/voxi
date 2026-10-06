@@ -30,7 +30,7 @@ sections:
     title: Voice input in action
     blocks:
       - video:
-          src: assets/voxi-demo.mp4
+          src: assets/voxi-demo.webm
           poster: assets/voxi-eager.png
           label: voxi transcribing speech and typing into the focused Wayland window
           caption: >-
