@@ -43,3 +43,20 @@ This is a coordination ticket: one agent in `../lmcoder` (hosting side), one in 
 - voxi: point `r2t2-confucius4` at the proxy and model name instead of 18131; then retire
   `voxi-r2t2.service` and its install path, or keep it as a fallback (decide, record here).
 - Verify: dictation with R2T2 works through lmcoder after a reboot, with `voxi-r2t2.service` stopped.
+
+## 5. Addendum (user, 2026-10-06): voxi bootstraps lmcoder
+Idea: lmcoder becomes voxi's model server, partly managed by voxi. When voxi finds no lmcoder
+(binary, config or running service), it installs lmcoder, writes a minimal lmcoder config that
+enables only the proxy and R2T2, and installs the lmcoder service so R2T2 always runs.
+An existing lmcoder config is never overwritten; voxi only checks that R2T2 is enabled and says so.
+
+Findings:
+- Fits lmcoder's pattern: services are spec entries (`spec/ports.yaml`: unit, port, model, like
+  `embed` and `rerank`), models come from the embedded catalog (`spec/models.yaml`, mmproj supported),
+  and a config lists the services to run (`services: [proxy, embed]` on t14). R2T2 would be a new
+  `asr` service, and voxi's minimal config would be `services: [proxy, asr]`.
+- Blocker: lmcoder is not installable by others yet. The GitHub repo is private and the Go module
+  path is `lmcoder`, so `go install <path>@latest` does not work. Needs a public repo and a
+  module path such as `ubunatic.com/lmcoder` (user decision).
+- Open: on t14 the proxy forwards to `upstream: x600`; check that a local `asr` service is still
+  reached through the proxy by model name, not sent to x600.
