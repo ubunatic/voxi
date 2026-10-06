@@ -177,7 +177,7 @@ func TestResolveOpenAIASRBaseURL_SpecEntries(t *testing.T) {
 	if !ok {
 		t.Fatal("models.yaml missing r2t2-confucius4")
 	}
-	if got := resolveOpenAIASRBaseURL(r2t2.BaseURL, globalBaseURL); got != "http://127.0.0.1:18131/v1" {
+	if got := resolveOpenAIASRBaseURL(r2t2.BaseURL, globalBaseURL); got != r2t2.BaseURL || got == globalBaseURL {
 		t.Errorf("r2t2-confucius4 resolved base URL = %q, want its own pinned base_url", got)
 	}
 

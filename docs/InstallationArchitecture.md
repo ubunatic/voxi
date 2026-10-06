@@ -19,8 +19,10 @@ voxi install --modifierd # optional system-scoped modifier gating
 `voxi install` converges the non-privileged parts of the installation: the Voxi
 binary, user service units, CrispASR, Piper neural TTS engine and default voice models, dotool/dotoold, and the enabled and active
 `voxi-agent.service`. It also installs and manages `voxi-eager.service`,
-`dotoold.service`, and `voxi-r2t2.service`; R2T2 is enabled only when the
-selected model's endpoint matches its loopback address and port. The R2T2
+`dotoold.service`, and `voxi-r2t2.service`. The default R2T2 model is served by
+lmcoder; `voxi-r2t2.service` is the fallback and is enabled only when the
+selected model's endpoint matches its loopback address and port (the
+`r2t2-confucius4-voxi` entry). The R2T2
 unit's port comes from the model spec, and installation requires both weight
 files before enabling it. The `tts_enabled` setting defaults to true. Piper is
 installed as a self-contained C++ release archive into `~/.local/lib/voxi/piper/`

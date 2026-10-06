@@ -163,7 +163,7 @@ func checkASREngine(ctx context.Context, d deps.Dependencies, home string, s *co
 			}
 
 			// Probe endpoint
-			healthURL := "http://127.0.0.1:18131/health"
+			healthURL := strings.TrimSuffix(strings.TrimRight(baseURL, "/"), "/v1") + "/health"
 			client := &http.Client{Timeout: 800 * time.Millisecond}
 			req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
 			if reqErr == nil {
@@ -201,6 +201,9 @@ func checkASREngine(ctx context.Context, d deps.Dependencies, home string, s *co
 		item.Status = StatusWarn
 		item.Summary = fmt.Sprintf("%s endpoint unreachable @ %s", modelName, baseURL)
 		item.Detail = "Ensure the OpenAI-compatible transcription server is running"
+		if fallback, ok := models.Models[install.R2T2FallbackModel]; ok && modelInfo.APIModel == fallback.APIModel {
+			item.Detail = fmt.Sprintf("R2T2 is served by lmcoder: check systemctl --user status lmcoder-asr.service, or select %s to run voxi's own server", install.R2T2FallbackModel)
+		}
 		return item
 
 	case "whisper":

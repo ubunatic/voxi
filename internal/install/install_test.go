@@ -246,7 +246,7 @@ func TestInstallR2T2EnablesUnitAndUsesResolvedBinary(t *testing.T) {
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte("asr_model: r2t2-confucius4\nllama_server_path: /opt/llama/bin/llama-server\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte("asr_model: r2t2-confucius4-voxi\nllama_server_path: /opt/llama/bin/llama-server\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	e.LookPath = func(name string) (string, error) {
@@ -318,7 +318,7 @@ func TestInstallFindsLlamaServerOnPathWhenSettingIsEmpty(t *testing.T) {
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte("asr_model: r2t2-confucius4\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte("asr_model: r2t2-confucius4-voxi\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	e.LookPath = func(name string) (string, error) {
@@ -353,7 +353,7 @@ func TestInstallRequiresLlamaServerOnlyForActiveLoopbackBackend(t *testing.T) {
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte("asr_model: r2t2-confucius4\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte("asr_model: r2t2-confucius4-voxi\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	e.LookPath = func(string) (string, error) { return "", errors.New("not found") }
@@ -364,6 +364,32 @@ func TestInstallRequiresLlamaServerOnlyForActiveLoopbackBackend(t *testing.T) {
 	}
 	if strings.Contains(strings.Join(*commands, "\n"), "enable --now voxi-r2t2.service") {
 		t.Fatalf("R2T2 unit activated without a resolved binary: %v", *commands)
+	}
+}
+
+// TestInstallLmcoderR2T2StopsVoxiService: the default R2T2 entry is served
+// by lmcoder (issue 181), so install needs no voxi model files and stops
+// voxi's own R2T2 service.
+func TestInstallLmcoderR2T2StopsVoxiService(t *testing.T) {
+	e, commands := testEffects(t)
+	configDir := filepath.Join(e.Home, ".config", "voxi")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte("asr_model: r2t2-confucius4\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	e.LookPath = func(string) (string, error) { return "", errors.New("not found") }
+	var out strings.Builder
+	if err := Install(context.Background(), &out, *e, false); err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(*commands, "\n")
+	if strings.Contains(joined, "enable --now voxi-r2t2.service") {
+		t.Fatalf("voxi R2T2 unit started for the lmcoder-served model: %v", *commands)
+	}
+	if !strings.Contains(joined, "disable --now voxi-r2t2.service") {
+		t.Fatalf("voxi R2T2 unit was not disabled: %v", *commands)
 	}
 }
 
@@ -412,7 +438,7 @@ func TestInstallR2T2RequiresBothModelFiles(t *testing.T) {
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte("asr_model: r2t2-confucius4\nllama_server_path: /opt/llama/bin/llama-server\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte("asr_model: r2t2-confucius4-voxi\nllama_server_path: /opt/llama/bin/llama-server\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	e.LookPath = func(string) (string, error) { return "/opt/llama/bin/llama-server", nil }

@@ -125,11 +125,10 @@ models:
     does_llm_cleanup: true
 
   r2t2-confucius4:
-    label: "R2T2 Confucius4 (llama-server, local GPU)"
+    label: "R2T2 Confucius4 (lmcoder, local GPU)"
     engine: openai-transcribe
-    # llama-server's R2T2 endpoint (see issue 134 §6, M1): the "model"
-    # field is required by spec validation for this engine, though this
-    # single-model llama-server target does not otherwise use it.
+    # Served by lmcoder's asr service behind its proxy (issue 181,
+    # lmcoder issue 171); the proxy picks the backend by this model name.
     api_model: r2t2
     # llama-server rejects response_format=text with HTTP 400 ("Only
     # 'json' response_format is supported for transcription") -- verified
@@ -142,16 +141,29 @@ models:
     # at the literal marker rather than matching a language-specific
     # prefix string.
     strip_before_marker: "<asr_text>"
-    # llama-server serves this engine on a different port than the
-    # openai-transcribe-gemini/agy whisper-server entry above, so the two
-    # cannot share the global openai_asr_base_url setting (issue 134,
-    # review gap found after M2 landed) -- pin this model's endpoint
-    # explicitly instead.
-    base_url: "http://127.0.0.1:18131/v1"
+    # Pinned per model: it cannot share the global openai_asr_base_url
+    # with the agy whisper-server entry above (issue 134). This is
+    # lmcoder's proxy port.
+    base_url: "http://127.0.0.1:8735/v1"
     # M1 measured this GPU-bound (2.78 GiB VRAM, ~2s for a short clip);
     # no CPU timing was measured and none is expected to be practical.
     requires_gpu: true
     # No live-corpus hallucination data yet for this engine (new, issue
     # 134) -- reuse common_stop_words as a safe starting point, same as
     # the other engines above.
+    stop_words: *common_stop_words
+
+  r2t2-confucius4-voxi:
+    # Fallback when lmcoder is not installed (issue 181): the same model in
+    # voxi's own voxi-r2t2.service (lmcoder's vendored llama-server, files
+    # in ~/.cache/voxi/models). Selecting it makes voxi install and start
+    # that service; any other model stops it.
+    label: "R2T2 Confucius4 (voxi's own llama-server, fallback)"
+    engine: openai-transcribe
+    # Required by spec validation; the single-model llama-server ignores it.
+    api_model: r2t2
+    response_format: json
+    strip_before_marker: "<asr_text>"
+    base_url: "http://127.0.0.1:18131/v1"
+    requires_gpu: true
     stop_words: *common_stop_words

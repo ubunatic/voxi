@@ -55,7 +55,12 @@ what keeps that honest.
 Evaluated in issue 131, integrated in 134. Qwen3-ASR based, Apache-2.0 code with
 NetEase's own model licence.
 
-Run it with:
+`r2t2-confucius4` (the one to use) is served by lmcoder: its `asr` service
+(`lmcoder-asr.service`, part of lmcoder's default setup, lmcoder issue 171) runs
+the model, and voxi sends requests to lmcoder's proxy at
+`http://127.0.0.1:8735/v1` with `model=r2t2`. lmcoder downloads the model files.
+If lmcoder is not installed, select `r2t2-confucius4-voxi`, the fallback in voxi's
+own `voxi-r2t2.service` (issue 181). That service runs:
 
 ```
 llama-server -m ~/.cache/voxi/models/Confucius4-R2T2-Q4_K_M.gguf \
@@ -63,7 +68,7 @@ llama-server -m ~/.cache/voxi/models/Confucius4-R2T2-Q4_K_M.gguf \
   -ngl 99 -c 4096 --no-warmup --port 18131
 ```
 
-`voxi install` writes and manages `voxi-r2t2.service`. It resolves
+`voxi install` writes and manages `voxi-r2t2.service` for the fallback entry. It resolves
 `llama_server_path` from `~/.config/voxi/config.yaml`, then falls back to
 `llama-server` on `PATH`; an active R2T2 selection fails with a clear error if
 neither resolves. The unit port is generated from this model's `base_url` in

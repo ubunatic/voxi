@@ -8,6 +8,7 @@ import (
 
 	"ubunatic.com/voxi/internal/config"
 	"ubunatic.com/voxi/internal/deps"
+	"ubunatic.com/voxi/internal/install"
 )
 
 func TestRestartAgent(t *testing.T) {
@@ -45,7 +46,7 @@ func TestRestartServicesR2T2(t *testing.T) {
 		return nil
 	}}
 
-	s := &config.UserSettings{ASRModel: "r2t2-confucius4"}
+	s := &config.UserSettings{ASRModel: install.R2T2FallbackModel}
 	if err := restartServices(context.Background(), d, "", s); err != nil {
 		t.Fatalf("restartServices() error = %v", err)
 	}
@@ -56,6 +57,26 @@ func TestRestartServicesR2T2(t *testing.T) {
 	}
 	if !strings.Contains(joined, "systemctl --user try-restart voxi-agent.service") {
 		t.Errorf("expected voxi-agent.service try-restart, got:\n%s", joined)
+	}
+}
+
+// TestRestartServicesR2T2ViaLmcoder: the default R2T2 entry is served by
+// lmcoder (issue 181), so voxi's own R2T2 service must stop.
+func TestRestartServicesR2T2ViaLmcoder(t *testing.T) {
+	var executed []string
+	d := deps.Dependencies{Run: func(_ context.Context, name string, args ...string) error {
+		executed = append(executed, name+" "+strings.Join(args, " "))
+		return nil
+	}}
+
+	s := &config.UserSettings{ASRModel: "r2t2-confucius4"}
+	if err := restartServices(context.Background(), d, "", s); err != nil {
+		t.Fatalf("restartServices() error = %v", err)
+	}
+
+	joined := strings.Join(executed, "\n")
+	if !strings.Contains(joined, "systemctl --user disable --now voxi-r2t2.service") {
+		t.Errorf("expected R2T2 service disable --now, got:\n%s", joined)
 	}
 }
 

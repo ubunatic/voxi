@@ -183,13 +183,13 @@ func InstallWithOptions(ctx context.Context, out io.Writer, e Effects, options I
 	if err != nil {
 		return fmt.Errorf("install: load model spec: %w", err)
 	}
-	r2t2Model, modelExists := models.Models["r2t2-confucius4"]
+	r2t2Model, modelExists := models.Models[R2T2FallbackModel]
 	if !modelExists {
-		return fmt.Errorf("install: model spec is missing r2t2-confucius4")
+		return fmt.Errorf("install: model spec is missing %s", R2T2FallbackModel)
 	}
 	r2t2Port, validR2T2URL := LoopbackEndpointPort(r2t2Model.BaseURL)
 	if !validR2T2URL {
-		return fmt.Errorf("install: r2t2-confucius4 base_url %q must use http://127.0.0.1:<port>", r2t2Model.BaseURL)
+		return fmt.Errorf("install: %s base_url %q must use http://127.0.0.1:<port>", R2T2FallbackModel, r2t2Model.BaseURL)
 	}
 	r2t2Active := IsR2T2Active(settings.ASRModel, models)
 	if r2t2Active {
@@ -415,12 +415,17 @@ func SameLoopbackEndpoint(candidate, target string) bool {
 	return candidateURL.Hostname() == targetURL.Hostname() && candidateURL.Port() == targetURL.Port()
 }
 
-// IsR2T2Active returns true if selectedModelName uses the local R2T2 backend endpoint.
+// R2T2FallbackModel is the spec entry served by voxi's own voxi-r2t2.service.
+// The default R2T2 entry is served by lmcoder instead (issue 181).
+const R2T2FallbackModel = "r2t2-confucius4-voxi"
+
+// IsR2T2Active returns true if selectedModelName uses voxi's own R2T2 service
+// endpoint, so voxi-r2t2.service must run.
 func IsR2T2Active(selectedModelName string, models *spec.ModelSpec) bool {
 	if models == nil {
 		return false
 	}
-	r2t2Model, modelExists := models.Models["r2t2-confucius4"]
+	r2t2Model, modelExists := models.Models[R2T2FallbackModel]
 	if !modelExists {
 		return false
 	}
