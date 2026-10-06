@@ -58,8 +58,11 @@ Findings:
   `embed` and `rerank`), models come from the embedded catalog (`spec/models.yaml`, mmproj supported),
   and a config lists the services to run (`services: [proxy, embed]` on t14). R2T2 would be a new
   `asr` service, and voxi's minimal config would be `services: [proxy, asr]`.
-- Blocker: lmcoder is not installable by others yet. The GitHub repo is private and the Go module
-  path is `lmcoder`, so `go install <path>@latest` does not work. Needs a public repo and a
-  module path such as `ubunatic.com/lmcoder` (user decision).
+- Decided (user, 2026-10-06): module path `ubunatic.com/lmcoder`. The primary repo
+  `codeberg.org/ubunatic/lmcoder` is public (the GitHub mirror is private). Two steps remain before
+  `go install ubunatic.com/lmcoder/cmd/lmcoder@latest` works:
+  1. lmcoder repo: rename the module in `go.mod` from `lmcoder` to `ubunatic.com/lmcoder` and fix imports.
+  2. ubunatic.com repo: `ubunatic.com/lmcoder/` exists but has no `go-import` tag; add it with
+     `make ingest-gopkg PKG=lmcoder`, check with `make check-gopkg`, then publish.
 - Open: on t14 the proxy forwards to `upstream: x600`; check that a local `asr` service is still
   reached through the proxy by model name, not sent to x600.
