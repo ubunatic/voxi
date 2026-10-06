@@ -4,7 +4,7 @@
 **Priority**: P2 (Medium)
 **Severity**: Feature
 **Category**: Coordination
-**Related**: issue 134 (R2T2 engine), 139 (voxi-r2t2 systemd unit), 158, 178 (cleanup LLM via lmcoder proxy), 182 (model cleanup), lmcoder issue 091, repo `../lmcoder`
+**Related**: issue 134 (R2T2 engine), 139 (voxi-r2t2 systemd unit), 158, 178 (cleanup LLM via lmcoder proxy), 182 (model cleanup), lmcoder issue 171 (hosting side, filed 2026-10-06), lmcoder issue 091, repo `../lmcoder`
 
 ---
 
@@ -36,7 +36,7 @@ This is a coordination ticket: one agent in `../lmcoder` (hosting side), one in 
   Re-downloaded by hand on 2026-10-06 from Hugging Face `netease-youdao/Confucius4-R2T2-GGUF`
   (Q4_K_M sha256 fa3cb46c…6466, mmproj Q8_0 sha256 8dc2c67e…cb65). `voxi install` cannot
   download them: it only checks the files exist and fails otherwise (`internal/install/install.go:196`).
-- R2T2 is called through `/v1/chat/completions`-style transcription (`engine: openai-transcribe`,
+- R2T2 is called through `POST /v1/audio/transcriptions` (multipart, not chat completions) (`engine: openai-transcribe`,
   `strip_before_marker: "<asr_text>"`, `spec/models.yaml`), so lmcoder needs the model plus its
   mmproj, and must not apply chat sampling profiles that change the transcript.
 
@@ -64,3 +64,5 @@ Findings:
   ubunatic.com/lmcoder (ubunatic.com 43a9b02, deployed). lmcoder v0.1.2 released; `go install ubunatic.com/lmcoder/cmd/lmcoder@latest` verified from a clean GOBIN.
 - Open: on t14 the proxy forwards to `upstream: x600`; check that a local `asr` service is still
   reached through the proxy by model name, not sent to x600.
+  Finding: today it is not. The proxy reads `model` only from JSON bodies, and voxi sends multipart,
+  so the request goes to x600. Tracked in lmcoder 171.
