@@ -174,7 +174,7 @@ func NewCommand(out io.Writer, home string, builtins []spec.StopWord, maxVocabul
 	)
 	cmd.AddCommand(vocabulary)
 	replacementPath := ReplacementPath(home)
-	replacement := &cobra.Command{Use: "replacement", Short: "Manage exact Cohere transcript corrections"}
+	replacement := &cobra.Command{Use: "replacement", Short: "Manage exact transcript corrections"}
 	replacement.AddCommand(
 		func() *cobra.Command {
 			add := &cobra.Command{Use: "add HEARD WRITTEN", Short: "Add a heard-form to written-form mapping, case-insensitive and case-adaptive", Args: cobra.ExactArgs(2), RunE: func(cmd *cobra.Command, a []string) error {
@@ -194,13 +194,13 @@ func NewCommand(out io.Writer, home string, builtins []spec.StopWord, maxVocabul
 				if fixedCase {
 					note = " (fixed case: always written exactly as given)"
 				}
-				fmt.Fprintf(out, "Added Cohere transcript replacement %q -> %q%s. Remove it with: voxi feedback replacement remove %q\n", rule.From, rule.To, note, rule.From)
+				fmt.Fprintf(out, "Added transcript replacement %q -> %q%s. Remove it with: voxi feedback replacement remove %q\n", rule.From, rule.To, note, rule.From)
 				return nil
 			}}
 			add.Flags().Bool("fixed-case", false, "always write WRITTEN exactly as given, regardless of how HEARD was cased (use for domains and the like)")
 			return add
 		}(),
-		&cobra.Command{Use: "list", Short: "List exact Cohere transcript corrections", Args: cobra.NoArgs, RunE: func(_ *cobra.Command, _ []string) error {
+		&cobra.Command{Use: "list", Short: "List exact transcript corrections", Args: cobra.NoArgs, RunE: func(_ *cobra.Command, _ []string) error {
 			rules, err := LoadReplacements(replacementPath)
 			if err != nil {
 				return err
@@ -226,7 +226,7 @@ func NewCommand(out io.Writer, home string, builtins []spec.StopWord, maxVocabul
 			if err := SaveReplacements(replacementPath, rules); err != nil {
 				return err
 			}
-			fmt.Fprintf(out, "Removed Cohere transcript replacement %q -> %q. Add it again with: voxi feedback replacement add %q %q\n", rule.From, rule.To, rule.From, rule.To)
+			fmt.Fprintf(out, "Removed transcript replacement %q -> %q. Add it again with: voxi feedback replacement add %q %q\n", rule.From, rule.To, rule.From, rule.To)
 			return nil
 		}},
 		func() *cobra.Command {

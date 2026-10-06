@@ -112,23 +112,58 @@ func TestCleanWithAGYUsesJSONAndPreservesFallbackTaxonomy(t *testing.T) {
 	})
 }
 
-func TestApplyEngineReplacementsIsCohereOnlyAndChunkLocal(t *testing.T) {
-	// "Voxy" is heard in Title Case here, so the stored lowercase "voxi" is
-	// adapted to "Voxi" to match (see feedback.ApplyReplacements).
-	rules := []feedback.Replacement{{From: "Voxy", To: "voxi"}}
-	if got := applyEngineReplacements(cohereTranscribeEngine, "Voxy one", rules); got != "Voxi one" {
-		t.Fatalf("Cohere result = %q", got)
+func TestEagerOpenAITranscriptAppliesConfiguredReplacements(t *testing.T) {
+	tmp := t.TempDir()
+	rawPath := filepath.Join(tmp, "audio.raw")
+	frame := make([]byte, 640)
+	for i := 0; i < len(frame); i += 2 {
+		binary.LittleEndian.PutUint16(frame[i:i+2], 1000)
 	}
-	if got := applyEngineReplacements("whisper", "Voxy one", rules); got != "Voxy one" {
-		t.Fatalf("Whisper was changed: %q", got)
+	pcm := append(bytes.Repeat(make([]byte, 640), 2), bytes.Repeat(frame, 10)...)
+	pcm = append(pcm, bytes.Repeat(make([]byte, 640), 3)...)
+	if err := os.WriteFile(rawPath, pcm, 0600); err != nil {
+		t.Fatal(err)
 	}
-	// Rules never span completed eager chunks or retroactively edit prior text.
-	chunks := []string{"Voxy", "project and Voxy"}
-	for i := range chunks {
-		chunks[i] = applyEngineReplacements(cohereTranscribeEngine, chunks[i], []feedback.Replacement{{From: "Voxy project", To: "voxi project"}, {From: "Voxy", To: "voxi"}})
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "The tool is called Neos.")
+	}))
+	defer server.Close()
+	settings := config.DefaultUserSettings()
+	settings.OpenAIASRBaseURL = server.URL + "/v1"
+	settings.DictationHistory = false
+	if err := config.SaveUserSettings(tmp, settings); err != nil {
+		t.Fatal(err)
 	}
-	if got := strings.Join(chunks, " "); got != "Voxi project and Voxi" {
-		t.Fatalf("chunk-local aggregate = %q", got)
+	rules := []feedback.Replacement{{From: "Neus", To: "neus"}, {From: "naos", To: "neus"}, {From: "neos", To: "neus"}}
+	if err := feedback.SaveReplacements(feedback.ReplacementPath(tmp), rules); err != nil {
+		t.Fatal(err)
+	}
+	d := deps.Dependencies{
+		Getenv: func(key string) string {
+			if key == "HOME" || key == "XDG_RUNTIME_DIR" {
+				return tmp
+			}
+			return ""
+		},
+		LookPath: func(name string) (string, error) { return name, nil },
+		RunStdin: func(context.Context, string, string, ...string) error { return nil },
+		Stdout:   io.Discard,
+	}
+	opts := EagerOptions{ThresholdRMS: 500, SilenceMs: 60, PreRollMs: 40, MinSpeechMs: 40, MaxWindowMs: 1000, TypeOutput: true, Model: "openai-transcribe-gemini", SpeechContext: false}
+	if err := runEagerCaptureSession(context.Background(), d, opts, tmp, "cat", []string{rawPath}, true, "replacement-session", nil, nil, nil); err != nil {
+		t.Fatalf("runEagerCaptureSession: %v", err)
+	}
+	items, err := chunks.NewBuffer(chunks.StorageDir(tmp, tmp), chunks.DefaultBufferSize).List(false)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("chunks: len=%d err=%v", len(items), err)
+	}
+	chunk := items[0]
+	if chunk.Engine != openaiTranscribeEngine || chunk.CleanedTranscript != "The tool is called Neus." || !chunk.Accepted {
+		t.Fatalf("OpenAI transcript chunk = %+v", chunk)
+	}
+	if len(chunk.AppliedReplacements) != 1 || chunk.AppliedReplacements[0] != (chunks.ReplacementSummary{From: "neos", To: "neus"}) {
+		t.Fatalf("applied replacements = %+v, want [{From:neos To:neus}]", chunk.AppliedReplacements)
 	}
 }
 

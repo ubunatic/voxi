@@ -126,28 +126,28 @@ voxi history clear                # wipe local history file
 voxi history record               # stdin/stdout pass-through hook for Voxtype
 voxi config get type-delay-ms     # read type_delay_ms from ~/.config/voxtype/config.toml
 voxi config set type-delay-ms <MS> # edit type_delay_ms preserving comments
-voxi feedback replacement add Voxy voxi # exact post-transcription Cohere correction
+voxi feedback replacement add Voxy voxi # exact post-transcription correction
 voxi feedback replacement list         # HEARD<TAB>WRITTEN mappings
-voxi feedback replacement remove Voxy  # exact-case source removal
+voxi feedback replacement remove Voxy  # remove a heard-form mapping
 voxi settings                 # interactive TUI for LLM cleaner, models, typing delay, history
 voxi settings --test          # verify all configured features & dependencies (JSON: --json)
 voxi daemon modifier-service      # run voxi-modifierd directly (normally a system service)
 ```
 
-### Cohere transcript replacements
+### Transcript replacements
 
 `voxi feedback replacement` manages private mappings in
-`~/.config/voxi/replacements.json`. A source matches exact case and only at Unicode
-word/phrase boundaries, so `Voxy` matches `Voxy,` but not `myVoxy` or `Voxyology`.
+`~/.config/voxi/replacements.json`. A source matches case-insensitively and only at
+Unicode word/phrase boundaries, so `Voxy` matches `voxy,` but not `myVoxy` or `Voxyology`.
 Multi-word sources are supported and their spaces match non-empty transcript whitespace.
 All matches are applied once against the original chunk, with the longest overlapping
 source winning; output is therefore literal and non-cascading. Add separate aliases when
-Cohere emits multiple forms. No fuzzy, phonetic, semantic, or model-based matching occurs.
+an ASR engine emits multiple forms. No fuzzy, phonetic, semantic, or model-based matching occurs.
 
-Corrections are loaded when an eager Cohere session starts and happen before acceptance,
-chunk metadata, aggregation, typing, and history. They never span chunk boundaries.
-Whisper output is unchanged: use `voxi feedback vocabulary` for its decoder prompt.
-The vocabulary prompt is not used by the default Cohere backend.
+Corrections are loaded when an eager session starts and happen after transcript cleanup,
+before acceptance, chunk metadata, aggregation, typing, and history. They apply to each ASR
+engine's output and never span chunk boundaries. Use `voxi feedback vocabulary` to bias
+decoder prompts where the selected engine supports them.
 
 Until issue 029 is implemented, `voxi mode` toggles between these mutually exclusive
 systemd user services:

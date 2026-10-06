@@ -607,12 +607,9 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 	// install (and crash-looping voxi-agent.service) even though the Cohere
 	// path never invokes voxtype. See issue 074 for the engine itself.
 	engine := modelSpec.Models[modelName].Engine
-	var replacements []feedback.Replacement
-	if engine == cohereTranscribeEngine {
-		replacements, err = feedback.LoadReplacements(feedback.ReplacementPath(d.Getenv("HOME")))
-		if err != nil {
-			fmt.Fprintf(d.Stdout, "Warning: cannot load Cohere transcript replacements; continuing without them: %v\n", err)
-		}
+	replacements, err := feedback.LoadReplacements(feedback.ReplacementPath(d.Getenv("HOME")))
+	if err != nil {
+		fmt.Fprintf(d.Stdout, "Warning: cannot load transcript replacements; continuing without them: %v\n", err)
 	}
 	userSettings, _ := config.LoadUserSettings(d.Getenv("HOME"))
 	transcribeBinPath, weightsPath, err := requireEngineBinary(ctx, d, modelName, engine)
@@ -746,15 +743,13 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 			writeVoxtypeState("recording")
 			text, matchedStopWords := asr.CleanWhisperTranscriptWithAudit(rawText, stopWords)
 			var appliedReplacements []chunks.ReplacementSummary
-			if engine == cohereTranscribeEngine {
-				var appliedRules []feedback.Replacement
-				text, appliedRules = feedback.ApplyReplacementsWithAudit(text, replacements)
-				for _, r := range appliedRules {
-					appliedReplacements = append(appliedReplacements, chunks.ReplacementSummary{
-						From: r.From,
-						To:   r.To,
-					})
-				}
+			var appliedRules []feedback.Replacement
+			text, appliedRules = applyTranscriptReplacements(text, replacements)
+			for _, r := range appliedRules {
+				appliedReplacements = append(appliedReplacements, chunks.ReplacementSummary{
+					From: r.From,
+					To:   r.To,
+				})
 			}
 			var llmRecord *chunks.LLMCleanupRecord
 			if userSettings != nil && userSettings.LLMCleaner && !modelSpec.Models[modelName].DoesLLMCleanup {
@@ -1400,11 +1395,8 @@ func cleanWithAGY(ctx context.Context, text, model, userData string, record *chu
 	return cleaned, record
 }
 
-func applyEngineReplacements(engine, text string, rules []feedback.Replacement) string {
-	if engine != cohereTranscribeEngine {
-		return text
-	}
-	return feedback.ApplyReplacements(text, rules)
+func applyTranscriptReplacements(text string, rules []feedback.Replacement) (string, []feedback.Replacement) {
+	return feedback.ApplyReplacementsWithAudit(text, rules)
 }
 
 func voxtypeTranscribeArgs(modelName, wavPath, initialPrompt string) []string {
