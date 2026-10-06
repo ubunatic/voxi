@@ -115,14 +115,24 @@ Reading aloud (TTS):
   gating **[001 website](../issues/001-website-integration.md)**,
   **[116 installer portability](../issues/116-test-installer-portability-across-distributions-and-real-systemd.md)**,
   **[106](../issues/106-configure-llm-transcription-cleanup-service-defaults-for-lmcoder-integration.md)
-  / [126](../issues/126-use-lmcoder-openai-compatible-transcription-api-as-asr-backend-target.md)
-  lmcoder-side waits**, **[138 R2T2 no-speech sentinel](../issues/138-treat-r2t2-language-none-scaffold-as-an-explicit-no-speech-result.md)**,
+  lmcoder-side wait**, **[138 R2T2 no-speech sentinel](../issues/138-treat-r2t2-language-none-scaffold-as-an-explicit-no-speech-result.md)**,
   **[095 spoken numbers](../issues/095-normalize-spoken-number-words-to-digits-in-dictated-transcripts-library-vs-build-our-own.md)**,
   **[090 alias spec drift](../issues/090-spec-drift-monitor-w-section-flag-aliases-hardcoded-separately-from-spec-actions-yaml.md)**,
   **[037 code quality](../issues/037-code-quality-and-test-coverage-roadmap.md)**,
   **[102 notification language packs](../issues/102-multi-language-audio-packs-for-the-modifier-release-notification-clip.md)**,
   **[024](../issues/024-gnome-typing-feedback-icon.md)/[025](../issues/025-voice-input-volume-animation.md)
   GNOME indicators** — unchanged from the prior pass.
+
+Models and lmcoder (added 2026-10-06):
+
+- **[181 lmcoder hosts R2T2](../issues/181-coordinate-with-lmcoder-lmcoder-hosts-the-r2t2-asr-model.md)**
+  (Open). R2T2 now runs through lmcoder's default `asr` service (lmcoder 171);
+  voxi's own server is the fallback `r2t2-confucius4-voxi`. Left: a reboot check
+  and voxi installing lmcoder when it is missing (§5). This closed 126.
+- **[182 remove unused model files](../issues/182-remove-unused-model-files-to-free-disk-space.md)**
+  (Open, P2). A `voxi models` list/prune command; keeps models on purpose (VoxCPM).
+- **[183 container test of public go install](../issues/183-container-test-public-go-install-of-voxi-then-voxi-install.md)**
+  (Open, P2). Tests what a new user types, next to 116.
 
 ## Close / Park
 

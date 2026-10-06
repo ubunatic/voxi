@@ -40,3 +40,7 @@ hardcoded R2T2 string in the engine, and a test covers scaffold-only input.
   (`low_energy_transient` already exists in the chunk pipeline) and reuse that
   vocabulary instead of inventing a parallel one.
 - Low priority: the audible effect today is a dropped "Uh", not lost sentences.
+- 2026-10-06 (issue 181): the live corpus test (`VOXI_LIVE_ASR=1 go test ./internal/eager/ -run
+  TestLiveASR_R2T2Corpus`) fails on `bug-d-etc` and `short-uh` because they return this scaffold,
+  on both lmcoder (8735) and voxi's own server (18131). Fixing this ticket should let the test tell
+  no-speech from a real empty result instead of failing.
