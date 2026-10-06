@@ -165,3 +165,4 @@
 | 181 | [181-coordinate-with-lmcoder-lmcoder-hosts-the-r2t2-asr-model.md](181-coordinate-with-lmcoder-lmcoder-hosts-the-r2t2-asr-model.md) | Coordinate with lmcoder: lmcoder hosts the R2T2 ASR model | Open |
 | 182 | [182-remove-unused-model-files-to-free-disk-space.md](182-remove-unused-model-files-to-free-disk-space.md) | Remove unused model files to free disk space | Open |
 | 183 | [183-container-test-public-go-install-of-voxi-then-voxi-install.md](183-container-test-public-go-install-of-voxi-then-voxi-install.md) | Container test: public go install of voxi, then voxi install | Open |
+| 184 | [184-make-r2t2-the-default-asr-model-without-llm-cleanup.md](184-make-r2t2-the-default-asr-model-without-llm-cleanup.md) | Make R2T2 the default ASR model, without LLM cleanup | Open |
