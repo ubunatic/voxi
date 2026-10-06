@@ -633,6 +633,7 @@ h1 .name {
   font-size: 0.92rem;
   max-width: 64rem;
   margin: 0 auto;
+  overflow-wrap: anywhere;
 }
 @media (max-width: 720px) { .manpage { padding: 0 1.2rem 1.2rem; } }
 
