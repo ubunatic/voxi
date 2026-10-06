@@ -39,6 +39,11 @@ lives in `spec/models.yaml`:
   the transcript) or `json` (llama-server: `{"type":"transcript.text.done","text":…}`).
 - `strip_before_marker` — cut everything up to and including the last occurrence
   of a literal marker. Used for R2T2's `language English<asr_text>` scaffold.
+- `wake_url` — POSTed `{"model": <api_model>}` when a recording starts, fire and
+  forget, so a stopped server loads while the user speaks (lmcoder `/lmcoder/wake`).
+- `transcribe_timeout_ms` — per-model request timeout (default 30 s). R2T2 via
+  lmcoder uses 90 s: the proxy holds a request up to 60 s while the local server
+  cold-starts. `drain.delivery_deadline_ms` in `spec/eager.yaml` must stay above it.
 
 `spec/models_schema_test.go` cross-checks models.yaml, the JSON schema and the Go
 struct, so a new field must be added in all three or the suite fails.
@@ -58,7 +63,10 @@ NetEase's own model licence.
 `r2t2-confucius4` (the one to use) is served by lmcoder: its `asr` service
 (`lmcoder-asr.service`, part of lmcoder's default setup, lmcoder issue 171) runs
 the model, and voxi sends requests to lmcoder's proxy at
-`http://127.0.0.1:8735/v1` with `model=r2t2`. lmcoder downloads the model files.
+`http://127.0.0.1:8735/v1` with `model=r2t2`. On t14 the proxy prefers x600's R2T2
+to take load off the laptop, starts the local server when x600 is not serving and
+stops it after x600 has been healthy for a while (lmcoder issue 173); voxi does not
+know which host answers. lmcoder downloads the model files.
 If lmcoder is not installed, select `r2t2-confucius4-voxi`, the fallback in voxi's
 own `voxi-r2t2.service` (issue 181). That service runs:
 

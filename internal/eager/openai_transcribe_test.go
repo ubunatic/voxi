@@ -2,11 +2,13 @@ package eager
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"ubunatic.com/voxi/spec"
 )
@@ -190,5 +192,73 @@ func TestResolveOpenAIASRBaseURL_SpecEntries(t *testing.T) {
 	}
 	if got := resolveOpenAIASRBaseURL(gemini.BaseURL, globalBaseURL); got != globalBaseURL {
 		t.Errorf("openai-transcribe-gemini resolved base URL = %q, want the global setting", got)
+	}
+}
+
+// TestWakeASRServerPostsModel: the wake call is a JSON POST naming the model
+// (lmcoder's /lmcoder/wake contract, issue 181).
+func TestWakeASRServerPostsModel(t *testing.T) {
+	got := make(chan map[string]string, 1)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.Header.Get("Content-Type") != "application/json" {
+			t.Errorf("wake request = %s %q, want POST application/json", r.Method, r.Header.Get("Content-Type"))
+		}
+		var body map[string]string
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		got <- body
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer ts.Close()
+
+	wakeASRServer(ts.URL+"/lmcoder/wake", "r2t2")
+	select {
+	case body := <-got:
+		if body["model"] != "r2t2" {
+			t.Fatalf("wake body = %v, want model r2t2", body)
+		}
+	default:
+		t.Fatal("wake request not sent")
+	}
+}
+
+// TestWakeASRServerIgnoresErrors: an older server (404) or no server must
+// not panic or block past the wake timeout.
+func TestWakeASRServerIgnoresErrors(t *testing.T) {
+	ts := httptest.NewServer(http.NotFoundHandler())
+	ts.Close()
+	start := time.Now()
+	wakeASRServer(ts.URL+"/lmcoder/wake", "r2t2")
+	if elapsed := time.Since(start); elapsed > wakeTimeout+time.Second {
+		t.Fatalf("wake took %s, want at most the wake timeout", elapsed)
+	}
+}
+
+// TestTranscribeTimeoutForR2T2CoversColdStart: the lmcoder proxy holds a
+// request up to 60 s while a server starts (issue 181), so the R2T2 entry
+// must allow longer, and the drain deadline must exceed every model's
+// timeout so a held request is never dropped.
+func TestTranscribeTimeoutForR2T2CoversColdStart(t *testing.T) {
+	modelSpec, err := spec.LoadModels()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := transcribeTimeoutFor(spec.Model{}); got != transcribeTimeout {
+		t.Errorf("unset timeout = %s, want default %s", got, transcribeTimeout)
+	}
+	r2t2 := modelSpec.Models["r2t2-confucius4"]
+	if got := transcribeTimeoutFor(r2t2); got <= 60*time.Second {
+		t.Errorf("r2t2-confucius4 timeout = %s, want above the proxy's 60 s cold-start hold", got)
+	}
+	if r2t2.WakeURL == "" {
+		t.Error("r2t2-confucius4 has no wake_url")
+	}
+	eagerSpec, err := spec.LoadEager()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, m := range modelSpec.Models {
+		if got := transcribeTimeoutFor(m); got >= eagerSpec.DeliveryDeadline() {
+			t.Errorf("%s timeout %s is not below the delivery deadline %s", name, got, eagerSpec.DeliveryDeadline())
+		}
 	}
 }

@@ -11,6 +11,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
+
+	"ubunatic.com/voxi/spec"
 )
 
 // openaiTranscribeEngine is the spec/models.yaml `engine:` value for a
@@ -90,7 +93,15 @@ func transcribeOpenAIWAV(ctx context.Context, wavPath, baseURL, model, responseF
 	}
 	httpReq.Header.Set("Content-Type", contentType)
 
-	client := &http.Client{Timeout: transcribeTimeout}
+	// The caller's context carries the per-model timeout (a backend may hold
+	// the request during a cold start); bound it only when it has none.
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, transcribeTimeout)
+		defer cancel()
+		httpReq = httpReq.WithContext(ctx)
+	}
+	client := &http.Client{}
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		return "", fmt.Errorf("openai-transcribe: POST %s: %w", reqURL, err)
@@ -173,4 +184,41 @@ func buildOpenAITranscribeRequestBody(wavPath, model, responseFormat string) (io
 		return nil, "", err
 	}
 	return &buf, w.FormDataContentType(), nil
+}
+
+// transcribeTimeoutFor returns the model's transcribe_timeout_ms, or the
+// engine default when the spec leaves it unset.
+func transcribeTimeoutFor(m spec.Model) time.Duration {
+	if m.TranscribeTimeoutMs > 0 {
+		return time.Duration(m.TranscribeTimeoutMs) * time.Millisecond
+	}
+	return transcribeTimeout
+}
+
+// wakeTimeout bounds the fire-and-forget wake call; the server answers it
+// at once (202) and loads in the background.
+const wakeTimeout = 2 * time.Second
+
+// wakeASRServer tells the ASR server that a recording started, so a stopped
+// server can load while the user speaks (lmcoder's /lmcoder/wake, issue
+// 181). Errors are ignored: an older server answers 404, and the
+// transcription request itself still starts the server when needed.
+func wakeASRServer(wakeURL, model string) {
+	payload, err := json.Marshal(map[string]string{"model": model})
+	if err != nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), wakeTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, wakeURL, bytes.NewReader(payload))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
 }

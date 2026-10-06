@@ -145,6 +145,12 @@ models:
     # with the agy whisper-server entry above (issue 134). This is
     # lmcoder's proxy port.
     base_url: "http://127.0.0.1:8735/v1"
+    # lmcoder routes to x600 first and starts the local asr server on
+    # demand (lmcoder 173). The wake call at recording start lets a stopped
+    # local server load while the user speaks; the proxy holds a request up
+    # to 60 s during a cold start, so allow 90 s (issue 181 §7).
+    wake_url: "http://127.0.0.1:8735/lmcoder/wake"
+    transcribe_timeout_ms: 90000
     # M1 measured this GPU-bound (2.78 GiB VRAM, ~2s for a short clip);
     # no CPU timing was measured and none is expected to be practical.
     requires_gpu: true

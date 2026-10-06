@@ -63,6 +63,14 @@ type Model struct {
 	// default. Empty means "no override" -- fall through. Ignored by
 	// engines other than openai-transcribe.
 	BaseURL string `yaml:"base_url"`
+	// WakeURL, when set, receives a fire-and-forget POST {"model": APIModel}
+	// when a recording starts, so a server that is stopped can load while the
+	// user speaks (lmcoder's /lmcoder/wake, issue 181). Ignored when empty.
+	WakeURL string `yaml:"wake_url"`
+	// TranscribeTimeoutMs bounds one transcription request for this model.
+	// Zero means the engine default. Raised for backends that hold a request
+	// while a server cold-starts (lmcoder proxy: up to 60 s, issue 181).
+	TranscribeTimeoutMs int `yaml:"transcribe_timeout_ms"`
 }
 
 // StopWord is a shipped hallucination filter. ID is stable so a user can

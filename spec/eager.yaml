@@ -46,9 +46,10 @@ modifier_gate:
 drain:
   # Absolute safety net, not the delivery policy: it only stops an abandoned
   # generation from typing minutes later when the user never starts another
-  # session. Sized well above transcribeTimeout (30s per queued job) plus
-  # injection, so it is never the reason a real utterance is dropped.
-  delivery_deadline_ms: 60000
+  # session. Sized well above the longest transcription timeout (90 s for a
+  # model whose server may cold-start, spec/models.yaml) plus injection, so
+  # it is never the reason a real utterance is dropped.
+  delivery_deadline_ms: 150000
   # Per-delivery injection budget, on a context independent of the drain:
   # once keystrokes start, aborting mid-word is strictly worse than finishing.
   # Must exceed the 5s physical-modifier-release wait inside

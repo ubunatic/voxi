@@ -619,6 +619,10 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 	if err != nil {
 		return err
 	}
+	if m := modelSpec.Models[modelName]; m.WakeURL != "" {
+		go wakeASRServer(m.WakeURL, m.APIModel)
+	}
+	modelTranscribeTimeout := transcribeTimeoutFor(modelSpec.Models[modelName])
 	buildTranscribeArgs := func(wavPath string) []string {
 		return voxtypeTranscribeArgs(modelName, wavPath, initialPrompt)
 	}
@@ -729,7 +733,7 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 
 			writeVoxtypeState("transcribing")
 			transcribeParent := drain.ctx
-			transcribeCtx, cancelTranscribe := context.WithTimeout(transcribeParent, transcribeTimeout)
+			transcribeCtx, cancelTranscribe := context.WithTimeout(transcribeParent, modelTranscribeTimeout)
 			transStart := time.Now()
 			_ = recorder.Record(telemetry.Event{Event: telemetry.TranscriptionStarted, Timestamp: transStart, SessionID: sessionID, ChunkID: chunkID, ChunkIndex: job.Index})
 			rawText, err := runTranscribe(transcribeCtx, wavPath)
