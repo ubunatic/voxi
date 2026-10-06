@@ -163,4 +163,4 @@
 | 179 | [179-assess-newly-announced-speech-models-from-ai-news-video-for-voxi.md](179-assess-newly-announced-speech-models-from-ai-news-video-for-voxi.md) | Assess newly announced speech models from AI news video for Voxi | Open |
 | 180 | [180-speaking-pixel-avatar-in-the-loom-tui-using-voxi-tts.md](180-speaking-pixel-avatar-in-the-loom-tui-using-voxi-tts.md) | Speaking pixel avatar in the Loom TUI using Voxi TTS | Open |
 | 181 | [181-coordinate-with-lmcoder-lmcoder-hosts-the-r2t2-asr-model.md](181-coordinate-with-lmcoder-lmcoder-hosts-the-r2t2-asr-model.md) | Coordinate with lmcoder: lmcoder hosts the R2T2 ASR model | Open |
-| 182 | [182-remove-unused-model-files-to-free-disk-space.md](182-remove-unused-model-files-to-free-disk-space.md) | Remove unused model files to free disk space | Draft |
+| 182 | [182-remove-unused-model-files-to-free-disk-space.md](182-remove-unused-model-files-to-free-disk-space.md) | Remove unused model files to free disk space | Open |

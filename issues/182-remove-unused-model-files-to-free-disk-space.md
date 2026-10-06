@@ -1,6 +1,6 @@
 # 182 — Remove unused model files to free disk space
 
-**Status**: Draft
+**Status**: Open
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Enhancement
