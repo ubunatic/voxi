@@ -251,10 +251,9 @@ The shipped `openai-transcribe-gemini` model entry (`api_model: gemini`,
 `does_llm_cleanup: true`) targets
 [`voxi-clients/agy-voice/whisper-server`](https://codeberg.org/ubunatic/voxi-clients), a
 separate research repo's OpenAI-API-compatible bridge onto agy's internal Gemini voice
-RPC — not literal whisper.cpp despite the server's name. It is a stand-in canary target
-while the actual intended target, a local `lmcoder` instance exposing the same contract
-(`lmcoder:issues/091`), is still unbuilt; see issue 126 for the full history and the
-`does_llm_cleanup` default's rationale.
+RPC — not literal whisper.cpp despite the server's name. It was a stand-in canary target; lmcoder now serves the same contract for R2T2
+(`r2t2-confucius4`, proxy 8735, lmcoder issue 171, voxi issue 181). See issue 126 for the
+history and the `does_llm_cleanup` default's rationale.
 
 `voxi chunks list` shows a distinct badge per engine: 👂 whisper, ⚡ cohere-transcribe,
 🔷 the Gemini `openai-transcribe` model specifically, 🌐 any other `openai-transcribe`

@@ -77,6 +77,19 @@ neither resolves. The unit port is generated from this model's `base_url` in
 both the model and mmproj files exist under `~/.cache/voxi/models/`. Other
 selections stop and disable the service.
 
+### Trap: voxi starts its own R2T2 server by endpoint match
+
+voxi decides whether to run `voxi-r2t2.service` by comparing the selected model's
+`base_url` with the fallback entry's (`IsR2T2Active`). Pointing two entries at the same
+port makes voxi start its server there; that is why the lmcoder-served default and the
+voxi-hosted fallback are separate entries on different ports (issue 181).
+
+### Trap: a running server hides missing model files
+
+llama-server keeps the model in memory, so a health check passes after the files are
+deleted and the server fails on its next restart (seen 2026-10-06, issue 181). Check the
+files, not only the endpoint.
+
 ### Trap: `-c 4096` is not optional on an iGPU
 
 On AMD Cezanne, VRAM *is* system RAM. `llama-server` fits its context to the free
