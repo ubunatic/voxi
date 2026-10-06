@@ -61,7 +61,6 @@ Findings:
 - Decided (user, 2026-10-06): module path `ubunatic.com/lmcoder`. The primary repo
   `codeberg.org/ubunatic/lmcoder` is public (the GitHub mirror is private). Done 2026-10-06:
   module renamed (lmcoder 6475cd0, pushed), vanity tags and install line live on
-  ubunatic.com/lmcoder (ubunatic.com 43a9b02, deployed). `go install ubunatic.com/lmcoder/cmd/lmcoder@main`
-  works; `@latest` still resolves to tag v0.1.1 (old module path) until a new lmcoder release is tagged.
+  ubunatic.com/lmcoder (ubunatic.com 43a9b02, deployed). lmcoder v0.1.2 released; `go install ubunatic.com/lmcoder/cmd/lmcoder@latest` verified from a clean GOBIN.
 - Open: on t14 the proxy forwards to `upstream: x600`; check that a local `asr` service is still
   reached through the proxy by model name, not sent to x600.
