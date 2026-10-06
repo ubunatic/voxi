@@ -33,6 +33,9 @@ This is a coordination ticket: one agent in `../lmcoder` (hosting side), one in 
   no longer on disk; `~/.cache/voxi/` is gone. The running service still answers from memory and
   will fail on its next restart. Whoever starts here: check the files first; lmcoder's model
   registry should own the download from now on.
+  Re-downloaded by hand on 2026-10-06 from Hugging Face `netease-youdao/Confucius4-R2T2-GGUF`
+  (Q4_K_M sha256 fa3cb46c…6466, mmproj Q8_0 sha256 8dc2c67e…cb65). `voxi install` cannot
+  download them: it only checks the files exist and fails otherwise (`internal/install/install.go:196`).
 - R2T2 is called through `/v1/chat/completions`-style transcription (`engine: openai-transcribe`,
   `strip_before_marker: "<asr_text>"`, `spec/models.yaml`), so lmcoder needs the model plus its
   mmproj, and must not apply chat sampling profiles that change the transcript.

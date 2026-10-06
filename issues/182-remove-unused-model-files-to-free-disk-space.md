@@ -20,6 +20,7 @@ used. They stay supported (Cohere may improve again), but their files should not
 ## 2. Findings (2026-10-06, t14)
 - `~/.local/share/voxi/voxcpm/` 871 MB: binary + `voxcpm-0.5b-q8_0-audiovae-f16.gguf`. Unused
   locally: config has `tts_voxcpm_host: x600`, so VoxCPM runs on x600.
+  User decision 2026-10-06: keep it, it will be used locally later. Prune must allow keeping a model on purpose.
 - `~/.local/share/voxtype/models/` 608 MB: `ggml-base.en.bin` 142 MB, `ggml-small.en.bin` 466 MB
   (Whisper; `small.en` is the CPU fallback of `large-v3-turbo`). Unused with `asr_model: r2t2-confucius4`.
 - `~/.local/share/voxi/voices/` 242 MB: four Piper voices + `cloned.wav`. Only `cloned.wav`
