@@ -97,3 +97,7 @@ speaks. Sent to the lmcoder session; waiting for its contract (wake signal, cold
 - voxi side done (6a9f007): spec fields `wake_url` and `transcribe_timeout_ms` (R2T2: wake at
   recording start, 90 s timeout), drain deadline 150 s. Open: verify after lmcoder 173 is deployed
   (wake 202, dictation via x600, fallback with x600 unreachable and local asr stopped).
+- lmcoder 173 deployed on t14 (lmcoder 8f80539, config `upstream_first: [asr]`). Verified: wake
+  answers 202; a transcription through 8735 is served by x600; voxi settings test passes. The lmcoder
+  session ran the fallback (both asr servers stopped → local asr started in 2.5 s, request held and
+  answered). Open: a user dictation with x600 serving, the local asr stop after 5 min, the reboot check, §5.
