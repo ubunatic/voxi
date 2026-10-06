@@ -26,7 +26,7 @@ used. They stay supported (Cohere may improve again), but their files should not
 - `~/.local/share/voxi/voices/` 242 MB: four Piper voices + `cloned.wav`. Only `cloned.wav`
   (VoxCPM reference) and the configured Piper voice are in use.
 - Cohere model location not checked yet.
-- `~/.cache/voxi/models/` (R2T2) is already gone, see 181.
+- `~/.cache/voxi/models/` (R2T2) deleted 2026-10-06: lmcoder now serves R2T2 from its own copy, see 181.
 
 ## 3. Plan
 - A command (e.g. `voxi models` with `list` and `prune`) that knows every model path from the

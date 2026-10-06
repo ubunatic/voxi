@@ -80,3 +80,6 @@ Findings:
   (`language None`) on both servers, so that test failure is model behaviour, not lmcoder.
 - Dictation confirmed by the user (2026-10-06). Open: a check after the next reboot; §5 (voxi installs lmcoder when
   it is missing) is not started.
+- Deleted voxi's copy of the R2T2 files (`~/.cache/voxi/models`, 1.4 GB) on the user's request
+  (2026-10-06); lmcoder serves from `~/.cache/llama-canary/models`. To use the fallback
+  `r2t2-confucius4-voxi`, copy both files from there into `~/.cache/voxi/models` first.
