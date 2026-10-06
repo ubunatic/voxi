@@ -66,3 +66,17 @@ Findings:
   reached through the proxy by model name, not sent to x600.
   Finding: today it is not. The proxy reads `model` only from JSON bodies, and voxi sends multipart,
   so the request goes to x600. Tracked in lmcoder 171.
+
+## 6. Status (2026-10-06): voxi switched to lmcoder
+- lmcoder side done (lmcoder 171, 97a39c5): `lmcoder-asr.service` on 8749, in lmcoder's default
+  stack, enabled at boot; t14 config `services: [proxy, embed, asr]`. The proxy routes multipart
+  requests by `model`, so local `asr` wins over `upstream: x600`.
+- voxi side done (62bae3c): `r2t2-confucius4` → `http://127.0.0.1:8735/v1`, model `r2t2`.
+  Decision: voxi's own server stays as fallback entry `r2t2-confucius4-voxi` (port 18131,
+  `voxi-r2t2.service`); only that entry starts it. On t14 `make restart-service` stopped and disabled
+  `voxi-r2t2.service`; its model files in `~/.cache/voxi/models` stay (fallback, see 182).
+- Verified: `voxi settings test` passes via 8735; live corpus (`VOXI_LIVE_ASR=1`) through lmcoder
+  gives the same transcripts as 18131. Two clips (`bug-d-etc`, `short-uh`) return empty
+  (`language None`) on both servers, so that test failure is model behaviour, not lmcoder.
+- Open: a dictation by the user and a check after the next reboot; §5 (voxi installs lmcoder when
+  it is missing) is not started.
