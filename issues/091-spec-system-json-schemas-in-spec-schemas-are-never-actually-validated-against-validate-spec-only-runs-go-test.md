@@ -1,6 +1,6 @@
 # 091 — Spec system: JSON Schemas in spec/schemas/ are never actually validated against
 
-**Status**: Open
+**Status**: Closed
 **Priority**: P2 (Medium)
 **Severity**: Design gap (spec system doesn't do what it documents)
 **Category**: Spec System
@@ -60,3 +60,10 @@ Either:
   be corrected instead of the code — reword `docs/Spec.md` to state plainly
   that the schemas are IDE-only hints, not CI-enforced, so the invariant list
   doesn't over-promise what the pipeline actually checks.
+
+## 4. Resolution
+
+Implemented Option 1:
+- Added `github.com/santhosh-tekuri/jsonschema/v5` to `go.mod`.
+- Added `spec/schema_test.go` running pure-Go JSON Schema validation for all `spec/*.yaml` files against their corresponding `spec/schemas/*.schema.json` draft-07 schemas.
+- Verified that all spec YAML files match their schemas with `make validate-spec`.
