@@ -164,3 +164,4 @@
 | 180 | [180-speaking-pixel-avatar-in-the-loom-tui-using-voxi-tts.md](180-speaking-pixel-avatar-in-the-loom-tui-using-voxi-tts.md) | Speaking pixel avatar in the Loom TUI using Voxi TTS | Open |
 | 181 | [181-coordinate-with-lmcoder-lmcoder-hosts-the-r2t2-asr-model.md](181-coordinate-with-lmcoder-lmcoder-hosts-the-r2t2-asr-model.md) | Coordinate with lmcoder: lmcoder hosts the R2T2 ASR model | Open |
 | 182 | [182-remove-unused-model-files-to-free-disk-space.md](182-remove-unused-model-files-to-free-disk-space.md) | Remove unused model files to free disk space | Open |
+| 183 | [183-container-test-public-go-install-of-voxi-then-voxi-install.md](183-container-test-public-go-install-of-voxi-then-voxi-install.md) | Container test: public go install of voxi, then voxi install | Open |
