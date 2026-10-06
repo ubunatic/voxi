@@ -59,10 +59,9 @@ Findings:
   and a config lists the services to run (`services: [proxy, embed]` on t14). R2T2 would be a new
   `asr` service, and voxi's minimal config would be `services: [proxy, asr]`.
 - Decided (user, 2026-10-06): module path `ubunatic.com/lmcoder`. The primary repo
-  `codeberg.org/ubunatic/lmcoder` is public (the GitHub mirror is private). Two steps remain before
-  `go install ubunatic.com/lmcoder/cmd/lmcoder@latest` works:
-  1. lmcoder repo: rename the module in `go.mod` from `lmcoder` to `ubunatic.com/lmcoder` and fix imports.
-  2. ubunatic.com repo: `ubunatic.com/lmcoder/` exists but has no `go-import` tag; add it with
-     `make ingest-gopkg PKG=lmcoder`, check with `make check-gopkg`, then publish.
+  `codeberg.org/ubunatic/lmcoder` is public (the GitHub mirror is private). Done 2026-10-06:
+  module renamed (lmcoder 6475cd0, pushed), vanity tags and install line live on
+  ubunatic.com/lmcoder (ubunatic.com 43a9b02, deployed). `go install ubunatic.com/lmcoder/cmd/lmcoder@main`
+  works; `@latest` still resolves to tag v0.1.1 (old module path) until a new lmcoder release is tagged.
 - Open: on t14 the proxy forwards to `upstream: x600`; check that a local `asr` service is still
   reached through the proxy by model name, not sent to x600.
