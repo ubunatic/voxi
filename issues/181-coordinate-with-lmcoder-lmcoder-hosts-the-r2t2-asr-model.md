@@ -83,3 +83,11 @@ Findings:
 - Deleted voxi's copy of the R2T2 files (`~/.cache/voxi/models`, 1.4 GB) on the user's request
   (2026-10-06); lmcoder serves from `~/.cache/llama-canary/models`. To use the fallback
   `r2t2-confucius4-voxi`, copy both files from there into `~/.cache/voxi/models` first.
+
+## 7. Next (user, 2026-10-06): x600 first, local R2T2 only as fallback
+Goal: take load off the laptop. On t14, R2T2 requests go to x600 when it serves R2T2, else to the
+local asr service. The local server may stop while x600 is up, and must start at once when the user
+dictates and no server is up. No latency measuring: x600 is assumed faster and the network fast
+enough. Split: lmcoder owns routing and the local server's start and stop; voxi keeps calling 8735
+and may send a wake signal when recording starts, so a stopped local server loads while the user
+speaks. Sent to the lmcoder session; waiting for its contract (wake signal, cold-start behaviour).
