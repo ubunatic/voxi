@@ -91,3 +91,9 @@ dictates and no server is up. No latency measuring: x600 is assumed faster and t
 enough. Split: lmcoder owns routing and the local server's start and stop; voxi keeps calling 8735
 and may send a wake signal when recording starts, so a stopped local server loads while the user
 speaks. Sent to the lmcoder session; waiting for its contract (wake signal, cold-start behaviour).
+- lmcoder answered (its issue 173): x600 already serves R2T2 and needs no config change; the proxy
+  will prefer x600, hold a request up to 60 s while it starts local asr, and stop local asr after
+  5 min of x600 health and no local use. Wake contract: `POST 8735/lmcoder/wake {"model":"r2t2"}` → 202.
+- voxi side done (6a9f007): spec fields `wake_url` and `transcribe_timeout_ms` (R2T2: wake at
+  recording start, 90 s timeout), drain deadline 150 s. Open: verify after lmcoder 173 is deployed
+  (wake 202, dictation via x600, fallback with x600 unreachable and local asr stopped).
