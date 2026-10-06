@@ -1,6 +1,6 @@
 # 185 — Apply vocabulary replacements consistently to streamed transcripts
 
-**Status**: Open
+**Status**: Closed — Resolved: eager dictation now applies configured exact replacements across ASR engines; session regression test and quota suite pass.
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Bug
