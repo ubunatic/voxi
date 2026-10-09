@@ -130,6 +130,9 @@ models:
     # Served by lmcoder's asr service behind its proxy (issue 181,
     # lmcoder issue 171); the proxy picks the backend by this model name.
     api_model: r2t2
+    # Start and stop go through lmcoder's supported service commands, never
+    # systemctl directly (see internal/frontend).
+    manager: lmcoder
     # llama-server rejects response_format=text with HTTP 400 ("Only
     # 'json' response_format is supported for transcription") -- verified
     # in issue 134 §6 M1 -- so this backend must send json, unlike the

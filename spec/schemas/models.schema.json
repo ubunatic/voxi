@@ -65,6 +65,10 @@
             "type": "string",
             "description": "The model id sent as the \"model\" field of the request to an openai-transcribe engine's /v1/audio/transcriptions endpoint (e.g. \"whisper-1\"). Distinct from this entry's own map key, which is voxi's spec model name and is never meaningful to the remote server. Required when engine is 'openai-transcribe'; ignored otherwise."
           },
+          "manager": {
+            "type": "string",
+            "description": "Name of the external tool that starts and stops this model's server when Voxi does not own it (e.g. \"lmcoder\"). Omit for voxi-owned or unmanaged servers."
+          },
           "stop_words": {
             "type": "array",
             "description": "Case-insensitive regex fragments matching known hallucinated phrases this model tends to leak (e.g. YouTube outros, subtitle credits). Applied both to reject whole-utterance hallucinations and to strip trailing hallucinated tails from otherwise-genuine speech.",

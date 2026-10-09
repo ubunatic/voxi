@@ -43,6 +43,10 @@ type Model struct {
 	// "json" selects the {"type":...,"text":...} envelope shape some
 	// backends (e.g. llama-server/R2T2, issue 134) require instead.
 	ResponseFormat string `yaml:"response_format"`
+	// Manager names the external tool that starts and stops this model's
+	// server when Voxi does not own it (e.g. "lmcoder"). Empty means the
+	// server is voxi-owned or externally managed with no lifecycle tool.
+	Manager string `yaml:"manager"`
 	// StripBeforeMarker, when set, discards everything up to and
 	// including the last occurrence of this literal substring in the
 	// transcript text, keeping only what follows. Used for backends that
