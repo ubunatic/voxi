@@ -168,3 +168,4 @@
 | 184 | [184-make-r2t2-the-default-asr-model-without-llm-cleanup.md](184-make-r2t2-the-default-asr-model-without-llm-cleanup.md) | Make R2T2 the default ASR model, without LLM cleanup | Open |
 | 185 | [185-apply-vocabulary-replacements-consistently-to-streamed-transcripts.md](185-apply-vocabulary-replacements-consistently-to-streamed-transcripts.md) | Apply vocabulary replacements consistently to streamed transcripts | Closed — Resolved: eager dictation now applies configured exact replacements across ASR engines; session regression test and quota suite pass. |
 | 186 | [186-build-a-cross-platform-gui-demo-for-voxi-features.md](186-build-a-cross-platform-gui-demo-for-voxi-features.md) | Build a cross-platform GUI demo for voxi features | Open |
+| 187 | [187-evaluate-kittentts-2-for-voice-cloning.md](187-evaluate-kittentts-2-for-voice-cloning.md) | Evaluate KittenTTS 2 for voice cloning | Open |
