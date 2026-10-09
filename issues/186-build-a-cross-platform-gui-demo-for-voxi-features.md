@@ -1,6 +1,6 @@
 # 186 — Build a cross-platform GUI demo for voxi features
 
-**Status**: In Progress — SDK selected; lmcoder required companion with cross-platform builds tracked in lmcoder #174
+**Status**: In Progress — M2 visual specs drafted; lmcoder is required for managed model servers
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Feature
@@ -41,10 +41,11 @@ choice) or a denied permission.
   target Linux, macOS and Windows from the first GUI release. Loom remains the TUI renderer, with
   both front ends intended to share Go feature/service logic. Fyne/malgo do not provide host media
   controls; investigate per-platform integrations rather than treating in-app buttons as equivalent.
-- **M2 — TUI prototype**: map server lifecycle and audio paths, then create `.ansi` mockups for
-  scope 4a–4c, verified with loom `measure`/`eval`, and build a first running loom TUI wired to
-  voxi's Go code. Record any unresolved platform/API or user decisions in this ticket before
-  crossing the next gate.
+- **M2 — TUI prototype**: use the host-drafted visual specs in `docs/data/voxi-tui-*.ansi`, map
+  server lifecycle and audio paths, and build a first running loom TUI wired to voxi's Go code.
+  Each mockup must pass loom `measure`/`eval` and `check-box`. Detect the required `lmcoder` tool and
+  use its supported lifecycle commands for its model servers. Record unresolved platform/API or
+  user decisions in this ticket before crossing the next gate.
 - **M3 — GUI (gate)**: starts only after M1 is decided and M2 runs. Build the GUI on Fyne with
   malgo audio and verify builds and behavior on Linux, macOS and Windows; implement or explicitly
   resolve host media-control coverage on each platform and record features that cannot be exercised.
