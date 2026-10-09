@@ -1,0 +1,21 @@
+┌──────────────────────────── Voxi Speech ─────────────────────────────┐
+│VOXI  /  SPEECH                                                       │
+│Voice input and speech output                                         │
+│                                                                      │
+│MICROPHONE                                                            │
+│Default input     ● Ryzen HD Audio Controller Digital Microphone      │
+│Input level       [████████░░░░]  Listening off                       │
+│[ r ] Start listening              [ x ] Stop                         │
+│                                                                      │
+│SPEECH INPUT                                                          │
+│ASR model         r2t2-confucius4  ·  via lmcoder                     │
+│Last transcript   “Set a timer for ten minutes.”                      │
+│                                                                      │
+│SPEECH OUTPUT                                                         │
+│TTS backend       voxcpm  ·  host status shown by voxi                │
+│[ p ] Play / pause                 [ s ] Stop                         │
+│Host media        OS integration status: unavailable                  │
+│                                                                      │
+│lmcoder           ● Found  ·  model service ready                     │
+│[1] Speech   [2] Servers   [3] Settings                       [q] Quit│
+└──────────────────────────────────────────────────────────────────────┘

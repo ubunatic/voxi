@@ -1,0 +1,21 @@
+┌─────────────────────────── Voxi Settings ────────────────────────────┐
+│VOXI  /  SETTINGS                                                     │
+│Manage installed features and speech preferences                      │
+│                                                                      │
+│FEATURES                                                              │
+│Speech input      [x] Enabled      ASR model: r2t2-confucius4         │
+│Speech output     [x] Enabled      TTS backend: voxcpm                │
+│Model servers     [x] Enabled      Manager: lmcoder                   │
+│                                                                      │
+│AUDIO                                                                 │
+│Input device      Default system microphone                           │
+│Output device     Default system speaker                              │
+│Host media        OS integration status: unavailable                  │
+│                                                                      │
+│INSTALLATION                                                          │
+│Voxi              ● Installed                                         │
+│lmcoder           ● Found  ·  required for managed model servers      │
+│[ e ] Edit selected setting             [ r ] Restore defaults        │
+│                                                                      │
+│[1] Speech   [2] Servers   [3] Settings                       [q] Quit│
+└──────────────────────────────────────────────────────────────────────┘

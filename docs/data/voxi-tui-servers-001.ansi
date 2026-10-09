@@ -1,0 +1,21 @@
+┌──────────────────────────── Voxi Model Servers ────────────────────────────┐
+│VOXI  /  MODEL SERVERS                                                      │
+│Lifecycle actions go through each owning tool                               │
+│                                                                            │
+│REQUIRED TOOL                                                               │
+│lmcoder           ● Found  ·  version 0.x                                   │
+│[ i ] Install guidance                 [ r ] Refresh status                 │
+│                                                                            │
+│ASR                                                                         │
+│r2t2-confucius4   ● Ready  ·  owned by lmcoder                              │
+│[ s ] Start via lmcoder               [ x ] Stop via lmcoder                │
+│whisper-server    ○ Not managed by voxi  ·  status only                     │
+│                                                                            │
+│VOXI SERVICES                                                               │
+│voxi-agent        ● Running                                                 │
+│voxi-r2t2         ○ Stopped  ·  voxi-owned                                  │
+│[ a ] Start selected                  [ d ] Stop selected                   │
+│                                                                            │
+│Missing tool or service errors appear here; no direct systemctl for lmcoder.│
+│[1] Speech   [2] Servers   [3] Settings                       [q] Quit      │
+└────────────────────────────────────────────────────────────────────────────┘
