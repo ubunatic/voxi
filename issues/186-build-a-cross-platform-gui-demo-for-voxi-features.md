@@ -1,10 +1,10 @@
 # 186 — Build a cross-platform GUI demo for voxi features
 
-**Status**: In Progress — SDK selected: Fyne and malgo; target Linux, macOS, Windows
+**Status**: Open
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Feature
-**Related**:
+**Related**: [lmcoder #174 — cross-platform builds](../lmcoder/issues/174-provide-cross-platform-lmcoder-builds-for-linux-macos-and-windows.md)
 
 ---
 
@@ -21,14 +21,19 @@ choice) or a denied permission.
 2. All OS/platform interaction goes through an established SDK such as SDL (e.g. via Go bindings).
    No Python, no JS, no Java.
 3. The SDK must make it easy to access the host's default microphones and media controls.
-4. v1 scope: (a) speech input and output, (b) start/stop model servers, (c) manage voxi settings
-   and features. Host keyboard access (typing/injection, modifier gating) is out of scope for v1.
+4. v1 scope: (a) speech input and output, (b) start/stop model servers through their owning tool,
+   (c) manage voxi settings and features. `lmcoder` is a required companion for its model-server
+   workflows; detect/report missing tools and use supported `lmcoder` lifecycle commands rather than
+   controlling its services directly. Host keyboard access (typing/injection, modifier gating) is
+   out of scope for v1.
 5. Prerequisite: the GUI assumes a working voxi install and, if needed, extends/enhances the install
    paths: (1) curl installer, (2) `go install`, (3) a Windows/macOS install path for non-techies.
 6. Prototype first as a loom-based TUI (ubunatic.com/loom). The chosen SDK must work with both TUIs
    and GUIs while the Go logic runs in the background.
 7. TUI prototypes are `.ansi` files: inspectable with `cat` and verified with the loom CLI
    (`measure`/`eval`).
+8. `lmcoder` is a required tool for its model-server workflows and must provide Linux, macOS, and
+   Windows builds (tracked in [lmcoder issue 174](../lmcoder/issues/174-provide-cross-platform-lmcoder-builds-for-linux-macos-and-windows.md)).
 
 ## 3. Plan & Gates
 - **M1 — SDK choice (decided)**: use Fyne for the Go GUI and malgo (miniaudio) for default
