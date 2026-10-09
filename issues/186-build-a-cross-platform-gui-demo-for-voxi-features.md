@@ -1,6 +1,6 @@
 # 186 — Build a cross-platform GUI demo for voxi features
 
-**Status**: Blocked — awaiting user decisions on TUI, monitor, settings and media scope
+**Status**: Blocked — awaiting user decision on TUI host media-control scope
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Feature
@@ -63,12 +63,16 @@ or a denied permission.
 - A first loom TUI and shared frontend layer exist in `examples/voxi-tui/` and `internal/frontend/`.
   The current source snapshot passed `make test-q1` during wrap, and the worker reported successful
   live rendering and `make install`; this is not final acceptance or a GUI implementation.
-- Before continuing, the user must decide whether the new UI starts as `voxi tui` or becomes a
-  future `voxi monitor` replacement, whether `voxi settings` remains standalone, whether the TUI
-  needs host media controls or only Linux status, and whether settings edit/reset must work in M2.
-  The architecture recommendation is to share the service layer, keep existing commands unchanged,
-  finish the TUI, and migrate monitor panels only after parity.
-- Known prototype gaps: settings edit/reset are placeholders; some settings/ASR readiness labels do
-  not reflect authoritative settings or local server state; transcript and mic level are placeholders.
-  Correct misleading states and settle scope before treating M2 as complete. Do not begin GUI work
-  or close this issue until those decisions and acceptance criteria are resolved.
+- **User decisions recorded**: keep `voxi monitor` unchanged for now and assess parity later; reuse
+  the existing `voxi settings` functionality in the new TUI rather than replace or duplicate it; the
+  initial three `.ansi` mockups are approved as the visual baseline. Keep the TUI a separate interface
+  until parity is assessed; its eventual command name remains to be chosen before promotion.
+- The architecture recommendation is to share the service layer, keep existing commands unchanged,
+  finish the TUI, and migrate monitor panels only after parity. The remaining scope decision is
+  whether the TUI needs host media controls or only Linux media status; the GUI retains the
+  cross-platform host-media requirement.
+- Known prototype gaps: settings editing has not yet been integrated; some settings/ASR readiness
+  labels do not reflect authoritative settings or local server state; transcript and mic level are
+  placeholders. Implement settings through the existing settings logic and show only truthful state.
+  Resolve the remaining media scope and verify acceptance before treating M2 as complete. Do not
+  begin GUI work or close this issue until the gates are satisfied.
