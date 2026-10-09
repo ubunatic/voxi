@@ -1,6 +1,6 @@
 # 186 — Build a cross-platform GUI demo for voxi features
 
-**Status**: Open
+**Status**: In Progress — SDK selected; lmcoder required companion with cross-platform builds tracked in lmcoder #174
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Feature
