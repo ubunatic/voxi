@@ -1,6 +1,6 @@
 # 186 — Build a cross-platform GUI demo for voxi features
 
-**Status**: In Progress — M2 visual specs drafted; lmcoder is required for managed model servers
+**Status**: Blocked — awaiting user decisions on TUI, monitor, settings and media scope
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Feature
@@ -12,9 +12,9 @@
 Voxi's Go code, models, and logic need an approachable cross-platform front end (Linux, macOS,
 Windows) for demonstrating and exercising the project's features, including for non-technical users.
 
-/goal Choose a cross-platform Go SDK and ship a first running loom-based TUI prototype (gate 1);
-only then build the real GUI (gate 2). Stop and report when blocked on a user decision (e.g. SDK
-choice) or a denied permission.
+/goal Deliver and verify a loom-based TUI prototype, settle how it relates to `voxi monitor` and
+`voxi settings`, and only then begin the real GUI. Stop and report when blocked on a user decision
+or a denied permission.
 
 ## 2. Requirements
 1. As much of the app as possible is Go.
@@ -54,3 +54,21 @@ choice) or a denied permission.
 - SDK choice recorded in this ticket with rationale.
 - `.ansi` prototypes committed and passing loom `measure`/`eval`; TUI runs against a real voxi install.
 - Install prerequisites (requirement 5) checked; gaps filed or fixed.
+
+## 5. Handoff
+- The SDK decision is Fyne + malgo; Linux, macOS, and Windows are all target platforms. `lmcoder`
+  is a required companion; cross-platform builds are tracked in lmcoder issue 174.
+- The host-drafted speech, servers, and settings mockups are committed under `docs/data/` and passed
+  loom `measure`, `eval`, and `check-box`.
+- A first loom TUI and shared frontend layer exist in `examples/voxi-tui/` and `internal/frontend/`.
+  The current source snapshot passed `make test-q1` during wrap, and the worker reported successful
+  live rendering and `make install`; this is not final acceptance or a GUI implementation.
+- Before continuing, the user must decide whether the new UI starts as `voxi tui` or becomes a
+  future `voxi monitor` replacement, whether `voxi settings` remains standalone, whether the TUI
+  needs host media controls or only Linux status, and whether settings edit/reset must work in M2.
+  The architecture recommendation is to share the service layer, keep existing commands unchanged,
+  finish the TUI, and migrate monitor panels only after parity.
+- Known prototype gaps: settings edit/reset are placeholders; some settings/ASR readiness labels do
+  not reflect authoritative settings or local server state; transcript and mic level are placeholders.
+  Correct misleading states and settle scope before treating M2 as complete. Do not begin GUI work
+  or close this issue until those decisions and acceptance criteria are resolved.
