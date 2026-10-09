@@ -1,6 +1,6 @@
 # 186 — Build a cross-platform GUI demo for voxi features
 
-**Status**: Open
+**Status**: In Progress — SDK selected: Fyne and malgo; target Linux, macOS, Windows
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Feature
@@ -31,12 +31,18 @@ choice) or a denied permission.
    (`measure`/`eval`).
 
 ## 3. Plan & Gates
-- **M1 — SDK choice**: compare candidates against requirements 1–3 and 6 (mic, media controls,
-  TUI+GUI coexistence, Go bindings, platform support). Present a recommendation; the user picks.
-- **M2 — TUI prototype**: `.ansi` mockups for scope 4a–4c, verified with loom `measure`/`eval`,
-  then a first running loom TUI wired to voxi's Go code.
-- **M3 — GUI (gate)**: starts only after M1 is decided and M2 runs. Build the GUI on the chosen SDK
-  and verify builds and behavior per platform; record features that cannot be exercised via the GUI.
+- **M1 — SDK choice (decided)**: use Fyne for the Go GUI and malgo (miniaudio) for default
+  microphone/speaker access. Selected for Go-native APIs and established cross-platform support;
+  target Linux, macOS and Windows from the first GUI release. Loom remains the TUI renderer, with
+  both front ends intended to share Go feature/service logic. Fyne/malgo do not provide host media
+  controls; investigate per-platform integrations rather than treating in-app buttons as equivalent.
+- **M2 — TUI prototype**: map server lifecycle and audio paths, then create `.ansi` mockups for
+  scope 4a–4c, verified with loom `measure`/`eval`, and build a first running loom TUI wired to
+  voxi's Go code. Record any unresolved platform/API or user decisions in this ticket before
+  crossing the next gate.
+- **M3 — GUI (gate)**: starts only after M1 is decided and M2 runs. Build the GUI on Fyne with
+  malgo audio and verify builds and behavior on Linux, macOS and Windows; implement or explicitly
+  resolve host media-control coverage on each platform and record features that cannot be exercised.
 
 ## 4. Acceptance
 - SDK choice recorded in this ticket with rationale.
