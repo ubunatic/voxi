@@ -113,3 +113,22 @@ repairs, routing probe linked live.
   prompt; print `stdin is not a terminal; rerun with --yes to apply` and exit with the fault code.
 - Tests for each item with the fake host (settle polling with a fake clock, auto_null fixture,
   dedupe, non-tty).
+
+**M3 delivered (c77f4af).** Live re-run of `systemctl --user stop wireplumber` + `--fix --yes`:
+dedupe ✓, non-tty guard ✓, routing now links to the real speaker ✓. Still wrong:
+
+### M4 — settle, live-verified
+**Pre-Work / Required Refinements (from M3 live review):**
+- Settle still ineffective live: `After repair:` gave `SKIP default-devices: no default.* metadata in
+  the dump`, `OK bt-card-profile-off: no Bluetooth audio card present`, `FAULT mic: no usable
+  default mic`; seconds later all OK. Find out why the fake-clock test passed but live failed (stale
+  dump reused for the re-check? settle condition met by the old graph before the restart took
+  effect? settle only applied to one check?). Every check in `After repair:` must read a fresh
+  pw-dump taken after settle; settle must also wait for the restarted unit's new MainPID / a
+  changed graph, not only "metadata exists".
+- `Snapshot: ...` is printed after the re-check block; print it before the first `applied`.
+- Wording: `applied (covered by an earlier restart)` → `skipped: covered by the earlier restart`.
+- Live verification is required for this milestone (user allowed touching sound devices): run
+  `systemctl --user stop wireplumber`, then `voxi doctor --fix --yes`, at least 3 times; every
+  `After repair:` block must show default-devices, bt card and mic OK. Paste all runs. Leave the
+  system with WirePlumber active and the speaker as default sink.
