@@ -15,6 +15,13 @@ var doctorFiles embed.FS
 type DoctorSpec struct {
 	Checks  []DoctorCheck     `yaml:"checks"`
 	Scripts map[string]string `yaml:"scripts"`
+	Settle  DoctorSettle      `yaml:"settle"`
+}
+
+// DoctorSettle bounds graph polling after service restarts.
+type DoctorSettle struct {
+	TimeoutMS  int `yaml:"timeout_ms"`
+	IntervalMS int `yaml:"interval_ms"`
 }
 
 // DoctorCheck describes one read-only audio health check.
@@ -66,17 +73,20 @@ type DoctorCoredumps struct {
 
 // DoctorRouting configures the silent playback probe.
 type DoctorRouting struct {
-	ProbeNode  string `yaml:"probe_node"`
-	Script     string `yaml:"script"`
-	SampleRate int    `yaml:"sample_rate"`
-	Channels   int    `yaml:"channels"`
-	DurationMS int    `yaml:"duration_ms"`
+	ProbeNode          string   `yaml:"probe_node"`
+	Script             string   `yaml:"script"`
+	SampleRate         int      `yaml:"sample_rate"`
+	Channels           int      `yaml:"channels"`
+	DurationMS         int      `yaml:"duration_ms"`
+	DummySinkNames     []string `yaml:"dummy_sink_names"`
+	DummySinkFactories []string `yaml:"dummy_sink_factories"`
 }
 
 // DoctorRepair stores the prompt shown beside a printed repair command.
 type DoctorRepair struct {
-	Prompt    string            `yaml:"prompt"`
-	Templates map[string]string `yaml:"templates"`
+	Prompt      string            `yaml:"prompt"`
+	SettleGraph bool              `yaml:"settle_graph"`
+	Templates   map[string]string `yaml:"templates"`
 }
 
 // LoadDoctor parses and validates the embedded doctor specification.
@@ -139,6 +149,9 @@ func validateDoctorSpec(s *DoctorSpec) error {
 	}
 	if _, ok := s.Scripts["routing-probe.sh"]; !ok {
 		return fmt.Errorf("spec: doctor.yaml does not register routing-probe.sh")
+	}
+	if s.Settle.TimeoutMS < 1 || s.Settle.IntervalMS < 1 || s.Settle.IntervalMS > s.Settle.TimeoutMS {
+		return fmt.Errorf("spec: doctor graph settle timeout and interval must be positive and interval no longer than timeout")
 	}
 	return nil
 }

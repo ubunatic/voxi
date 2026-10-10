@@ -11,6 +11,7 @@ checks:
       - {scope: system, unit: bluetooth.service}
     repair:
       prompt: Restart the failed service or inspect its journal.
+      settle_graph: true
       templates:
         restart_user: "systemctl --user restart {{unit}}"
         restart_system: "sudo systemctl restart {{unit}}"
@@ -87,9 +88,15 @@ checks:
       sample_rate: 48000
       channels: 1
       duration_ms: 1000
+      dummy_sink_names: [auto_null]
+      dummy_sink_factories: [support.null-audio-sink]
     repair:
       prompt: Restart WirePlumber after confirming earlier device faults are fixed.
+      settle_graph: true
       templates:
         restart: "systemctl --user restart wireplumber"
 scripts:
   routing-probe.sh: scripts/routing-probe.sh
+settle:
+  timeout_ms: 5000
+  interval_ms: 100

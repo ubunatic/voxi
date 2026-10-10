@@ -62,11 +62,11 @@ type Report struct {
 
 // ExitCode follows the doctor command contract: faults are 1, check errors 2.
 func (r Report) ExitCode() int {
-	if r.Fault > 0 {
-		return 1
-	}
 	if r.Error > 0 {
 		return 2
+	}
+	if r.Fault > 0 {
+		return 1
 	}
 	return 0
 }
@@ -117,7 +117,7 @@ func (d HostDoctor) check(ctx context.Context, check spec.DoctorCheck, opts Opti
 	case "mic":
 		return d.checkMic(ctx, check, opts.PWDump), nil
 	case "stream-routing":
-		return d.checkRouting(ctx, check, opts.NoProbe), nil
+		return d.checkRouting(ctx, check, opts.NoProbe, opts.PWDump), nil
 	default:
 		return Result{}, fmt.Errorf("doctor: no implementation for check %q", check.ID)
 	}
@@ -125,6 +125,15 @@ func (d HostDoctor) check(ctx context.Context, check spec.DoctorCheck, opts Opti
 
 // Print writes script-compatible check lines and a summary.
 func (r Report) Print(w io.Writer) {
+	r.print(w, false)
+}
+
+// PrintFix writes a post-repair report with commands shown as repair suggestions.
+func (r Report) PrintFix(w io.Writer) {
+	r.print(w, true)
+}
+
+func (r Report) print(w io.Writer, fixMode bool) {
 	for _, check := range r.Checks {
 		fmt.Fprintf(w, "%s %s: %s\n", check.Status, check.ID, check.Detail)
 		if check.Status == WARN {
@@ -134,15 +143,16 @@ func (r Report) Print(w io.Writer) {
 		}
 		if check.Status == FAULT {
 			for _, repair := range check.Repairs {
-				fmt.Fprintf(w, "  repair (printed, not run): %s\n", repair)
+				if fixMode {
+					fmt.Fprintf(w, "  repair: %s\n", repair)
+				} else {
+					fmt.Fprintf(w, "  repair (printed, not run): %s\n", repair)
+				}
 			}
 		}
 	}
 	if r.Snapshot != "" {
 		fmt.Fprintf(w, "Snapshot: %s\n", r.Snapshot)
-	}
-	for _, command := range r.Applied {
-		fmt.Fprintf(w, "  applied: %s\n", command)
 	}
 	fmt.Fprintf(w, "\nSummary: %d OK, %d FAULT, %d SKIP, %d WARN, %d ERROR\n", r.OK, r.Fault, r.Skip, r.Warn, r.Error)
 }
@@ -406,7 +416,7 @@ func (d HostDoctor) checkMic(ctx context.Context, c spec.DoctorCheck, path strin
 	return Result{ID: c.ID, Status: FAULT, Detail: strings.Join(details, ", "), Repairs: repairs}
 }
 
-func (d HostDoctor) checkRouting(ctx context.Context, c spec.DoctorCheck, noProbe bool) Result {
+func (d HostDoctor) checkRouting(ctx context.Context, c spec.DoctorCheck, noProbe bool, path string) Result {
 	if noProbe {
 		return skipped(c.ID, "--no-probe given, the stream probe was not run")
 	}
@@ -415,6 +425,25 @@ func (d HostDoctor) checkRouting(ctx context.Context, c spec.DoctorCheck, noProb
 		return skipped(c.ID, commandSkip("pw-play/pw-link", err))
 	}
 	if target != "" {
+		for _, dummyName := range c.Routing.DummySinkNames {
+			if target == dummyName {
+				return Result{ID: c.ID, Status: FAULT, Detail: "probe stream linked only to dummy/null sink '" + target + "'", Repairs: []string{c.Repair.Templates["restart"]}}
+			}
+		}
+		dump, result := d.loadDump(ctx, c.ID, path)
+		if result != nil {
+			return *result
+		}
+		graph, parseErr := parseGraph(dump)
+		if parseErr != nil {
+			return skipped(c.ID, "cannot parse pw-dump: "+parseErr.Error())
+		}
+		factory := graph.nodeFactories[target]
+		for _, dummyFactory := range c.Routing.DummySinkFactories {
+			if factory == dummyFactory {
+				return Result{ID: c.ID, Status: FAULT, Detail: "probe stream linked only to dummy/null sink '" + target + "'", Repairs: []string{c.Repair.Templates["restart"]}}
+			}
+		}
 		return Result{ID: c.ID, Status: OK, Detail: "probe stream linked to sink '" + target + "'"}
 	}
 	return Result{ID: c.ID, Status: FAULT, Detail: "a new playback stream was not linked to any sink (WirePlumber is not routing streams)", Repairs: []string{c.Repair.Templates["restart"]}}
@@ -451,6 +480,7 @@ func (d HostDoctor) loadDump(ctx context.Context, checkID, path string) ([]byte,
 type graph struct {
 	defaults       map[string]string
 	nodeByName     map[string]int
+	nodeFactories  map[string]string
 	firstNode      map[string]string
 	bluetoothCards []bluetoothCard
 	cards          int
@@ -490,7 +520,7 @@ func parseGraph(data []byte) (graph, error) {
 	if err := json.Unmarshal(data, &objects); err != nil {
 		return graph{}, err
 	}
-	g := graph{defaults: map[string]string{}, nodeByName: map[string]int{}, firstNode: map[string]string{}}
+	g := graph{defaults: map[string]string{}, nodeByName: map[string]int{}, nodeFactories: map[string]string{}, firstNode: map[string]string{}}
 	for _, o := range objects {
 		switch {
 		case strings.HasSuffix(o.Type, ":Metadata") && stringValue(o.Props["metadata.name"]) == "default":
@@ -506,6 +536,11 @@ func parseGraph(data []byte) (graph, error) {
 				continue
 			}
 			g.nodeByName[name] = o.ID
+			factory := stringValue(o.Info.Props["factory.name"])
+			if factory == "" {
+				factory = stringValue(o.Props["factory.name"])
+			}
+			g.nodeFactories[name] = factory
 			if _, exists := g.firstNode[class]; !exists {
 				g.firstNode[class] = name
 			}

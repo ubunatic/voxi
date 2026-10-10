@@ -1,0 +1,2 @@
+voxi-doctor-probe:output_FL
+    |-> dummy_sink:playback_FL

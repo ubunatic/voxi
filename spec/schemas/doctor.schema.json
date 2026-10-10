@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Voxi Audio Doctor",
   "type": "object",
-  "required": ["checks", "scripts"],
+  "required": ["checks", "scripts", "settle"],
   "properties": {
     "checks": {
       "type": "array",
@@ -21,13 +21,14 @@
           "bluetooth": {"type": "object", "required": ["api", "off_profile"], "properties": {"api": {"type": "string"}, "off_profile": {"type": "string"}}, "additionalProperties": false},
           "journal": {"type": "object", "required": ["signals", "resume_marker", "suspend_marker"], "properties": {"signals": {"type": "array", "minItems": 1, "items": {"type": "string"}}, "resume_marker": {"type": "string"}, "suspend_marker": {"type": "string"}}, "additionalProperties": false},
           "coredumps": {"type": "object", "required": ["since", "processes"], "properties": {"since": {"type": "string"}, "processes": {"type": "array", "minItems": 1, "items": {"type": "string"}}}, "additionalProperties": false},
-          "routing": {"type": "object", "required": ["probe_node", "script", "sample_rate", "channels", "duration_ms"], "properties": {"probe_node": {"type": "string"}, "script": {"type": "string"}, "sample_rate": {"type": "integer", "minimum": 1}, "channels": {"type": "integer", "minimum": 1}, "duration_ms": {"type": "integer", "minimum": 1}}, "additionalProperties": false},
-          "repair": {"type": "object", "required": ["prompt", "templates"], "properties": {"prompt": {"type": "string", "minLength": 1}, "templates": {"type": "object", "minProperties": 1, "additionalProperties": {"type": "string"}}}, "additionalProperties": false}
+          "routing": {"type": "object", "required": ["probe_node", "script", "sample_rate", "channels", "duration_ms", "dummy_sink_names", "dummy_sink_factories"], "properties": {"probe_node": {"type": "string"}, "script": {"type": "string"}, "sample_rate": {"type": "integer", "minimum": 1}, "channels": {"type": "integer", "minimum": 1}, "duration_ms": {"type": "integer", "minimum": 1}, "dummy_sink_names": {"type": "array", "minItems": 1, "items": {"type": "string"}}, "dummy_sink_factories": {"type": "array", "minItems": 1, "items": {"type": "string"}}}, "additionalProperties": false},
+          "repair": {"type": "object", "required": ["prompt", "templates"], "properties": {"prompt": {"type": "string", "minLength": 1}, "settle_graph": {"type": "boolean"}, "templates": {"type": "object", "minProperties": 1, "additionalProperties": {"type": "string"}}}, "additionalProperties": false}
         },
         "additionalProperties": false
       }
     },
-    "scripts": {"type": "object", "required": ["routing-probe.sh"], "properties": {"routing-probe.sh": {"type": "string", "minLength": 1}}, "additionalProperties": false}
+    "scripts": {"type": "object", "required": ["routing-probe.sh"], "properties": {"routing-probe.sh": {"type": "string", "minLength": 1}}, "additionalProperties": false},
+    "settle": {"type": "object", "required": ["timeout_ms", "interval_ms"], "properties": {"timeout_ms": {"type": "integer", "minimum": 1}, "interval_ms": {"type": "integer", "minimum": 1}}, "additionalProperties": false}
   },
   "definitions": {
     "service": {"type": "object", "required": ["scope", "unit"], "properties": {"scope": {"type": "string", "enum": ["user", "system"]}, "unit": {"type": "string"}}, "additionalProperties": false},

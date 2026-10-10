@@ -18,12 +18,24 @@ type Host interface {
 	Run(context.Context, string, ...string) ([]byte, error)
 	Apply(context.Context, string) error
 	ProbeRouting(context.Context, spec.DoctorRouting) (string, error)
+	Wait(context.Context, time.Duration) error
 }
 
 type systemHost struct{}
 
 func (systemHost) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
 	return exec.CommandContext(ctx, name, args...).CombinedOutput()
+}
+
+func (systemHost) Wait(ctx context.Context, interval time.Duration) error {
+	timer := time.NewTimer(interval)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 func (systemHost) Apply(ctx context.Context, command string) error {

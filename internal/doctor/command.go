@@ -53,10 +53,21 @@ func NewCommand(out io.Writer, host Host) *cobra.Command {
 					}
 				}
 				opts.Fix = true
+				if !opts.Yes && !interactive && report.Fault > 0 {
+					report.PrintFix(out)
+					fmt.Fprintln(out, "stdin is not a terminal; rerun with --yes to apply")
+					return ExitError{Code: report.ExitCode()}
+				}
 				report, err = doctor.Repair(ctx, report, opts, input, out, opts.Yes, interactive)
 				if err != nil {
 					return ExitError{Code: 2}
 				}
+				fmt.Fprintln(out, "After repair:")
+				report.PrintFix(out)
+				if code := report.ExitCode(); code != 0 {
+					return ExitError{Code: code}
+				}
+				return nil
 			}
 			report.Print(out)
 			if code := report.ExitCode(); code != 0 {

@@ -1,0 +1,13 @@
+[
+  {
+    "id": 90,
+    "type": "PipeWire:Interface:Node",
+    "info": {
+      "props": {
+        "node.name": "dummy_sink",
+        "factory.name": "support.null-audio-sink",
+        "media.class": "Audio/Sink"
+      }
+    }
+  }
+]
