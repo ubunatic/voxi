@@ -64,7 +64,23 @@ Doctor data lives in the spec, not in Go (docs/Spec.md: YAML + JSON Schema, embe
   edge cases from `scripts/doctor/test.sh` all covered in Go.
 - Commit `feat(doctor): ... (issue 189 M1)`.
 
+**M1 delivered (5197007): spec-driven read-only diagnosis.** `spec/doctor.yaml` + schema + loader,
+`spec/scripts/routing-probe.sh`, `internal/doctor`, `voxi doctor`. Host review: tests green, live run
+5 OK / 1 FAULT (journal), dangling fixture gives the exact `pw-metadata` and `pactl set-card-profile`
+repairs, routing probe linked live.
+
 ### M2 — repair wizard
+**Pre-Work / Required Refinements (from M1 review):**
+- journal-signals and coredumps are evidence, not repairable faults: after a repair their log lines
+  remain, so a re-check can never clear them. Give them a `WARN` status (spec field, e.g.
+  `severity: evidence`) that does not set exit 1 and gets no wizard repair; print their hint as
+  "see:" instead of "repair". Drop the "restart everything" template from journal-signals.
+- Services OK line must be built from the spec unit list, not a fixed string.
+- Add a `mic` check that wraps `mic.Diagnose` (source side, issue 177) with its existing repair,
+  so `voxi doctor` covers what `voxi mic` does; no duplicated logic.
+- The host will verify every repair live by injecting faults (user allowed it): card profile `off`,
+  dangling `default.audio.sink`, WirePlumber restart. Make each repair re-check quickly (poll ≤3s).
+
 - `--fix` asks y/N per fault, `--yes` applies all; order services → card profile → defaults → routing;
   `pw-dump` snapshot before the first repair (path printed); re-run the check after each repair.
 - Repairs behind an interface; tests never touch the live stack.
