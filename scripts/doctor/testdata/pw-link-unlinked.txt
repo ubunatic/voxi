@@ -1,0 +1,4 @@
+alsa_output.pci-0000_07_00.6.HiFi__Speaker__sink:playback_FL
+  |<- firefox:output_FL
+firefox:output_FL
+  |-> alsa_output.pci-0000_07_00.6.HiFi__Speaker__sink:playback_FL
