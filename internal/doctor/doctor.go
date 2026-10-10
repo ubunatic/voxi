@@ -151,7 +151,7 @@ func (r Report) print(w io.Writer, fixMode bool) {
 			}
 		}
 	}
-	if r.Snapshot != "" {
+	if r.Snapshot != "" && !fixMode {
 		fmt.Fprintf(w, "Snapshot: %s\n", r.Snapshot)
 	}
 	fmt.Fprintf(w, "\nSummary: %d OK, %d FAULT, %d SKIP, %d WARN, %d ERROR\n", r.OK, r.Fault, r.Skip, r.Warn, r.Error)

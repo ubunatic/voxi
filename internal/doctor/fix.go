@@ -14,7 +14,7 @@ import (
 	"ubunatic.com/voxi/spec"
 )
 
-// Repair asks before applying each fault repair and re-runs the affected check.
+// Repair asks before applying each fault repair, then refreshes the post-repair report.
 func (d HostDoctor) Repair(ctx context.Context, report Report, opts Options, in io.Reader, out io.Writer, yes, interactive bool) (Report, error) {
 	if yes {
 		opts.Fix = true
@@ -32,6 +32,8 @@ func (d HostDoctor) Repair(ctx context.Context, report Report, opts Options, in 
 	})
 	reader := bufio.NewReader(in)
 	didSnapshot := false
+	didApply := false
+	repairErrors := map[string]Result{}
 	if !yes && !interactive {
 		if report.Fault > 0 {
 			fmt.Fprintln(out, "stdin is not a terminal; rerun with --yes to apply")
@@ -62,35 +64,55 @@ func (d HostDoctor) Repair(ctx context.Context, report Report, opts Options, in 
 				continue
 			}
 			covered := restartCovered(command, appliedEffects)
+			var baselineDump []byte
 			if !didSnapshot {
-				path, err := d.snapshot(ctx, opts.StateDir)
+				path, dump, err := d.snapshot(ctx, opts.StateDir)
 				if err != nil {
 					fmt.Fprintf(out, "  failed: %v\n", err)
-					report.Checks[idx] = Result{ID: check.ID, Status: ERROR, Detail: err.Error()}
+					repairErrors[check.ID] = Result{ID: check.ID, Status: ERROR, Detail: err.Error()}
+					report.Checks[idx] = repairErrors[check.ID]
 					break
 				}
 				report.Snapshot = path
+				baselineDump = dump
+				fmt.Fprintf(out, "Snapshot: %s\n", path)
 				didSnapshot = true
+			} else if !covered {
+				dump, err := d.Host.Run(ctx, "pw-dump")
+				if err != nil {
+					fmt.Fprintf(out, "  failed: read pre-repair pw-dump: %v\n", err)
+					repairErrors[check.ID] = Result{ID: check.ID, Status: ERROR, Detail: fmt.Sprintf("read pre-repair pw-dump: %v", err)}
+					report.Checks[idx] = repairErrors[check.ID]
+					break
+				}
+				baselineDump = dump
 			}
+			baselinePIDs := restartMainPIDs(ctx, d.Host, command)
 			if covered {
-				fmt.Fprintln(out, "  applied (covered by an earlier restart)")
+				fmt.Fprintln(out, "  skipped: covered by the earlier restart")
 			} else if err := d.Host.Apply(ctx, command); err != nil {
 				fmt.Fprintf(out, "  failed: %v\n", err)
 				report.Checks[idx] = Result{ID: check.ID, Status: ERROR, Detail: fmt.Sprintf("apply %q: %v", command, err)}
+				repairErrors[check.ID] = report.Checks[idx]
 				continue
 			} else {
 				fmt.Fprintln(out, "  applied")
+				didApply = true
 				for effect := range restartEffects(command) {
 					appliedEffects[effect] = true
 				}
 				report.Applied = append(report.Applied, command)
 			}
-			if check.Repair.SettleGraph {
-				if err := d.waitForGraph(ctx); err != nil {
+			if check.Repair.SettleGraph && !covered {
+				if err := d.waitForGraph(ctx, baselineDump, baselinePIDs); err != nil {
 					fmt.Fprintf(out, "  failed: %v\n", err)
-					report.Checks[idx] = Result{ID: check.ID, Status: ERROR, Detail: err.Error()}
+					repairErrors[check.ID] = Result{ID: check.ID, Status: ERROR, Detail: err.Error()}
+					report.Checks[idx] = repairErrors[check.ID]
 					break
 				}
+			}
+			if didApply {
+				opts.PWDump = ""
 			}
 			updated, err := d.check(ctx, checks[check.ID], opts)
 			if err != nil {
@@ -101,6 +123,21 @@ func (d HostDoctor) Repair(ctx context.Context, report Report, opts Options, in 
 				break
 			}
 		}
+	}
+	if didApply {
+		opts.PWDump = ""
+		fresh, err := d.Run(ctx, opts)
+		if err != nil {
+			return report, err
+		}
+		fresh.Snapshot = report.Snapshot
+		fresh.Applied = report.Applied
+		for id, result := range repairErrors {
+			if idx := fresh.index(id); idx >= 0 {
+				fresh.Checks[idx] = result
+			}
+		}
+		report = fresh
 	}
 	report.count()
 	return report, nil
@@ -151,10 +188,12 @@ func restartEffects(command string) map[string]bool {
 	return effects
 }
 
-func (d HostDoctor) waitForGraph(ctx context.Context) error {
+func (d HostDoctor) waitForGraph(ctx context.Context, baselineDump []byte, baselinePIDs map[string]string) error {
 	timeout := time.Duration(d.Spec.Settle.TimeoutMS) * time.Millisecond
 	interval := time.Duration(d.Spec.Settle.IntervalMS) * time.Millisecond
 	var elapsed time.Duration
+	baselineGraph, _ := parseGraph(baselineDump)
+	baselineSignature := graphFingerprint(baselineGraph)
 	for {
 		dump, err := d.Host.Run(ctx, "pw-dump")
 		if err == nil {
@@ -163,7 +202,11 @@ func (d HostDoctor) waitForGraph(ctx context.Context) error {
 				name := graph.defaults["default.audio.sink"]
 				if name != "" {
 					if _, exists := graph.nodeByName[name]; exists {
-						return nil
+						graphChanged := graphFingerprint(graph) != baselineSignature
+						pidChanged := restartPIDChanged(ctx, d.Host, baselinePIDs)
+						if graphChanged || pidChanged {
+							return nil
+						}
 					}
 				}
 			}
@@ -182,22 +225,90 @@ func (d HostDoctor) waitForGraph(ctx context.Context) error {
 	}
 }
 
-func (d HostDoctor) snapshot(ctx context.Context, stateDir string) (string, error) {
+func restartMainPIDs(ctx context.Context, host Host, command string) map[string]string {
+	effects := restartEffects(command)
+	if len(effects) == 0 {
+		return nil
+	}
+	pids := make(map[string]string, len(effects))
+	for effect := range effects {
+		scope, unit, ok := strings.Cut(effect, ":")
+		if !ok {
+			continue
+		}
+		args := []string{}
+		if scope == "user" {
+			args = append(args, "--user")
+		}
+		args = append(args, "show", "-p", "MainPID", "--value", unit+".service")
+		output, err := host.Run(ctx, "systemctl", args...)
+		if err == nil {
+			pids[effect] = strings.TrimSpace(string(output))
+		}
+	}
+	return pids
+}
+
+func restartPIDChanged(ctx context.Context, host Host, baseline map[string]string) bool {
+	if len(baseline) == 0 {
+		return false
+	}
+	changed := false
+	for effect, before := range baseline {
+		scope, unit, ok := strings.Cut(effect, ":")
+		if !ok {
+			continue
+		}
+		args := []string{}
+		if scope == "user" {
+			args = append(args, "--user")
+		}
+		args = append(args, "show", "-p", "MainPID", "--value", unit+".service")
+		output, err := host.Run(ctx, "systemctl", args...)
+		if err == nil && strings.TrimSpace(string(output)) != before && strings.TrimSpace(string(output)) != "0" {
+			changed = true
+		}
+	}
+	return changed
+}
+
+func graphFingerprint(g graph) string {
+	var b strings.Builder
+	defaultKeys := make([]string, 0, len(g.defaults))
+	for key := range g.defaults {
+		defaultKeys = append(defaultKeys, key)
+	}
+	sort.Strings(defaultKeys)
+	for _, key := range defaultKeys {
+		fmt.Fprintf(&b, "default:%s=%s\n", key, g.defaults[key])
+	}
+	names := make([]string, 0, len(g.nodeByName))
+	for name := range g.nodeByName {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		fmt.Fprintf(&b, "node:%s=%d:%s\n", name, g.nodeByName[name], g.nodeFactories[name])
+	}
+	return b.String()
+}
+
+func (d HostDoctor) snapshot(ctx context.Context, stateDir string) (string, []byte, error) {
 	dump, err := d.Host.Run(ctx, "pw-dump")
 	if err != nil {
-		return "", fmt.Errorf("doctor: snapshot pw-dump before repair: %w", err)
+		return "", nil, fmt.Errorf("doctor: snapshot pw-dump before repair: %w", err)
 	}
 	if stateDir == "" {
 		stateDir = defaultStateDir()
 	}
 	if err := os.MkdirAll(stateDir, 0o700); err != nil {
-		return "", fmt.Errorf("doctor: create state directory: %w", err)
+		return "", nil, fmt.Errorf("doctor: create state directory: %w", err)
 	}
 	path := filepath.Join(stateDir, "pw-dump-before-repair-"+time.Now().Format("20060102T150405.000000000")+".json")
 	if err := os.WriteFile(path, dump, 0o600); err != nil {
-		return "", fmt.Errorf("doctor: save pw-dump snapshot: %w", err)
+		return "", nil, fmt.Errorf("doctor: save pw-dump snapshot: %w", err)
 	}
-	return path, nil
+	return path, dump, nil
 }
 
 func defaultStateDir() string {

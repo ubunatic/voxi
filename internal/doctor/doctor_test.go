@@ -61,6 +61,7 @@ func (h *fixtureHost) Apply(_ context.Context, command string) error {
 
 func (h *fixtureHost) Wait(_ context.Context, d time.Duration) error {
 	h.waits = append(h.waits, d)
+	h.calls = append(h.calls, "WAIT")
 	return nil
 }
 
@@ -160,6 +161,9 @@ func TestRepairWizardDeclineAndSnapshot(t *testing.T) {
 				if !strings.Contains(out.String(), "  repair: "+command+"\n") || !strings.Contains(out.String(), "  applied\n") {
 					t.Fatalf("repair output missing command/outcome:\n%s", out.String())
 				}
+				if strings.Index(out.String(), "Snapshot:") > strings.Index(out.String(), "  applied\n") {
+					t.Fatalf("snapshot was not printed before apply:\n%s", out.String())
+				}
 				if report.Snapshot == "" || !strings.HasPrefix(report.Snapshot, stateDir) {
 					t.Fatalf("snapshot path %q not in %q", report.Snapshot, stateDir)
 				}
@@ -196,35 +200,60 @@ func TestRepairSettlesGraphUsingInjectedClock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bad, err := os.ReadFile(fixture(t, "pw-dump-dangling-bt-sink.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
 	dumpCalls := 0
-	h := &fixtureHost{run: func(name string, args ...string) commandResult {
+	h := &fixtureHost{}
+	h.run = func(name string, args ...string) commandResult {
 		switch name {
 		case "pw-dump":
 			dumpCalls++
-			if dumpCalls == 2 {
-				return commandResult{output: string(bad)}
-			}
 			return commandResult{output: string(good)}
 		case "systemctl":
+			if strings.Contains(strings.Join(args, " "), "MainPID") {
+				if len(h.waits) > 0 {
+					return commandResult{output: "202"}
+				}
+				return commandResult{output: "101"}
+			}
 			if len(args) > 1 && args[len(args)-2] == "is-active" {
 				return commandResult{output: "active"}
 			}
 			return commandResult{output: "0"}
+		case "journalctl":
+			return commandResult{}
+		case "coredumpctl":
+			return commandResult{output: "No coredumps found."}
 		default:
 			return commandResult{err: fmt.Errorf("unexpected command %s", name)}
 		}
-	}}
+	}
 	report := Report{Checks: []Result{{ID: "services", Status: FAULT, Detail: "wireplumber is inactive", Repairs: []string{"systemctl --user restart wireplumber.service"}}}}
-	got, err := (HostDoctor{Host: h, Spec: s}).Repair(context.Background(), report, Options{Fix: true, StateDir: t.TempDir()}, strings.NewReader(""), &bytes.Buffer{}, true, false)
+	got, err := (HostDoctor{Host: h, Spec: s}).Repair(context.Background(), report, Options{Fix: true, PWDump: fixture(t, "pw-dump-dangling-bt-sink.json"), NoProbe: true, Since: "2099-01-01", StateDir: t.TempDir()}, strings.NewReader(""), &bytes.Buffer{}, true, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Checks[0].Status != OK || len(h.waits) != 1 || h.waits[0] != 100*time.Millisecond {
-		t.Fatalf("repair report=%+v waits=%v, want OK after one 100ms interval", got.Checks[0], h.waits)
+	for _, id := range []string{"services", "default-devices", "bt-card-profile-off", "mic"} {
+		idx := got.index(id)
+		if idx < 0 || got.Checks[idx].Status != OK {
+			t.Fatalf("post-repair %s result = %+v, want fresh OK", id, got.Checks)
+		}
+	}
+	if len(h.waits) != 1 || h.waits[0] != 100*time.Millisecond || dumpCalls < 4 {
+		t.Fatalf("waits=%v, want one 100ms interval before fresh diagnosis", h.waits)
+	}
+	applyAt, waitAt, freshDumpCalls := -1, -1, 0
+	for i, call := range h.calls {
+		if strings.HasPrefix(call, "APPLY ") {
+			applyAt = i
+		}
+		if applyAt >= 0 && call == "WAIT" {
+			waitAt = i
+		}
+		if waitAt >= 0 && i > waitAt && call == "pw-dump " {
+			freshDumpCalls++
+		}
+	}
+	if freshDumpCalls < 2 {
+		t.Fatalf("expected a settle dump and fresh full recheck after settle, calls=%v", h.calls)
 	}
 }
 
@@ -265,6 +294,12 @@ func TestRepairDeduplicatesRestartEffects(t *testing.T) {
 			data, err := os.ReadFile(fixture(t, "pw-dump-healthy.json"))
 			return commandResult{output: string(data), err: err}
 		}
+		if name == "systemctl" && strings.Contains(strings.Join(args, " "), "MainPID") {
+			if len(h.applied) > 0 {
+				return commandResult{output: "456"}
+			}
+			return commandResult{output: "123"}
+		}
 		return healthyHost(t).run(name, args...)
 	}
 	report := Report{Checks: []Result{
@@ -276,7 +311,7 @@ func TestRepairDeduplicatesRestartEffects(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(h.applied) != 1 || got.Checks[1].Status != OK || !strings.Contains(out.String(), "applied (covered by an earlier restart)") {
+	if len(h.applied) != 1 || got.Checks[1].Status != OK || !strings.Contains(out.String(), "skipped: covered by the earlier restart") {
 		t.Fatalf("applied=%v routing=%+v output:\n%s", h.applied, got.Checks[1], out.String())
 	}
 }
