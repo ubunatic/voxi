@@ -1,6 +1,6 @@
 # 189 — Add voxi doctor command with repair wizard for audio stack faults
 
-**Status**: Open
+**Status**: Closed — voxi doctor ships: 7 spec-driven checks (spec/doctor.yaml, spec/scripts/routing-probe.sh), --fix y/N wizard and --yes, snapshot before repair, settled re-check. Host verified live: BT card off, dangling default sink, and stopped WirePlumber (3 runs) all repaired with all checks OK afterwards.
 **Priority**: P2 (Medium)
 **Severity**: Major
 **Category**: Feature
