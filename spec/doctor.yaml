@@ -3,6 +3,7 @@ checks:
   - id: services
     title: audio services
     order: 1
+    repair_order: 1
     services:
       - {scope: user, unit: pipewire.service}
       - {scope: user, unit: pipewire-pulse.service}
@@ -18,6 +19,7 @@ checks:
   - id: default-devices
     title: default devices
     order: 2
+    repair_order: 3
     defaults:
       - {kind: sink, class: Audio/Sink}
       - {kind: source, class: Audio/Source}
@@ -31,6 +33,7 @@ checks:
   - id: bt-card-profile-off
     title: Bluetooth card profile
     order: 3
+    repair_order: 2
     bluetooth:
       api: bluez5
       off_profile: off
@@ -41,6 +44,7 @@ checks:
   - id: journal-signals
     title: audio journal signals
     order: 4
+    severity: evidence
     journal:
       signals:
         - profiles inconsistent
@@ -53,22 +57,30 @@ checks:
       resume_marker: System returned from sleep operation
       suspend_marker: Performing sleep operation
     repair:
-      prompt: Fix active device and profile faults before restarting audio services.
-      templates:
-        restart: "systemctl --user restart pipewire pipewire-pulse wireplumber  # only after checks 2 and 3 are fixed; drops audio streams"
+      prompt: Review the audio journal evidence.
+      templates: {see: "journalctl --user -b"}
   - id: coredumps
     title: audio process crashes
     order: 5
+    severity: evidence
     coredumps:
       since: -7 days
       processes: [pipewire, pipewire-pulse, wireplumber, gnome-control-center, voxi]
     repair:
       prompt: Inspect the latest core dump stack trace.
       templates:
-        info: "coredumpctl info {{exe}}  # read the stack trace, then check 1 for crash loops"
+        see: "coredumpctl info {{exe}}  # inspect the stack trace, then check services for crash loops"
+  - id: mic
+    title: microphone source
+    order: 6
+    repair_order: 4
+    repair:
+      prompt: Apply the existing mic doctor repair plan.
+      templates: {see: "voxi mic"}
   - id: stream-routing
     title: playback stream routing
-    order: 6
+    order: 7
+    repair_order: 5
     routing:
       probe_node: voxi-doctor-probe
       script: routing-probe.sh

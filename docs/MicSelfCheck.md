@@ -41,6 +41,14 @@ Super+X again. voxi does not restart or salvage the session.
 | `mic.Doctor` | Probe → diagnose → plan → apply → re-probe until settled → fallback. Host boundary is `Probe` and `Run` |
 | `internal/eager/micwatch.go` | Runs the check per session, drops the session, repairs after the reap, notifies |
 | `voxi mic [--fix]` | Same diagnosis and repair by hand |
+| `voxi doctor [--fix] [--yes]` | Checks the complete audio stack, including `mic.Diagnose`; asks before each repair, saves a pre-repair `pw-dump`, and rechecks afterward |
+
+`voxi doctor` reads its check list, systemd units, journal signatures, process names, and repair
+templates from the embedded `spec/doctor.yaml`. Journal matches and core dumps are evidence and
+appear as `WARN` with a `see:` hint. They do not trigger repairs or a fault exit status. Use
+`--yes` to apply all available repairs without prompts; `--fix` prompts on stdin and will not
+apply answers from a non-terminal input stream. Snapshots are saved under
+`$XDG_STATE_HOME/voxi/doctor/` or `~/.local/state/voxi/doctor/`.
 
 Repairs are deliberately narrow: clear only the saved default source
 (`pw-metadata -d 0 default.configured.audio.source`), switch a plain Bluetooth headphone input to

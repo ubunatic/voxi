@@ -27,6 +27,7 @@ type fixtureHost struct {
 	linkFile string
 	routeErr error
 	calls    []string
+	applied  []string
 }
 
 func (h *fixtureHost) Run(_ context.Context, name string, args ...string) ([]byte, error) {
@@ -48,6 +49,12 @@ func (h *fixtureHost) ProbeRouting(_ context.Context, cfg spec.DoctorRouting) (s
 		return parseProbeTarget(string(data), cfg.ProbeNode), nil
 	}
 	return h.routing, h.routeErr
+}
+
+func (h *fixtureHost) Apply(_ context.Context, command string) error {
+	h.applied = append(h.applied, command)
+	h.calls = append(h.calls, "APPLY "+command)
+	return nil
 }
 
 func fixture(t *testing.T, name string) string {
@@ -80,6 +87,66 @@ func TestCheckIDsMatchSpec(t *testing.T) {
 	sort.Strings(got)
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("spec check IDs = %v, Go implementations = %v", got, want)
+	}
+}
+
+func checkFor(t *testing.T, s *spec.DoctorSpec, id string) spec.DoctorCheck {
+	t.Helper()
+	for _, check := range s.Checks {
+		if check.ID == id {
+			return check
+		}
+	}
+	t.Fatalf("missing check %q", id)
+	return spec.DoctorCheck{}
+}
+
+func TestRepairWizardDeclineAndSnapshot(t *testing.T) {
+	s := loadDoctorSpec(t)
+	command := "pactl set-card-profile bluez_card.00_11_22_33_44_55 a2dp-sink"
+	h := &fixtureHost{run: func(name string, _ ...string) commandResult {
+		if name == "pw-dump" {
+			b, err := os.ReadFile(fixture(t, "pw-dump-dangling-bt-sink.json"))
+			if err != nil {
+				return commandResult{err: err}
+			}
+			return commandResult{output: string(b)}
+		}
+		return commandResult{err: errors.New("unexpected command")}
+	}}
+	base := Report{Checks: []Result{{ID: "bt-card-profile-off", Status: FAULT, Detail: "fault", Repairs: []string{command}}}}
+	for _, tt := range []struct {
+		name        string
+		answer      string
+		interactive bool
+		yes         bool
+		wantApply   bool
+	}{
+		{"declined", "n\n", true, false, false},
+		{"non-terminal cannot apply", "y\n", false, false, false},
+		{"accepted", "y\n", true, false, true},
+		{"yes applies without prompt", "", false, true, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			h.applied = nil
+			stateDir := t.TempDir()
+			out := &bytes.Buffer{}
+			report, err := (HostDoctor{Host: h, Spec: s}).Repair(context.Background(), base, Options{Fix: true, PWDump: fixture(t, "pw-dump-dangling-bt-sink.json"), StateDir: stateDir}, strings.NewReader(tt.answer), out, tt.yes, tt.interactive)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if (len(h.applied) > 0) != tt.wantApply {
+				t.Fatalf("applied %v, want apply=%v", h.applied, tt.wantApply)
+			}
+			if tt.wantApply {
+				if report.Snapshot == "" || !strings.HasPrefix(report.Snapshot, stateDir) {
+					t.Fatalf("snapshot path %q not in %q", report.Snapshot, stateDir)
+				}
+				if b, err := os.ReadFile(report.Snapshot); err != nil || len(b) == 0 {
+					t.Fatalf("snapshot read error=%v bytes=%d", err, len(b))
+				}
+			}
+		})
 	}
 }
 
@@ -176,22 +243,22 @@ func TestPrototypeCases(t *testing.T) {
 					return commandResult{}
 				}
 				return commandResult{err: errors.New("unexpected command")}
-			}}).checkJournal(ctx, s.Checks[3], "2099-01-01")
+			}}).checkJournal(ctx, checkFor(t, s, "journal-signals"), "2099-01-01")
 		}},
 		{"06 missing probe tools skips", resultFor(t, "stream-routing", SKIP, "pw-play/pw-link is not installed, cannot check"), func() Result {
-			return doctor(&fixtureHost{routeErr: &exec.Error{Name: "pw-play", Err: exec.ErrNotFound}}).checkRouting(ctx, s.Checks[5], false)
+			return doctor(&fixtureHost{routeErr: &exec.Error{Name: "pw-play", Err: exec.ErrNotFound}}).checkRouting(ctx, checkFor(t, s, "stream-routing"), false)
 		}},
 		{"06 no probe skips", resultFor(t, "stream-routing", SKIP, "--no-probe given, the stream probe was not run"), func() Result {
-			return doctor(&fixtureHost{}).checkRouting(ctx, s.Checks[5], true)
+			return doctor(&fixtureHost{}).checkRouting(ctx, checkFor(t, s, "stream-routing"), true)
 		}},
 		{"06 linked probe is OK", resultFor(t, "stream-routing", OK, "probe stream linked to sink 'alsa_output.pci-0000_07_00.6.HiFi__Speaker__sink'"), func() Result {
-			return doctor(&fixtureHost{linkFile: fixture(t, "pw-link-linked.txt")}).checkRouting(ctx, s.Checks[5], false)
+			return doctor(&fixtureHost{linkFile: fixture(t, "pw-link-linked.txt")}).checkRouting(ctx, checkFor(t, s, "stream-routing"), false)
 		}},
 		{"06 unlinked probe faults", resultFor(t, "stream-routing", FAULT, "a new playback stream was not linked to any sink (WirePlumber is not routing streams)", "systemctl --user restart wireplumber"), func() Result {
-			return doctor(&fixtureHost{linkFile: fixture(t, "pw-link-unlinked.txt")}).checkRouting(ctx, s.Checks[5], false)
+			return doctor(&fixtureHost{linkFile: fixture(t, "pw-link-unlinked.txt")}).checkRouting(ctx, checkFor(t, s, "stream-routing"), false)
 		}},
 		{"06 repair restarts WirePlumber", resultFor(t, "stream-routing", FAULT, "a new playback stream was not linked to any sink (WirePlumber is not routing streams)", "systemctl --user restart wireplumber"), func() Result {
-			return doctor(&fixtureHost{}).checkRouting(ctx, s.Checks[5], false)
+			return doctor(&fixtureHost{}).checkRouting(ctx, checkFor(t, s, "stream-routing"), false)
 		}},
 		{"aggregate report faults on dangling state", Result{ID: "aggregate", Status: FAULT, Detail: "faults=2"}, func() Result {
 			h := healthyHost(t)
@@ -202,7 +269,7 @@ func TestPrototypeCases(t *testing.T) {
 			}
 			return Result{ID: "aggregate", Status: FAULT, Detail: fmt.Sprintf("faults=%d", r.Fault)}
 		}},
-		{"report summary shape", Result{ID: "summary", Detail: "Summary: 0 OK, 2 FAULT, 4 SKIP, 0 ERROR"}, func() Result {
+		{"report summary shape", Result{ID: "summary", Detail: "Summary: 0 OK, 2 FAULT, 4 SKIP, 0 WARN, 0 ERROR"}, func() Result {
 			var b bytes.Buffer
 			r := Report{Fault: 2, Skip: 4}
 			r.Print(&b)

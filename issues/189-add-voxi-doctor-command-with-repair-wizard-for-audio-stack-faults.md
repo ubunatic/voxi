@@ -4,7 +4,7 @@
 **Priority**: P2 (Medium)
 **Severity**: Major
 **Category**: Feature
-**Related**: 177, scripts/doctor/
+**Related**: 177
 
 ---
 
@@ -84,5 +84,6 @@ repairs, routing probe linked live.
 - `--fix` asks y/N per fault, `--yes` applies all; order services → card profile → defaults → routing;
   `pw-dump` snapshot before the first repair (path printed); re-run the check after each repair.
 - Repairs behind an interface; tests never touch the live stack.
-- Man page, `docs/MicSelfCheck.md`; remove `scripts/doctor/` after searching callers.
+- Man pages are generated from Cobra; update `docs/MicSelfCheck.md` and remove the retired
+  `scripts/doctor/` prototype after searching callers.
 - Close: `harnez issues close 189 "<real outcome>"`.

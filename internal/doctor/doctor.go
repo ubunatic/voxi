@@ -20,9 +20,12 @@ import (
 
 // Options controls optional state sources used by the diagnostic checks.
 type Options struct {
-	PWDump  string
-	Since   string
-	NoProbe bool
+	PWDump   string
+	Since    string
+	NoProbe  bool
+	StateDir string
+	Fix      bool
+	Yes      bool
 }
 
 // Status is one read-only check verdict.
@@ -33,6 +36,7 @@ const (
 	FAULT Status = "FAULT"
 	SKIP  Status = "SKIP"
 	ERROR Status = "ERROR"
+	WARN  Status = "WARN"
 )
 
 // Result is the verdict and optional printed repair for one check.
@@ -41,15 +45,19 @@ type Result struct {
 	Status  Status
 	Detail  string
 	Repairs []string
+	See     []string
 }
 
 // Report contains all check verdicts and aggregate status.
 type Report struct {
-	Checks []Result
-	OK     int
-	Fault  int
-	Skip   int
-	Error  int
+	Checks   []Result
+	OK       int
+	Fault    int
+	Skip     int
+	Error    int
+	Warn     int
+	Snapshot string
+	Applied  []string
 }
 
 // ExitCode follows the doctor command contract: faults are 1, check errors 2.
@@ -71,7 +79,7 @@ type HostDoctor struct {
 
 // CheckIDs is the set of check IDs dispatched by the implementation.
 func CheckIDs() []string {
-	return []string{"services", "default-devices", "bt-card-profile-off", "journal-signals", "coredumps", "stream-routing"}
+	return []string{"services", "default-devices", "bt-card-profile-off", "journal-signals", "coredumps", "mic", "stream-routing"}
 }
 
 // Run executes the six checks in spec order and returns their report.
@@ -84,53 +92,81 @@ func (d HostDoctor) Run(ctx context.Context, opts Options) (Report, error) {
 	}
 	report := Report{}
 	for _, check := range d.Spec.Checks {
-		var result Result
-		switch check.ID {
-		case "services":
-			result = d.checkServices(ctx, check)
-		case "default-devices":
-			result = d.checkDefaults(ctx, check, opts.PWDump)
-		case "bt-card-profile-off":
-			result = d.checkBluetooth(ctx, check, opts.PWDump)
-		case "journal-signals":
-			result = d.checkJournal(ctx, check, opts.Since)
-		case "coredumps":
-			result = d.checkCoredumps(ctx, check, opts.Since)
-		case "stream-routing":
-			result = d.checkRouting(ctx, check, opts.NoProbe)
-		default:
-			return Report{}, fmt.Errorf("doctor: no implementation for check %q", check.ID)
+		result, err := d.check(ctx, check, opts)
+		if err != nil {
+			return Report{}, err
 		}
 		report.Checks = append(report.Checks, result)
-		switch result.Status {
-		case OK:
-			report.OK++
-		case FAULT:
-			report.Fault++
-		case SKIP:
-			report.Skip++
-		case ERROR:
-			report.Error++
-		}
 	}
+	report.count()
 	return report, nil
+}
+
+func (d HostDoctor) check(ctx context.Context, check spec.DoctorCheck, opts Options) (Result, error) {
+	switch check.ID {
+	case "services":
+		return d.checkServices(ctx, check), nil
+	case "default-devices":
+		return d.checkDefaults(ctx, check, opts.PWDump), nil
+	case "bt-card-profile-off":
+		return d.checkBluetooth(ctx, check, opts.PWDump), nil
+	case "journal-signals":
+		return d.checkJournal(ctx, check, opts.Since), nil
+	case "coredumps":
+		return d.checkCoredumps(ctx, check, opts.Since), nil
+	case "mic":
+		return d.checkMic(ctx, check, opts.PWDump), nil
+	case "stream-routing":
+		return d.checkRouting(ctx, check, opts.NoProbe), nil
+	default:
+		return Result{}, fmt.Errorf("doctor: no implementation for check %q", check.ID)
+	}
 }
 
 // Print writes script-compatible check lines and a summary.
 func (r Report) Print(w io.Writer) {
 	for _, check := range r.Checks {
 		fmt.Fprintf(w, "%s %s: %s\n", check.Status, check.ID, check.Detail)
+		if check.Status == WARN {
+			for _, hint := range check.See {
+				fmt.Fprintf(w, "  see: %s\n", hint)
+			}
+		}
 		if check.Status == FAULT {
 			for _, repair := range check.Repairs {
 				fmt.Fprintf(w, "  repair (printed, not run): %s\n", repair)
 			}
 		}
 	}
-	fmt.Fprintf(w, "\nSummary: %d OK, %d FAULT, %d SKIP, %d ERROR\n", r.OK, r.Fault, r.Skip, r.Error)
+	if r.Snapshot != "" {
+		fmt.Fprintf(w, "Snapshot: %s\n", r.Snapshot)
+	}
+	for _, command := range r.Applied {
+		fmt.Fprintf(w, "  applied: %s\n", command)
+	}
+	fmt.Fprintf(w, "\nSummary: %d OK, %d FAULT, %d SKIP, %d WARN, %d ERROR\n", r.OK, r.Fault, r.Skip, r.Warn, r.Error)
+}
+
+func (r *Report) count() {
+	r.OK, r.Fault, r.Skip, r.Error, r.Warn = 0, 0, 0, 0, 0
+	for _, check := range r.Checks {
+		switch check.Status {
+		case OK:
+			r.OK++
+		case FAULT:
+			r.Fault++
+		case SKIP:
+			r.Skip++
+		case ERROR:
+			r.Error++
+		case WARN:
+			r.Warn++
+		}
+	}
 }
 
 func (d HostDoctor) checkServices(ctx context.Context, c spec.DoctorCheck) Result {
-	problems, repairs := []string{}, []string{}
+	problems, repairs, evidence, evidenceSee := []string{}, []string{}, []string{}, []string{}
 	for _, service := range c.Services {
 		baseArgs := []string{}
 		repair := render(c.Repair.Templates["restart_system"], "unit", service.Unit)
@@ -164,24 +200,27 @@ func (d HostDoctor) checkServices(ctx context.Context, c spec.DoctorCheck) Resul
 			return skipped(c.ID, "cannot read restart count for "+service.Unit)
 		}
 		if restarts > 0 {
-			problems = append(problems, fmt.Sprintf("%s was restarted %d time(s) by systemd", service.Unit, restarts))
-			repairs = append(repairs, journal+"  # look for the crash, see check 5")
+			evidence = append(evidence, fmt.Sprintf("%s was restarted %d time(s) by systemd", service.Unit, restarts))
+			evidenceSee = append(evidenceSee, journal)
 		}
 	}
 	if len(problems) > 0 {
 		return Result{ID: c.ID, Status: FAULT, Detail: strings.Join(problems, ", "), Repairs: repairs}
 	}
-	return Result{ID: c.ID, Status: OK, Detail: "pipewire, pipewire-pulse and wireplumber (user) and bluetooth (system) are active, no restarts"}
+	if len(evidence) > 0 {
+		return Result{ID: c.ID, Status: WARN, Detail: strings.Join(evidence, ", "), See: evidenceSee}
+	}
+	units := make([]string, 0, len(c.Services))
+	for _, service := range c.Services {
+		units = append(units, service.Unit+" ("+service.Scope+")")
+	}
+	return Result{ID: c.ID, Status: OK, Detail: strings.Join(units, ", ") + " are active, no restarts"}
 }
 
 func (d HostDoctor) checkDefaults(ctx context.Context, c spec.DoctorCheck, path string) Result {
 	dump, result := d.loadDump(ctx, c.ID, path)
 	if result != nil {
 		return *result
-	}
-	state, err := mic.ParseDump(dump)
-	if err != nil {
-		return skipped(c.ID, "cannot parse pw-dump: "+err.Error())
 	}
 	graph, err := parseGraph(dump)
 	if err != nil {
@@ -215,14 +254,6 @@ func (d HostDoctor) checkDefaults(ctx context.Context, c spec.DoctorCheck, path 
 				repairs = append(repairs, c.Repair.Templates["configured_missing"])
 				problems = append(problems, configuredKey+" names '"+configured+"', which is gone, and no "+def.Kind+" is present")
 			}
-		}
-	}
-	// mic.Diagnose catches a default that names an existing non-source node, which
-	// the generic default-node existence check cannot distinguish by class.
-	for _, problem := range mic.Diagnose(state) {
-		if _, exists := graph.nodeByName[graph.defaults["default.audio.source"]]; problem.Kind == mic.NoDefault && graph.defaults["default.audio.source"] != "" && exists {
-			problems = append(problems, "default audio source is not a usable microphone")
-			repairs = append(repairs, c.Repair.Templates["active_missing"])
 		}
 	}
 	if len(problems) > 0 {
@@ -302,8 +333,8 @@ func (d HostDoctor) checkJournal(ctx context.Context, c spec.DoctorCheck, since 
 	sleepMarks := sleepSummary(string(sleepLog), c.Journal)
 	if len(hits) > 0 {
 		summary := signalSummary(hits, c.Journal.Signals)
-		repair := c.Repair.Templates["restart"]
-		return Result{ID: c.ID, Status: FAULT, Detail: fmt.Sprintf("%d matching log line(s) %s: %s; sleep: %s", len(hits), windowText, summary, sleepMarks), Repairs: []string{repair}}
+		see := c.Repair.Templates["see"]
+		return Result{ID: c.ID, Status: WARN, Detail: fmt.Sprintf("%d matching log line(s) %s: %s; sleep: %s", len(hits), windowText, summary, sleepMarks), See: []string{see}}
 	}
 	return Result{ID: c.ID, Status: OK, Detail: fmt.Sprintf("no audio failure signature in the log %s; sleep: %s", windowText, sleepMarks)}
 }
@@ -318,7 +349,7 @@ func (d HostDoctor) checkCoredumps(ctx context.Context, c spec.DoctorCheck, sinc
 	}
 	text := string(out)
 	if strings.Contains(text, "No coredumps found") {
-		return Result{ID: c.ID, Status: OK, Detail: "no core dumps of pipewire, wireplumber, gnome-control-center or voxi since " + since}
+		return Result{ID: c.ID, Status: OK, Detail: "no core dumps of " + strings.Join(c.Coredumps.Processes, ", ") + " since " + since}
 	}
 	if !strings.Contains(text, "TIME") {
 		return skipped(c.ID, "coredumpctl failed: "+firstLine(text))
@@ -345,10 +376,34 @@ func (d HostDoctor) checkCoredumps(ctx context.Context, c spec.DoctorCheck, sinc
 				exe = f
 			}
 		}
-		repair := render(c.Repair.Templates["info"], "exe", exe)
-		return Result{ID: c.ID, Status: FAULT, Detail: fmt.Sprintf("%d core dump(s) of audio or voxi processes since %s, latest: %s", len(hits), since, strings.Join(strings.Fields(latest), " ")), Repairs: []string{repair}}
+		see := render(c.Repair.Templates["see"], "exe", exe)
+		return Result{ID: c.ID, Status: WARN, Detail: fmt.Sprintf("%d core dump(s) of audio or voxi processes since %s, latest: %s", len(hits), since, strings.Join(strings.Fields(latest), " ")), See: []string{see}}
 	}
 	return Result{ID: c.ID, Status: OK, Detail: "no core dumps of pipewire, wireplumber, gnome-control-center or voxi since " + since}
+}
+
+func (d HostDoctor) checkMic(ctx context.Context, c spec.DoctorCheck, path string) Result {
+	dump, result := d.loadDump(ctx, c.ID, path)
+	if result != nil {
+		return *result
+	}
+	state, err := mic.ParseDump(dump)
+	if err != nil {
+		return skipped(c.ID, "cannot parse pw-dump: "+err.Error())
+	}
+	problems := mic.Diagnose(state)
+	if len(problems) == 0 {
+		return Result{ID: c.ID, Status: OK, Detail: "no microphone source problem"}
+	}
+	details := make([]string, 0, len(problems))
+	for _, problem := range problems {
+		details = append(details, problem.Detail)
+	}
+	var repairs []string
+	for _, action := range mic.Plan(state, problems) {
+		repairs = append(repairs, strings.Join(action.Cmd, " "))
+	}
+	return Result{ID: c.ID, Status: FAULT, Detail: strings.Join(details, ", "), Repairs: repairs}
 }
 
 func (d HostDoctor) checkRouting(ctx context.Context, c spec.DoctorCheck, noProbe bool) Result {

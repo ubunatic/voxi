@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/spf13/cobra"
 	"ubunatic.com/voxi/spec"
@@ -25,7 +26,7 @@ func NewCommand(out io.Writer, host Host) *cobra.Command {
 	var opts Options
 	cmd := &cobra.Command{
 		Use:           "doctor",
-		Short:         "Diagnose audio stack faults without changing system state",
+		Short:         "Diagnose and optionally repair audio stack faults",
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -38,9 +39,24 @@ func NewCommand(out io.Writer, host Host) *cobra.Command {
 			if ctx == nil {
 				ctx = context.Background()
 			}
-			report, err := (HostDoctor{Host: host, Spec: s}).Run(ctx, opts)
+			doctor := HostDoctor{Host: host, Spec: s}
+			report, err := doctor.Run(ctx, opts)
 			if err != nil {
 				return ExitError{Code: 2}
+			}
+			if opts.Fix || opts.Yes {
+				input := cmd.InOrStdin()
+				interactive := false
+				if f, ok := input.(*os.File); ok && f == os.Stdin {
+					if info, statErr := f.Stat(); statErr == nil {
+						interactive = info.Mode()&os.ModeCharDevice != 0
+					}
+				}
+				opts.Fix = true
+				report, err = doctor.Repair(ctx, report, opts, input, out, opts.Yes, interactive)
+				if err != nil {
+					return ExitError{Code: 2}
+				}
 			}
 			report.Print(out)
 			if code := report.ExitCode(); code != 0 {
@@ -52,5 +68,7 @@ func NewCommand(out io.Writer, host Host) *cobra.Command {
 	cmd.Flags().StringVar(&opts.PWDump, "pw-dump", "", "read PipeWire state from a saved pw-dump JSON file")
 	cmd.Flags().StringVar(&opts.Since, "since", "", "journal and core dump window (default: since last resume / last 7 days)")
 	cmd.Flags().BoolVar(&opts.NoProbe, "no-probe", false, "skip the silent playback routing probe")
+	cmd.Flags().BoolVar(&opts.Fix, "fix", false, "ask before applying repairs and recheck each fault")
+	cmd.Flags().BoolVar(&opts.Yes, "yes", false, "apply every available repair without prompting (implies --fix)")
 	return cmd
 }

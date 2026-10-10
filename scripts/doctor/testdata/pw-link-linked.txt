@@ -1,8 +1,0 @@
-alsa_output.pci-0000_07_00.6.HiFi__Speaker__sink:playback_FL
-  |<- voxi-doctor-probe:output_FL
-alsa_output.pci-0000_07_00.6.HiFi__Speaker__sink:playback_FR
-  |<- voxi-doctor-probe:output_FR
-voxi-doctor-probe:output_FL
-  |-> alsa_output.pci-0000_07_00.6.HiFi__Speaker__sink:playback_FL
-voxi-doctor-probe:output_FR
-  |-> alsa_output.pci-0000_07_00.6.HiFi__Speaker__sink:playback_FR

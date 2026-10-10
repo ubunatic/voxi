@@ -19,16 +19,18 @@ type DoctorSpec struct {
 
 // DoctorCheck describes one read-only audio health check.
 type DoctorCheck struct {
-	ID        string          `yaml:"id"`
-	Title     string          `yaml:"title"`
-	Order     int             `yaml:"order"`
-	Services  []DoctorService `yaml:"services"`
-	Defaults  []DoctorDefault `yaml:"defaults"`
-	Bluetooth DoctorBluetooth `yaml:"bluetooth"`
-	Journal   DoctorJournal   `yaml:"journal"`
-	Coredumps DoctorCoredumps `yaml:"coredumps"`
-	Routing   DoctorRouting   `yaml:"routing"`
-	Repair    DoctorRepair    `yaml:"repair"`
+	ID          string          `yaml:"id"`
+	Title       string          `yaml:"title"`
+	Order       int             `yaml:"order"`
+	RepairOrder int             `yaml:"repair_order"`
+	Severity    string          `yaml:"severity"`
+	Services    []DoctorService `yaml:"services"`
+	Defaults    []DoctorDefault `yaml:"defaults"`
+	Bluetooth   DoctorBluetooth `yaml:"bluetooth"`
+	Journal     DoctorJournal   `yaml:"journal"`
+	Coredumps   DoctorCoredumps `yaml:"coredumps"`
+	Routing     DoctorRouting   `yaml:"routing"`
+	Repair      DoctorRepair    `yaml:"repair"`
 }
 
 // DoctorService identifies a systemd unit and manager scope.
@@ -119,6 +121,9 @@ func validateDoctorSpec(s *DoctorSpec) error {
 	for _, c := range s.Checks {
 		if c.ID == "" || c.Title == "" || c.Order < 1 || c.Repair.Prompt == "" {
 			return fmt.Errorf("spec: doctor check missing id, title, order, or repair prompt")
+		}
+		if c.Severity != "" && c.Severity != "evidence" {
+			return fmt.Errorf("spec: doctor check %q has unsupported severity %q", c.ID, c.Severity)
 		}
 		if seen[c.ID] {
 			return fmt.Errorf("spec: duplicate doctor check %q", c.ID)

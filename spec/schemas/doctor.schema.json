@@ -6,14 +6,16 @@
   "properties": {
     "checks": {
       "type": "array",
-      "minItems": 6,
+      "minItems": 7,
       "items": {
         "type": "object",
         "required": ["id", "title", "order", "repair"],
         "properties": {
-          "id": {"type": "string", "enum": ["services", "default-devices", "bt-card-profile-off", "journal-signals", "coredumps", "stream-routing"]},
+          "id": {"type": "string", "enum": ["services", "default-devices", "bt-card-profile-off", "journal-signals", "coredumps", "mic", "stream-routing"]},
           "title": {"type": "string", "minLength": 1},
           "order": {"type": "integer", "minimum": 1},
+          "repair_order": {"type": "integer", "minimum": 1},
+          "severity": {"type": "string", "enum": ["evidence"]},
           "services": {"type": "array", "items": {"$ref": "#/definitions/service"}},
           "defaults": {"type": "array", "items": {"$ref": "#/definitions/default"}},
           "bluetooth": {"type": "object", "required": ["api", "off_profile"], "properties": {"api": {"type": "string"}, "off_profile": {"type": "string"}}, "additionalProperties": false},

@@ -16,6 +16,7 @@ import (
 // Host supplies read-only system state to checks. ProbeRouting may play silence.
 type Host interface {
 	Run(context.Context, string, ...string) ([]byte, error)
+	Apply(context.Context, string) error
 	ProbeRouting(context.Context, spec.DoctorRouting) (string, error)
 }
 
@@ -23,6 +24,76 @@ type systemHost struct{}
 
 func (systemHost) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
 	return exec.CommandContext(ctx, name, args...).CombinedOutput()
+}
+
+func (systemHost) Apply(ctx context.Context, command string) error {
+	args, err := commandArgs(command)
+	if err != nil {
+		return err
+	}
+	if len(args) == 0 {
+		return fmt.Errorf("doctor: empty repair command")
+	}
+	return exec.CommandContext(ctx, args[0], args[1:]...).Run()
+}
+
+func commandArgs(command string) ([]string, error) {
+	var args []string
+	var word strings.Builder
+	quote := rune(0)
+	escaped, started := false, false
+	for _, r := range command {
+		if escaped {
+			word.WriteRune(r)
+			escaped, started = false, true
+			continue
+		}
+		if quote == '\'' {
+			if r == '\'' {
+				quote = 0
+			} else {
+				word.WriteRune(r)
+			}
+			started = true
+			continue
+		}
+		if quote == '"' {
+			switch r {
+			case '"':
+				quote = 0
+			case '\\':
+				escaped = true
+			default:
+				word.WriteRune(r)
+			}
+			started = true
+			continue
+		}
+		switch {
+		case r == '\'' || r == '"':
+			quote, started = r, true
+		case r == '\\':
+			escaped, started = true, true
+		case r == ' ' || r == '\t':
+			if started {
+				args = append(args, word.String())
+				word.Reset()
+				started = false
+			}
+		case r == '\n' || r == ';' || r == '|' || r == '&' || r == '`' || r == '$':
+			return nil, fmt.Errorf("doctor: unsafe character in repair command")
+		default:
+			word.WriteRune(r)
+			started = true
+		}
+	}
+	if quote != 0 || escaped {
+		return nil, fmt.Errorf("doctor: incomplete quoting in repair command")
+	}
+	if started {
+		args = append(args, word.String())
+	}
+	return args, nil
 }
 
 func (systemHost) ProbeRouting(ctx context.Context, cfg spec.DoctorRouting) (string, error) {
