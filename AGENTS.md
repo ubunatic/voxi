@@ -82,6 +82,8 @@ tests (use `t.TempDir()`). Terms and rules: `docs/SampleStore.md`. The legacy
 Before building a repair for PipeWire, WirePlumber or BlueZ, check live how it behaves (e.g.
 record from the device and watch the profile), and save a `pw-dump` of any broken state as
 testdata while it lasts. WirePlumber policy can undo manual changes (see `docs/MicSelfCheck.md`).
+Verify every audio repair by injecting the fault on the live stack; fake-clock tests are not
+enough (recipe in `docs/AudioDoctor.md`).
 <!-- harnez:begin Repo Setup -->
 ## Repo Setup
 - Solo/hobby repo — single default branch, no PR workflow.
