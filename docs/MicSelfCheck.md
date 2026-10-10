@@ -54,6 +54,8 @@ Repairs are deliberately narrow: clear only the saved default source
 (`pw-metadata -d 0 default.configured.audio.source`), switch a plain Bluetooth headphone input to
 headset mode (`wpctl set-profile`), and fall back to a built-in mic (`wpctl set-default`). No
 service restarts and no full WirePlumber state reset, which would forget all volumes and profiles.
+(This holds for the automatic mic check; `voxi doctor --fix` may restart WirePlumber after asking,
+see [AudioDoctor.md](AudioDoctor.md).)
 A stale saved default alone is not urgent while another mic works.
 
 ## Decisions and Pitfalls
