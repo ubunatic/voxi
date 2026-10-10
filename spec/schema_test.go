@@ -21,6 +21,7 @@ func TestSchemasValidateYAML(t *testing.T) {
 		{"models.yaml", "schemas/models.schema.json"},
 		{"monitor.yaml", "schemas/monitor.schema.json"},
 		{"tts.yaml", "schemas/tts.schema.json"},
+		{"doctor.yaml", "schemas/doctor.schema.json"},
 	}
 
 	for _, s := range specs {

@@ -18,6 +18,7 @@ import (
 	"ubunatic.com/voxi/internal/chunks"
 	"ubunatic.com/voxi/internal/config"
 	"ubunatic.com/voxi/internal/deps"
+	"ubunatic.com/voxi/internal/doctor"
 	"ubunatic.com/voxi/internal/eager"
 	"ubunatic.com/voxi/internal/feedback"
 	"ubunatic.com/voxi/internal/history"
@@ -393,7 +394,7 @@ func main() {
 		panic(fmt.Sprintf("load embedded model specification: %v", err))
 	}
 	configCmd.AddCommand(feedback.NewConfigImportCommand(d.Stdout, d.Getenv("HOME"), modelSpec.SpeechContext.MaxTermChars))
-	root.AddCommand(modeCmd, recordCmd, eagerCmd, monitorCmd, historyCmd, configCmd, daemonCmd, benchCmd, settings.NewCommand(d, modelSpec.Names()), shortcut.NewCommand(d), telemetry.NewCommand(d.Stdout, d.Getenv), feedback.NewCommand(d.Stdout, d.Getenv("HOME"), modelSpec.BuiltinStopWords(modelSpec.DefaultModel), modelSpec.SpeechContext.MaxTermChars, modelSpec.SpeechContext.Terms), agent.NewCommand(d), chunks.NewCommand(d, nil), sample.NewCommand(d), tts.NewSayCommand(d), ttsclone.NewCommand(d), tts.NewSupervisorCommand(), newMicCmd(d))
+	root.AddCommand(modeCmd, recordCmd, eagerCmd, monitorCmd, historyCmd, configCmd, daemonCmd, benchCmd, settings.NewCommand(d, modelSpec.Names()), shortcut.NewCommand(d), telemetry.NewCommand(d.Stdout, d.Getenv), feedback.NewCommand(d.Stdout, d.Getenv("HOME"), modelSpec.BuiltinStopWords(modelSpec.DefaultModel), modelSpec.SpeechContext.MaxTermChars, modelSpec.SpeechContext.Terms), agent.NewCommand(d), chunks.NewCommand(d, nil), sample.NewCommand(d), tts.NewSayCommand(d), ttsclone.NewCommand(d), tts.NewSupervisorCommand(), newMicCmd(d), doctor.NewCommand(d.Stdout, nil))
 	installEffects := install.DefaultEffects()
 	installEffects.Home = d.Getenv("HOME")
 	installEffects.Executable = os.Executable
@@ -402,6 +403,10 @@ func main() {
 	addDebugCommands(root, d)
 
 	if err := root.Execute(); err != nil {
+		var exitErr interface{ CommandExitCode() int }
+		if errors.As(err, &exitErr) {
+			os.Exit(exitErr.CommandExitCode())
+		}
 		tts.ReportCommandError(d, err)
 		os.Exit(1)
 	}

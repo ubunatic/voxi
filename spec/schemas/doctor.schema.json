@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Voxi Audio Doctor",
+  "type": "object",
+  "required": ["checks", "scripts"],
+  "properties": {
+    "checks": {
+      "type": "array",
+      "minItems": 6,
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "order", "repair"],
+        "properties": {
+          "id": {"type": "string", "enum": ["services", "default-devices", "bt-card-profile-off", "journal-signals", "coredumps", "stream-routing"]},
+          "title": {"type": "string", "minLength": 1},
+          "order": {"type": "integer", "minimum": 1},
+          "services": {"type": "array", "items": {"$ref": "#/definitions/service"}},
+          "defaults": {"type": "array", "items": {"$ref": "#/definitions/default"}},
+          "bluetooth": {"type": "object", "required": ["api", "off_profile"], "properties": {"api": {"type": "string"}, "off_profile": {"type": "string"}}, "additionalProperties": false},
+          "journal": {"type": "object", "required": ["signals", "resume_marker", "suspend_marker"], "properties": {"signals": {"type": "array", "minItems": 1, "items": {"type": "string"}}, "resume_marker": {"type": "string"}, "suspend_marker": {"type": "string"}}, "additionalProperties": false},
+          "coredumps": {"type": "object", "required": ["since", "processes"], "properties": {"since": {"type": "string"}, "processes": {"type": "array", "minItems": 1, "items": {"type": "string"}}}, "additionalProperties": false},
+          "routing": {"type": "object", "required": ["probe_node", "script", "sample_rate", "channels", "duration_ms"], "properties": {"probe_node": {"type": "string"}, "script": {"type": "string"}, "sample_rate": {"type": "integer", "minimum": 1}, "channels": {"type": "integer", "minimum": 1}, "duration_ms": {"type": "integer", "minimum": 1}}, "additionalProperties": false},
+          "repair": {"type": "object", "required": ["prompt", "templates"], "properties": {"prompt": {"type": "string", "minLength": 1}, "templates": {"type": "object", "minProperties": 1, "additionalProperties": {"type": "string"}}}, "additionalProperties": false}
+        },
+        "additionalProperties": false
+      }
+    },
+    "scripts": {"type": "object", "required": ["routing-probe.sh"], "properties": {"routing-probe.sh": {"type": "string", "minLength": 1}}, "additionalProperties": false}
+  },
+  "definitions": {
+    "service": {"type": "object", "required": ["scope", "unit"], "properties": {"scope": {"type": "string", "enum": ["user", "system"]}, "unit": {"type": "string"}}, "additionalProperties": false},
+    "default": {"type": "object", "required": ["kind", "class"], "properties": {"kind": {"type": "string", "enum": ["sink", "source"]}, "class": {"type": "string"}}, "additionalProperties": false}
+  },
+  "additionalProperties": false
+}

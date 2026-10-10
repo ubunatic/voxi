@@ -1,0 +1,83 @@
+# yaml-language-server: $schema=schemas/doctor.schema.json
+checks:
+  - id: services
+    title: audio services
+    order: 1
+    services:
+      - {scope: user, unit: pipewire.service}
+      - {scope: user, unit: pipewire-pulse.service}
+      - {scope: user, unit: wireplumber.service}
+      - {scope: system, unit: bluetooth.service}
+    repair:
+      prompt: Restart the failed service or inspect its journal.
+      templates:
+        restart_user: "systemctl --user restart {{unit}}"
+        restart_system: "sudo systemctl restart {{unit}}"
+        journal_user: "journalctl --user -u {{unit}} -b"
+        journal_system: "journalctl -u {{unit}} -b"
+  - id: default-devices
+    title: default devices
+    order: 2
+    defaults:
+      - {kind: sink, class: Audio/Sink}
+      - {kind: source, class: Audio/Source}
+    repair:
+      prompt: Restore the active default or select an available configured device.
+      templates:
+        active: "pw-metadata 0 default.audio.{{kind}} '{\"name\":\"{{node.name}}\"}' Spa:String:JSON"
+        active_missing: "wpctl status"
+        configured: "wpctl set-default {{node.id}}"
+        configured_missing: "wpctl status"
+  - id: bt-card-profile-off
+    title: Bluetooth card profile
+    order: 3
+    bluetooth:
+      api: bluez5
+      off_profile: off
+    repair:
+      prompt: Switch the Bluetooth card to its first available profile.
+      templates:
+        profile: "pactl set-card-profile {{card.name}} {{profile.name}}"
+  - id: journal-signals
+    title: audio journal signals
+    order: 4
+    journal:
+      signals:
+        - profiles inconsistent
+        - Unable to get default sink
+        - timeout on stream
+        - Host is down
+        - profile connect failed
+        - Mic problem
+        - card removed
+      resume_marker: System returned from sleep operation
+      suspend_marker: Performing sleep operation
+    repair:
+      prompt: Fix active device and profile faults before restarting audio services.
+      templates:
+        restart: "systemctl --user restart pipewire pipewire-pulse wireplumber  # only after checks 2 and 3 are fixed; drops audio streams"
+  - id: coredumps
+    title: audio process crashes
+    order: 5
+    coredumps:
+      since: -7 days
+      processes: [pipewire, pipewire-pulse, wireplumber, gnome-control-center, voxi]
+    repair:
+      prompt: Inspect the latest core dump stack trace.
+      templates:
+        info: "coredumpctl info {{exe}}  # read the stack trace, then check 1 for crash loops"
+  - id: stream-routing
+    title: playback stream routing
+    order: 6
+    routing:
+      probe_node: voxi-doctor-probe
+      script: routing-probe.sh
+      sample_rate: 48000
+      channels: 1
+      duration_ms: 1000
+    repair:
+      prompt: Restart WirePlumber after confirming earlier device faults are fixed.
+      templates:
+        restart: "systemctl --user restart wireplumber"
+scripts:
+  routing-probe.sh: scripts/routing-probe.sh
