@@ -87,3 +87,29 @@ repairs, routing probe linked live.
 - Man pages are generated from Cobra; update `docs/MicSelfCheck.md` and remove the retired
   `scripts/doctor/` prototype after searching callers.
 - Close: `harnez issues close 189 "<real outcome>"`.
+
+**M2 delivered (d69e042): repair wizard.** Host live fault injection (2026-10-10, user allowed):
+- BT card `off` → `--fix --yes` applied `pactl set-card-profile ... a2dp-sink`, re-check OK. ✓
+- dangling `default.audio.sink` → `pw-metadata` repair applied, re-check OK, test sound heard. ✓
+- `systemctl --user stop wireplumber` → repaired, but the re-check was wrong (see M3).
+
+### M3 — live-review fixes
+**Pre-Work / Required Refinements (from M2 live review):**
+- Settle after a service restart: the re-check ran before WirePlumber had rebuilt the graph and gave
+  `SKIP default-devices: no default.* metadata`, `OK bt-card-profile-off: no Bluetooth audio card
+  present`, `FAULT mic: no usable default mic`; 2 s later all were OK. After any restart repair, poll
+  (≤5 s, interval in spec) until `default` metadata exists and the default sink node is present,
+  then re-check.
+- `OK stream-routing: probe stream linked to sink 'auto_null'` is a false OK: `auto_null` is
+  PipeWire's dummy sink. Linked only to a dummy/null sink (`factory.name` support.null-audio-sink or
+  node.name `auto_null`, list in spec) → FAULT.
+- Duplicate repair: the services repair and the routing repair both restarted WirePlumber
+  (`applied: systemctl --user restart wireplumber.service` then `... wireplumber`). Do not run a
+  repair whose effect an earlier applied repair already covers; just re-check that check.
+- Wording in `--fix` mode: print `repair:` (not `repair (printed, not run):`), then `applied`,
+  `declined` or `failed: <err>` per repair, then a labelled `After repair:` block with the
+  re-check verdicts and summary.
+- Non-tty stdin without `--yes`: currently prints `Apply repair ...? [y/N]` and reads the pipe. Do not
+  prompt; print `stdin is not a terminal; rerun with --yes to apply` and exit with the fault code.
+- Tests for each item with the fake host (settle polling with a fake clock, auto_null fixture,
+  dedupe, non-tty).
