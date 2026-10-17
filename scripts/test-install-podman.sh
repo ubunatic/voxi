@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Test Voxi curl installation workflow using Podman
 set -euo pipefail
+unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
 
 _cyan="\033[36m"
 _green="\033[32m"
@@ -26,6 +27,12 @@ podman build -t "${IMAGE_TAG}" -f "${PROJECT_ROOT}/test/install/Containerfile" "
 
 log_info "Testing go install from this checkout, then voxi install and voxi install --modifierd..."
 podman run --rm --security-opt label=disable -v "${PROJECT_ROOT}:/src:ro" "${IMAGE_TAG}" bash /src/test/install/test-go-install.sh
+
+log_info "Testing public go install (ubunatic.com/voxi/cmd/voxi@${VOXI_PUBLIC_VERSION:-latest}) in clean container..."
+podman run --rm --security-opt label=disable \
+  -e VOXI_PUBLIC_VERSION="${VOXI_PUBLIC_VERSION:-latest}" \
+  -v "${PROJECT_ROOT}/test/install/test-public-go-install.sh:/tmp/test-public-go-install.sh:ro" \
+  "${IMAGE_TAG}" bash /tmp/test-public-go-install.sh
 
 log_info "Testing curl installer in clean container environment..."
 podman run --rm --security-opt label=disable -v "${PROJECT_ROOT}/scripts/install.sh:/tmp/install.sh:ro" "${IMAGE_TAG}" bash -c '

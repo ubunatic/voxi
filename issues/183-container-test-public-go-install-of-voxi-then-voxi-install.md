@@ -1,6 +1,6 @@
 # 183 — Container test: public go install of voxi, then voxi install
 
-**Status**: Open
+**Status**: Blocked — published release v0.1.15 has invalid go version '1.26.5' in go.mod; requires release bump
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Infrastructure
@@ -34,3 +34,14 @@ On 2026-10-06 the same path was broken for lmcoder (old tag with old module name
   for checking a release right after tagging.
 - Needs network; keep it out of offline/unit test targets.
 - Verify: `make test-install-podman` (or a new target) passes against the current release.
+
+## 4. Implementation & Findings (2026-10-17)
+- Added `test/install/test-public-go-install.sh` supporting `VOXI_PUBLIC_VERSION` (defaults to `latest`).
+- Wired the public go install test step into `scripts/test-install-podman.sh`.
+- Test execution revealed an immediate failure in the published release `v0.1.15`:
+  ```
+  go: ubunatic.com/voxi/cmd/voxi@latest (in ubunatic.com/voxi@v0.1.15): go.mod:3: invalid go version '1.26.5': must match format 1.23
+  ```
+- Root cause: `go.mod` in `v0.1.15` has `go 1.26.5` instead of `go 1.26`.
+- Fixed `go.mod` locally in the repository to `go 1.26`.
+- As specified by `/goal`, blocked and reported: a new release is required to publish the corrected `go.mod` so that `go install ubunatic.com/voxi/cmd/voxi@latest` succeeds in clean environments.
