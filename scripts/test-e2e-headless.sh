@@ -14,9 +14,9 @@ log_ok()    { echo -e "${_green}${_bold}==>${_reset} $*"; }
 log_warn()  { echo -e "${_yellow}${_bold}warning:${_reset} $*"; }
 log_error() { echo -e "${_red}${_bold}error:${_reset} $*" >&2; }
 
-if ! command -v podman >/dev/null 2>&1; then
-  log_error "Podman is not installed on this host."
-  exit 1
+if ! command -v podman >/dev/null 2>&1
+then log_error "Podman is not installed on this host."
+     exit 1
 fi
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -33,16 +33,16 @@ podman build -t "${IMAGE_TAG}" -f "${PROJECT_ROOT}/test/e2e/Containerfile" "${PR
 # Prepare mount arguments for host caches if available
 VOLUMES=(-v "${PROJECT_ROOT}:/workspace:ro")
 
-if [[ -d "${HOME}/.cache/voxi" ]]; then
-  VOLUMES+=(-v "${HOME}/.cache/voxi:/home/testuser/.cache/voxi:ro")
+if test -d "${HOME}/.cache/voxi"
+then VOLUMES+=(-v "${HOME}/.cache/voxi:/home/testuser/.cache/voxi:ro")
 fi
 
-if [[ -d "${HOME}/.local/lib/voxi/crispasr" ]]; then
-  VOLUMES+=(-v "${HOME}/.local/lib/voxi/crispasr:/home/testuser/.local/lib/voxi/crispasr:ro")
+if test -d "${HOME}/.local/lib/voxi/crispasr"
+then VOLUMES+=(-v "${HOME}/.local/lib/voxi/crispasr:/home/testuser/.local/lib/voxi/crispasr:ro")
 fi
 
-if [[ -d "${HOME}/go/bin" ]]; then
-  VOLUMES+=(-v "${HOME}/go/bin:/tmp/host-gobin:ro")
+if test -d "${HOME}/go/bin"
+then VOLUMES+=(-v "${HOME}/go/bin:/tmp/host-gobin:ro")
 fi
 
 log_info "Running headless end-to-end integration test in container..."
@@ -82,16 +82,16 @@ SINK_PID=$!
 trap "kill -9 $SINK_PID 2>/dev/null || true" EXIT
 
 # Ensure dotoolc is available
-if ! command -v dotoolc >/dev/null 2>&1; then
-  mkdir -p "$HOME/go/bin"
+if ! command -v dotoolc >/dev/null 2>&1
+then mkdir -p "$HOME/go/bin"
   go install git.sr.ht/~geb/dotool@latest
   dotoold_dir="$(go list -m -f "{{.Dir}}" git.sr.ht/~geb/dotool@latest)"
   install -m 0755 "$dotoold_dir/dotoold" "$dotoold_dir/dotoolc" "$HOME/go/bin/"
 fi
 
 # Ensure crispasr is available
-if ! command -v crispasr >/dev/null 2>&1; then
-  echo "Downloading CrispASR..."
+if ! command -v crispasr >/dev/null 2>&1
+then echo "Downloading CrispASR..."
   arch="$(uname -m)"
   case "$arch" in
     x86_64) asset=crispasr-linux-x86_64.tar.gz ;;
@@ -108,8 +108,8 @@ echo "✅ Audio & Typing infrastructure ready."
 
 echo "==> 3. Running eager dictation pipeline against fixture (short-one-two.wav)..."
 FIXTURE="/workspace/test/fixtures/short-one-two.wav"
-if [[ ! -f "$FIXTURE" ]]; then
-  echo "❌ Error: Fixture $FIXTURE not found!"
+if test ! -f "$FIXTURE"
+then echo "❌ Error: Fixture $FIXTURE not found!"
   exit 1
 fi
 
@@ -140,13 +140,13 @@ echo "-------------------"
 
 # Validate that expected words were captured in chunks
 CHUNKS_JSON="/tmp/runtime/voxi/chunks/manifest.json"
-if [[ ! -f "$CHUNKS_JSON" ]]; then
-  echo "❌ Error: Chunk manifest $CHUNKS_JSON not found!"
+if test ! -f "$CHUNKS_JSON"
+then echo "❌ Error: Chunk manifest $CHUNKS_JSON not found!"
   exit 1
 fi
 
-if ! grep -qi "One" "$CHUNKS_JSON" || ! grep -qi "Two" "$CHUNKS_JSON"; then
-  echo "❌ Error: Expected utterances (One, Two) missing from chunk manifest!"
+if ! grep -qi "One" "$CHUNKS_JSON" || ! grep -qi "Two" "$CHUNKS_JSON"
+then echo "❌ Error: Expected utterances (One, Two) missing from chunk manifest!"
   exit 1
 fi
 

@@ -27,17 +27,11 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Verify code formatting
-        run: |
-          unformatted=$(gofmt -l .)
-          if [ -n "$unformatted" ]; then
-            echo "The following files are not formatted:"
-            echo "$unformatted"
-            exit 1
-          fi
+      - name: Install harnez
+        run: go install ubunatic.com/harnez/cmd/harnez@latest
 
-      - name: Vet code
-        run: go vet ./...
+      - name: Lint
+        run: make lint
 
       - name: Build binaries
         run: go build ./...

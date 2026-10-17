@@ -13,9 +13,9 @@ log_info()  { echo -e "${_cyan}${_bold}==>${_reset} $*"; }
 log_ok()    { echo -e "${_green}${_bold}==>${_reset} $*"; }
 log_error() { echo -e "${_red}${_bold}error:${_reset} $*" >&2; }
 
-if ! command -v podman >/dev/null 2>&1; then
-  log_error "Podman is not installed on this host."
-  exit 1
+if ! command -v podman >/dev/null 2>&1
+then log_error "Podman is not installed on this host."
+     exit 1
 fi
 
 IMAGE_TAG="voxi-install-test"
@@ -45,14 +45,14 @@ echo "==> Testing curl download followed by automatic voxi install..."
 bash /tmp/install.sh
 
 # Verify installed binaries
-if [[ ! -x "$HOME/.local/bin/voxi" ]]; then
-  echo "❌ Error: ~/.local/bin/voxi was not installed or is not executable."
-  exit 1
+if test ! -x "$HOME/.local/bin/voxi"
+then echo "❌ Error: ~/.local/bin/voxi was not installed or is not executable."
+     exit 1
 fi
 
-if [[ ! -x "$HOME/.local/bin/voxi-modifierd" ]]; then
-  echo "❌ Error: ~/.local/bin/voxi-modifierd was not installed or is not executable."
-  exit 1
+if test ! -x "$HOME/.local/bin/voxi-modifierd"
+then echo "❌ Error: ~/.local/bin/voxi-modifierd was not installed or is not executable."
+     exit 1
 fi
 
 echo "✅ Verified binaries installed in ~/.local/bin"
@@ -60,39 +60,39 @@ echo "✅ Verified binaries installed in ~/.local/bin"
 echo "✅ Verified voxi binary runs."
 
 # Verify CrispASR installation
-if [[ ! -x "$HOME/.local/lib/voxi/crispasr/crispasr" ]]; then
-  echo "❌ Error: CrispASR binary was not installed."
-  exit 1
+if test ! -x "$HOME/.local/lib/voxi/crispasr/crispasr"
+then echo "❌ Error: CrispASR binary was not installed."
+     exit 1
 fi
 echo "✅ CrispASR version: $("$HOME/.local/lib/voxi/crispasr/crispasr" --version)"
 
 # Verify Dotool installation
-if [[ ! -x "$HOME/.local/bin/dotoold" ]]; then
-  echo "❌ Error: dotoold was not installed."
-  exit 1
+if test ! -x "$HOME/.local/bin/dotoold"
+then echo "❌ Error: dotoold was not installed."
+     exit 1
 fi
 echo "✅ Dotool components installed."
 
 # Verify generated user systemd unit files
-for unit in voxi-agent.service voxi-eager.service dotoold.service; do
-  unit_path="$HOME/.config/systemd/user/${unit}"
-  if [[ ! -f "$unit_path" ]]; then
-    echo "❌ Error: Expected user unit $unit_path does not exist."
-    exit 1
-  fi
-  grep -q "ExecStart=" "$unit_path" || {
-    echo "❌ Error: Unit file $unit_path missing ExecStart."
-    exit 1
-  }
+for unit in voxi-agent.service voxi-eager.service dotoold.service
+do unit_path="$HOME/.config/systemd/user/${unit}"
+   if test ! -f "$unit_path"
+   then echo "❌ Error: Expected user unit $unit_path does not exist."
+        exit 1
+   fi
+   grep -q "ExecStart=" "$unit_path" || {
+     echo "❌ Error: Unit file $unit_path missing ExecStart."
+     exit 1
+   }
 done
 
 echo "✅ Verified user systemd units properly generated."
 
 # Verify man page installed by install.sh'"'"'s `voxi man --install` step
 man_path="$HOME/.local/share/man/man1/voxi.1"
-if [[ ! -f "$man_path" ]]; then
-  echo "❌ Error: Expected man page $man_path does not exist."
-  exit 1
+if test ! -f "$man_path"
+then echo "❌ Error: Expected man page $man_path does not exist."
+     exit 1
 fi
 grep -q '"'"'\.TH "VOXI"'"'"' "$man_path" || {
   echo "❌ Error: $man_path does not look like a generated voxi roff man page."

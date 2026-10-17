@@ -85,9 +85,21 @@ uninstall: ⚙️  # remove installed binaries and services
 	sudo rm -f $(PREFIX)/bin/$(BINARY) $(PREFIX)/bin/$(MODIFIER) /etc/systemd/system/voxi-modifierd.service
 	sudo systemctl daemon-reload || true
 
+lint: ⚙️  # check formatting, vet, and harnez lint on tracked files
+	@unformatted=$$(gofmt -l .); if test -n "$$unformatted"; then echo "Unformatted files:"; echo "$$unformatted"; exit 1; fi
+	go vet ./...
+	git ls-files '*.go' '*.sh' '*.md' 'Makefile' | xargs harnez lint --check
+
 test: ⚙️  # run tests and vet
 	go vet ./...
 	go test ./...
+
+test-pkg: ⚙️  # run tests for one package (-race, -count=1) e.g. make test-pkg PKG=./internal/asr/...
+	@test -n "$(PKG)" || { echo "error: specify PKG=./path/..." >&2; exit 1; }
+	go test -race -count=1 $(PKG)
+
+test-short: ⚙️  # run fast unit tier tests (-short: skips PTY/media/integration)
+	go test -short -race ./...
 
 check: ⚙️ test validate-spec  # run tests, vet, and spec validation
 

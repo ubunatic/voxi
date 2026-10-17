@@ -25,8 +25,8 @@ VERSION="${VOXI_VERSION:-}"
 NO_BOOTSTRAP="${VOXI_NO_BOOTSTRAP:-0}"
 PASSTHROUGH_ARGS=()
 
-while [[ $# -gt 0 ]]; do
-  case "$1" in
+while test $# -gt 0
+do case "$1" in
     -v|--version)
       VERSION="$2"
       shift 2
@@ -67,9 +67,9 @@ done
 
 # Check operating system
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
-if [[ "$OS" != "linux" ]]; then
-  log_error "Voxi requires Linux (detected: $OS)."
-  exit 1
+if test "$OS" != "linux"
+then log_error "Voxi requires Linux (detected: $OS)."
+     exit 1
 fi
 
 # Detect architecture
@@ -88,34 +88,34 @@ case "$RAW_ARCH" in
 esac
 
 # Check dependencies
-for tool in curl tar; do
-  if ! command -v "$tool" >/dev/null 2>&1; then
-    log_error "Required tool '$tool' is not installed."
-    exit 1
-  fi
+for tool in curl tar
+do if ! command -v "$tool" >/dev/null 2>&1
+   then log_error "Required tool '$tool' is not installed."
+        exit 1
+   fi
 done
 
 # Resolve latest release tag if not specified
-if [[ -z "$VERSION" ]]; then
-  log_info "Discovering latest release on Codeberg..."
-  REDIRECT_URL="$(curl -sI https://codeberg.org/ubunatic/voxi/releases/latest | tr -d '\r' | awk -F'/' '/[Ll]ocation:/{print $NF}' || true)"
-  if [[ -n "$REDIRECT_URL" && "$REDIRECT_URL" == v* ]]; then
-    TAG="$REDIRECT_URL"
-  else
-    # Fallback to Forgejo API
-    TAG="$(curl -fsSL https://codeberg.org/api/v1/repos/ubunatic/voxi/releases/latest 2>/dev/null | awk -F'"tag_name": *"' '{print $2}' | cut -d'"' -f1 || true)"
-  fi
+if test -z "$VERSION"
+then log_info "Discovering latest release on Codeberg..."
+     REDIRECT_URL="$(curl -sI https://codeberg.org/ubunatic/voxi/releases/latest | tr -d '\r' | awk -F'/' '/[Ll]ocation:/{print $NF}' || true)"
+     case "$REDIRECT_URL" in
+       v*) TAG="$REDIRECT_URL" ;;
+       *)
+         # Fallback to Forgejo API
+         TAG="$(curl -fsSL https://codeberg.org/api/v1/repos/ubunatic/voxi/releases/latest 2>/dev/null | awk -F'"tag_name": *"' '{print $2}' | cut -d'"' -f1 || true)"
+         ;;
+     esac
 
-  if [[ -z "$TAG" ]]; then
-    log_error "Failed to discover latest release. Specify a version manually via VOXI_VERSION=vX.Y.Z."
-    exit 1
-  fi
+     if test -z "$TAG"
+     then log_error "Failed to discover latest release. Specify a version manually via VOXI_VERSION=vX.Y.Z."
+          exit 1
+     fi
 else
-  if [[ "$VERSION" == v* ]]; then
-    TAG="$VERSION"
-  else
-    TAG="v$VERSION"
-  fi
+     case "$VERSION" in
+       v*) TAG="$VERSION" ;;
+       *)  TAG="v$VERSION" ;;
+     esac
 fi
 
 RAW_VERSION="${TAG#v}"
@@ -130,27 +130,27 @@ TMP_DIR="$(mktemp -d -t voxi-install-XXXXXX)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 log_info "Downloading ${ASSET_NAME}..."
-if ! curl -fL -o "${TMP_DIR}/${ASSET_NAME}" "$ASSET_URL"; then
-  log_error "Failed to download release archive from $ASSET_URL"
-  exit 1
+if ! curl -fL -o "${TMP_DIR}/${ASSET_NAME}" "$ASSET_URL"
+then log_error "Failed to download release archive from $ASSET_URL"
+     exit 1
 fi
 
-if curl -fsL -o "${TMP_DIR}/SHA256SUMS" "$SUMS_URL" 2>/dev/null; then
-  log_info "Verifying SHA256 checksum..."
-  (
-    cd "$TMP_DIR"
-    if command -v sha256sum >/dev/null 2>&1; then
-      grep "  ${ASSET_NAME}$" SHA256SUMS | sha256sum -c - --status || {
-        log_error "SHA256 checksum verification failed!"
-        exit 1
-      }
-    elif command -v shasum >/dev/null 2>&1; then
-      grep "  ${ASSET_NAME}$" SHA256SUMS | shasum -a 256 -c - --status || {
-        log_error "SHA256 checksum verification failed!"
-        exit 1
-      }
-    fi
-  )
+if curl -fsL -o "${TMP_DIR}/SHA256SUMS" "$SUMS_URL" 2>/dev/null
+then log_info "Verifying SHA256 checksum..."
+     (
+       cd "$TMP_DIR"
+       if command -v sha256sum >/dev/null 2>&1
+       then grep "  ${ASSET_NAME}$" SHA256SUMS | sha256sum -c - --status || {
+              log_error "SHA256 checksum verification failed!"
+              exit 1
+            }
+       elif command -v shasum >/dev/null 2>&1
+       then grep "  ${ASSET_NAME}$" SHA256SUMS | shasum -a 256 -c - --status || {
+              log_error "SHA256 checksum verification failed!"
+              exit 1
+            }
+       fi
+     )
 fi
 
 mkdir -p "$INSTALL_DIR"
@@ -158,15 +158,15 @@ log_info "Extracting binaries into ${INSTALL_DIR}..."
 tar -xzf "${TMP_DIR}/${ASSET_NAME}" -C "$TMP_DIR"
 
 install -m 0755 "${TMP_DIR}/voxi" "${INSTALL_DIR}/voxi"
-if [[ -f "${TMP_DIR}/voxi-modifierd" ]]; then
-  install -m 0755 "${TMP_DIR}/voxi-modifierd" "${INSTALL_DIR}/voxi-modifierd"
+if test -f "${TMP_DIR}/voxi-modifierd"
+then install -m 0755 "${TMP_DIR}/voxi-modifierd" "${INSTALL_DIR}/voxi-modifierd"
 fi
 
 export PATH="${INSTALL_DIR}:${PATH}"
 
-if [[ "$NO_BOOTSTRAP" -eq 1 ]]; then
-  log_ok "Voxi binary installed to ${INSTALL_DIR}/voxi"
-  exit 0
+if test "$NO_BOOTSTRAP" -eq 1
+then log_ok "Voxi binary installed to ${INSTALL_DIR}/voxi"
+     exit 0
 fi
 
 log_info "Running 'voxi install' to configure services and dependencies..."

@@ -8,10 +8,14 @@ printf 'Custom shortcut paths (read-only):\n'
 gsettings get "$schema" custom-keybindings
 printf 'Existing Super+X assignments (read-only):\n'
 found=0
-for candidate in org.gnome.desktop.wm.keybindings "$schema"; do
-	if gsettings list-recursively "$candidate" | grep -Fi "'<Super>x'"; then found=1; fi
+for candidate in org.gnome.desktop.wm.keybindings "$schema"
+do if gsettings list-recursively "$candidate" | grep -Fi "'<Super>x'"
+   then found=1
+   fi
 done
-if [ "$found" -eq 0 ]; then printf 'none in built-in GNOME shortcut schemas\n'; fi
+if test "$found" -eq 0
+then printf 'none in built-in GNOME shortcut schemas\n'
+fi
 
 # Prove the relocatable schema write/read mechanism in an isolated keyfile backend.
 # This never connects to or changes the user's live dconf database.
