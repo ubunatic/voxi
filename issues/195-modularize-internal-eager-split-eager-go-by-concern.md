@@ -1,6 +1,6 @@
 # 195 — Modularize internal/eager: split eager.go by concern
 
-**Status**: In Progress
+**Status**: Closed — Resolved by a5b1138
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Architecture
