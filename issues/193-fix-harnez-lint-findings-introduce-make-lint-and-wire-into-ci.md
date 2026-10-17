@@ -1,6 +1,6 @@
 # 193 — Fix harnez lint findings, introduce make lint, and wire into CI
 
-**Status**: In Progress
+**Status**: Closed — Resolved by 2a4bde6
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Quality
