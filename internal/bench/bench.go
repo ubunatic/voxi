@@ -328,11 +328,11 @@ func recordFixedDuration(ctx context.Context, d deps.Dependencies, wavPath strin
 
 	recCmdName := ""
 	var recArgs []string
-	if _, err := d.LookPath("pw-record"); err == nil {
-		recCmdName = "pw-record"
+	if p, err := d.LookPath("pw-record"); err == nil {
+		recCmdName = p
 		recArgs = []string{"--rate", "16000", "--channels", "1", "--format", "s16", "-"}
-	} else if _, err := d.LookPath("arecord"); err == nil {
-		recCmdName = "arecord"
+	} else if p, err := d.LookPath("arecord"); err == nil {
+		recCmdName = p
 		recArgs = []string{"-r", "16000", "-c", "1", "-f", "S16_LE", "-t", "raw", "-q", "-"}
 	} else {
 		return fmt.Errorf("neither pw-record nor arecord found on PATH")
