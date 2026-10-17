@@ -8,10 +8,9 @@ the sprint scopes the flake hunt to harnez and loom).
 ## Changes
 - `.github/gotest-report.go` (shared verbatim with harnez, loom, cati):
   failures, test time, slowest 10 packages per job summary.
-- `ci.yaml`: parallel `lint` (gofmt, vet, build), `unit` (`go test -short`),
-  `race`; `report` writes the CI wall time. The separate `go test ./spec/...`
-  step is dropped: `go test ./...` already runs it. Per-job module and build
-  caches; actions moved off the deprecated Node 20 majors; `contents: read`.
+- `ci.yaml`: one job (parallel jobs made the seconds-long suite slower, 0.6
+  to 1.4 min). `go test -race -json` feeds the summary step; actions moved
+  off the deprecated Node 20 majors; `contents: read`, 15 min timeout.
 
 ## Verification
 - actionlint clean; workflow_dispatch run on the ccr branch.

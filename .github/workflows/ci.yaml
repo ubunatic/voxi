@@ -7,6 +7,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -15,14 +18,15 @@ jobs:
   test:
     name: Test & Build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           lfs: true
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -36,8 +40,16 @@ jobs:
       - name: Build binaries
         run: go build ./...
 
+      # One job: the suite takes seconds, so parallel jobs cost more setup than
+      # they save. Raw logs need admin rights to download; the summary step
+      # writes failures, test time and the slowest packages to the job summary.
       - name: Run tests with race detector
-        run: go test -race -v ./...
+        id: race
+        run: go test -race -json ./... > race.json 2>&1
+
+      - name: Test summary
+        if: always() && steps.race.outcome != 'skipped'
+        run: go run .github/gotest-report.go -title "go test -race" race.json
 
       - name: Validate spec schemas
         run: go test -v ./spec/...
