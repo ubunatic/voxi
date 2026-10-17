@@ -6,10 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
-	"ubunatic.com/voxi/internal/chunks"
-	"ubunatic.com/voxi/internal/deps"
 	"ubunatic.com/voxi/spec"
 )
 
@@ -217,204 +214,17 @@ func TestVocabularyCommandAddListRemove(t *testing.T) {
 	}
 }
 
-func TestSampleSaveLast(t *testing.T) {
+func TestFeedbackSampleCommandsRemoved(t *testing.T) {
 	home := t.TempDir()
-	xdgRuntime := t.TempDir()
-
-	// Prepare a chunk in the chunk ring buffer
-	chunkBuf := chunks.NewBuffer(chunks.StorageDir(xdgRuntime, home), 5)
-	dummyPCM := make([]byte, 3200)
-	c := chunks.Chunk{
-		Index:                 1,
-		Timestamp:             time.Now(),
-		AudioDurationSecs:     1.0,
-		TranscribeDurationSec: 0.2,
-		RTF:                   0.2,
-		RawTranscript:         "testing save last",
-		CleanedTranscript:     "testing save last",
-		Accepted:              true,
-	}
-	if _, err := chunkBuf.Add(c, dummyPCM, 16000); err != nil {
-		t.Fatal(err)
-	}
-
-	var out bytes.Buffer
-	// Stdin provides blank newline for transcript confirmation and blank newline for keyterms
-	stdin := strings.NewReader("\n\n")
-	d := deps.Dependencies{
-		Stdout: &out,
-		Stdin:  stdin,
-		Getenv: func(key string) string {
-			if key == "HOME" {
-				return home
-			}
-			if key == "XDG_RUNTIME_DIR" {
-				return xdgRuntime
-			}
-			return ""
-		},
-	}
-	_ = d // legacy command no longer consumes these capture dependencies
-
-	cmd := NewCommand(&out, home, rules, 64, nil)
-	cmd.SetArgs([]string{"sample", "save-last", "test-sample"})
-	if err := cmd.Execute(); err == nil {
-		t.Fatal("feedback sample command remains available")
-	}
-	t.Skip("legacy feedback sample test retired by issue 172")
-
-	// Verify sample was saved in ~/.config/voxi/samples
-	sampleWAV := filepath.Join(home, ".config", "voxi", "samples", "test-sample.wav")
-	if _, err := os.Stat(sampleWAV); err != nil {
-		t.Fatalf("expected sample WAV to exist: %v", err)
-	}
-
-	manifestBytes, err := os.ReadFile(filepath.Join(home, ".config", "voxi", "samples", "corpus.tsv"))
-	if err != nil {
-		t.Fatalf("read manifest: %v", err)
-	}
-	if !strings.Contains(string(manifestBytes), "test-sample\ttest-sample.wav\ttesting save last") {
-		t.Fatalf("unexpected corpus manifest: %s", string(manifestBytes))
-	}
-}
-
-func TestSampleSaveChunk(t *testing.T) {
-	home := t.TempDir()
-	xdgRuntime := t.TempDir()
-
-	chunkBuf := chunks.NewBuffer(chunks.StorageDir(xdgRuntime, home), 5)
-	dummyPCM := make([]byte, 3200)
-
-	// Add chunk 1
-	c1 := chunks.Chunk{
-		Index:                 1,
-		Timestamp:             time.Now(),
-		AudioDurationSecs:     1.0,
-		TranscribeDurationSec: 0.2,
-		RTF:                   0.2,
-		RawTranscript:         "raw chunk one",
-		CleanedTranscript:     "cleaned chunk one",
-		Accepted:              true,
-	}
-	if _, err := chunkBuf.Add(c1, dummyPCM, 16000); err != nil {
-		t.Fatal(err)
-	}
-
-	// Add chunk 2 (with empty cleaned transcript to test fallback to raw)
-	c2 := chunks.Chunk{
-		Index:                 2,
-		Timestamp:             time.Now(),
-		AudioDurationSecs:     1.0,
-		TranscribeDurationSec: 0.2,
-		RTF:                   0.2,
-		RawTranscript:         "raw chunk two only",
-		CleanedTranscript:     "",
-		Accepted:              true,
-	}
-	if _, err := chunkBuf.Add(c2, dummyPCM, 16000); err != nil {
-		t.Fatal(err)
-	}
-
-	depsFor := func(stdinStr string, out *bytes.Buffer) deps.Dependencies {
-		return deps.Dependencies{
-			Stdout: out,
-			Stdin:  strings.NewReader(stdinStr),
-			Getenv: func(key string) string {
-				if key == "HOME" {
-					return home
-				}
-				if key == "XDG_RUNTIME_DIR" {
-					return xdgRuntime
-				}
-				return ""
-			},
-		}
-	}
-
-	// 1. Test save-chunk with 2 args: specific index (1) and name
-	{
+	for _, args := range [][]string{
+		{"sample", "save-last", "test-sample"},
+		{"sample", "save-chunk", "1", "test-sample"},
+	} {
 		var out bytes.Buffer
-		d := depsFor("\n\n", &out)
-		_ = d
 		cmd := NewCommand(&out, home, rules, 64, nil)
-		cmd.SetArgs([]string{"sample", "save-chunk", "1", "sample-chunk-1"})
+		cmd.SetArgs(args)
 		if err := cmd.Execute(); err == nil {
-			t.Fatal("feedback sample command remains available")
-		}
-		t.Skip("legacy feedback sample test retired by issue 172")
-
-		sampleWAV := filepath.Join(home, ".config", "voxi", "samples", "sample-chunk-1.wav")
-		if _, err := os.Stat(sampleWAV); err != nil {
-			t.Fatalf("expected sample WAV to exist: %v", err)
-		}
-
-		manifestBytes, err := os.ReadFile(filepath.Join(home, ".config", "voxi", "samples", "corpus.tsv"))
-		if err != nil {
-			t.Fatalf("read manifest: %v", err)
-		}
-		if !strings.Contains(string(manifestBytes), "sample-chunk-1\tsample-chunk-1.wav\tcleaned chunk one") {
-			t.Fatalf("unexpected corpus manifest: %s", string(manifestBytes))
-		}
-	}
-
-	// 2. Test save-chunk with 1 arg: defaults to "last" (chunk 2, raw fallback)
-	{
-		var out bytes.Buffer
-		d := depsFor("\n\n", &out)
-		_ = d
-		cmd := NewCommand(&out, home, rules, 64, nil)
-		cmd.SetArgs([]string{"sample", "save-chunk", "sample-chunk-last"})
-		if err := cmd.Execute(); err != nil {
-			t.Fatalf("save-chunk sample-chunk-last failed: %v", err)
-		}
-
-		sampleWAV := filepath.Join(home, ".config", "voxi", "samples", "sample-chunk-last.wav")
-		if _, err := os.Stat(sampleWAV); err != nil {
-			t.Fatalf("expected sample WAV to exist: %v", err)
-		}
-
-		manifestBytes, err := os.ReadFile(filepath.Join(home, ".config", "voxi", "samples", "corpus.tsv"))
-		if err != nil {
-			t.Fatalf("read manifest: %v", err)
-		}
-		if !strings.Contains(string(manifestBytes), "sample-chunk-last\tsample-chunk-last.wav\traw chunk two only") {
-			t.Fatalf("unexpected corpus manifest: %s", string(manifestBytes))
-		}
-	}
-
-	// 3. Test save-chunk with 2 args: selector "last" explicitly
-	{
-		var out bytes.Buffer
-		d := depsFor("\n\n", &out)
-		_ = d
-		cmd := NewCommand(&out, home, rules, 64, nil)
-		cmd.SetArgs([]string{"sample", "save-chunk", "last", "sample-chunk-last-explicit"})
-		if err := cmd.Execute(); err != nil {
-			t.Fatalf("save-chunk last sample-chunk-last-explicit failed: %v", err)
-		}
-
-		manifestBytes, err := os.ReadFile(filepath.Join(home, ".config", "voxi", "samples", "corpus.tsv"))
-		if err != nil {
-			t.Fatalf("read manifest: %v", err)
-		}
-		if !strings.Contains(string(manifestBytes), "sample-chunk-last-explicit\tsample-chunk-last-explicit.wav\traw chunk two only") {
-			t.Fatalf("unexpected corpus manifest: %s", string(manifestBytes))
-		}
-	}
-
-	// 4. Test save-chunk with nonexistent index: should return clear error
-	{
-		var out bytes.Buffer
-		d := depsFor("\n\n", &out)
-		_ = d
-		cmd := NewCommand(&out, home, rules, 64, nil)
-		cmd.SetArgs([]string{"sample", "save-chunk", "99", "nonexistent"})
-		err := cmd.Execute()
-		if err == nil {
-			t.Fatal("expected error for nonexistent chunk index")
-		}
-		if !strings.Contains(err.Error(), "chunk 99 not found in recent chunks buffer") {
-			t.Fatalf("unexpected error message: %v", err)
+			t.Fatalf("expected feedback sample command %v to be unavailable", args)
 		}
 	}
 }
