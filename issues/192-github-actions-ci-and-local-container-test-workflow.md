@@ -1,6 +1,6 @@
 # 192 — GitHub Actions CI and local container test workflow
 
-**Status**: Open
+**Status**: Closed — Delivered GitHub Actions CI workflow and container-test make target with audio/network test skips (8ca47e7)
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Infrastructure / CI
