@@ -60,7 +60,7 @@ func TestCaptureFromCommandStopsOnStdinEnter(t *testing.T) {
 	in := bufio.NewReader(&delayedReader{delay: 150 * time.Millisecond, line: "\n"})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	pcm, dur, err := captureFromCommand(ctx, "sh", []string{"-c", "head -c 3200 /dev/zero; sleep 5"}, in)
+	pcm, dur, err := captureFromCommand(ctx, "sh", []string{"-c", "head -c 3200 /dev/zero; read -r _"}, in)
 	if err != nil {
 		t.Fatalf("captureFromCommand: %v", err)
 	}
