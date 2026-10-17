@@ -7,6 +7,9 @@ BINARY   ?= voxi
 MODIFIER ?= voxi-modifierd
 # Kept for uninstalling binaries from older system-wide installations.
 PREFIX   ?= /usr/local
+ENGINE   ?= $(shell command -v podman || command -v docker)
+CONTAINER_IMAGE ?= voxi-test
+OUTPUT_DIR ?= $(CURDIR)/.test-output
 
 help: 🤖  # show this help
 	@grep -E '^[a-zA-Z_-]+:.*[⚙🤖].*#+' $(MAKEFILE_LIST) | \
@@ -99,6 +102,20 @@ test-install-podman: ⚙️  # test Go and curl installation workflows in clean 
 	./scripts/test-install-podman.sh
 
 test-install: ⚙️ test-install-podman  # alias for test-install-podman
+
+container-test: ⚙️  # run tests in a clean reproducible container
+	@test -n "$(ENGINE)" || { echo "error: neither podman nor docker found on PATH" >&2; exit 1; }
+	mkdir -p $(OUTPUT_DIR)
+	env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY $(ENGINE) build -t $(CONTAINER_IMAGE) -f Containerfile .
+	env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY $(ENGINE) run --rm --security-opt label=disable \
+		-v "$(CURDIR):/src:ro" \
+		-v "$(OUTPUT_DIR):/output:rw" \
+		-e GOCACHE=/tmp/gocache \
+		-e GOTMPDIR=/tmp \
+		-e GOFLAGS=-buildvcs=false \
+		-e VOXI_CONTAINER_TEST=1 \
+		$(CONTAINER_IMAGE) \
+		bash -c "set -euo pipefail; cd /src; go vet ./...; go build ./...; go test -race ./... | tee /output/test.log; test -z \"\$$(gofmt -l .)\""
 
 test-e2e: ⚙️  # run headless end-to-end integration test in container via podman
 	./scripts/test-e2e-headless.sh

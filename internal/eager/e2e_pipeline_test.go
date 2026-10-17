@@ -44,6 +44,9 @@ import (
 const e2eEnvVar = "VOXI_E2E"
 
 func e2eSkipReason() string {
+	if os.Getenv("VOXI_CONTAINER_TEST") != "" {
+		return "VOXI_CONTAINER_TEST is set; skipping real end-to-end eager-pipeline test in container"
+	}
 	if os.Getenv(e2eEnvVar) != "" {
 		return ""
 	}

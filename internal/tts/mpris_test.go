@@ -2,6 +2,7 @@ package tts
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 
@@ -18,6 +19,9 @@ func TestMPRISRegistersMethodsAndRoutesNext(t *testing.T) {
 	first := waitForPlayer(t, backend)
 	defer first.finish(nil)
 
+	if os.Getenv("VOXI_CONTAINER_TEST") != "" {
+		t.Skip("VOXI_CONTAINER_TEST is set; skipping session D-Bus test in container")
+	}
 	service, err := StartMPRIS(context.Background(), manager)
 	if err != nil {
 		t.Skipf("session D-Bus is unavailable: %v", err)

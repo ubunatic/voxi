@@ -30,6 +30,9 @@ type evalUpstreamResult struct {
 // Set VOXI_CLEANUP_EVAL_BACKEND=agy and VOXI_CLEANUP_EVAL_MODEL=gemini-3.7-flash-low
 // for the agy-backed evaluation; otherwise it uses the configured local endpoint.
 func TestRealCleanupEvaluation(t *testing.T) {
+	if os.Getenv("VOXI_CONTAINER_TEST") != "" {
+		t.Skip("VOXI_CONTAINER_TEST is set; skipping real-model cleanup evaluation in container")
+	}
 	baseURL := os.Getenv("VOXI_CLEANUP_EVAL_URL")
 	model := os.Getenv("VOXI_CLEANUP_EVAL_MODEL")
 	if model == "" {

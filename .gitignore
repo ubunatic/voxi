@@ -5,6 +5,7 @@
 *.test
 *.out
 *.prof
+/.test-output/
 
 # Local audio recordings/caches
 *.wav

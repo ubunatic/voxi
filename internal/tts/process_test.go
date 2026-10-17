@@ -282,7 +282,7 @@ func TestSupervisorHelperProcess(t *testing.T) {
 }
 
 func TestSupervisorParentDeathKillsAndReapsGrandchild(t *testing.T) {
-	if testing.Short() {
+	if testing.Short() || os.Getenv("VOXI_CONTAINER_TEST") != "" {
 		t.Skip("process-tree integration test")
 	}
 	pidFile := filepath.Join(t.TempDir(), "grandchild.pid")

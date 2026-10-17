@@ -46,4 +46,3 @@ func restartServices(ctx context.Context, d deps.Dependencies, home string, s *c
 func restartAgent(ctx context.Context, d deps.Dependencies) error {
 	return restartServices(ctx, d, "", nil)
 }
-

@@ -952,5 +952,3 @@ func formatCompactBytes(bytes int64) string {
 		return fmt.Sprintf("%dB", bytes)
 	}
 }
-
-

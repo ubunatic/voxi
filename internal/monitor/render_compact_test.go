@@ -24,8 +24,8 @@ func TestPrintCompactTwoBoxMatchesLayout(t *testing.T) {
 			Online:     true,
 			Endpoint:   "127.0.0.1:18131",
 		},
-		ServiceMemory:  6764573491, // ~6.3 GB
-		VRAMUsedBytes:  3006477107, // ~2.8 GB
+		ServiceMemory: 6764573491, // ~6.3 GB
+		VRAMUsedBytes: 3006477107, // ~2.8 GB
 		Processes: []ProcessResource{
 			{Name: "agent"},
 			{Name: "r2t2"},

@@ -36,6 +36,9 @@ import (
 // and a simple word-level similarity/WER against each sample's expected
 // transcript are printed in a table for a human to read.
 func TestLiveASR_R2T2Corpus(t *testing.T) {
+	if os.Getenv("VOXI_CONTAINER_TEST") != "" {
+		t.Skip("VOXI_CONTAINER_TEST is set; skipping live ASR corpus test in container")
+	}
 	if os.Getenv("VOXI_LIVE_ASR") != "1" {
 		t.Skip("VOXI_LIVE_ASR not set to 1; skipping live ASR corpus test (see test doc comment to run it)")
 	}
