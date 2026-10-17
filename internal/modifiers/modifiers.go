@@ -143,14 +143,18 @@ func NewModifierReader(path string) *ModifierReader {
 
 // ResolveModifierStatePath finds the active or default modifier state file path.
 func ResolveModifierStatePath(envRuntimeDir string) string {
+	return resolveModifierStatePathWithStat(os.Stat, envRuntimeDir)
+}
+
+func resolveModifierStatePathWithStat(stat func(string) (os.FileInfo, error), envRuntimeDir string) string {
 	// First preference: standard system path /run/voxi/modifiers
-	if _, err := os.Stat(DefaultModifierStatePath); err == nil {
+	if _, err := stat(DefaultModifierStatePath); err == nil {
 		return DefaultModifierStatePath
 	}
 
 	// Legacy preference: /run/harnez/modifiers
 	legacySysPath := "/run/harnez/modifiers"
-	if _, err := os.Stat(legacySysPath); err == nil {
+	if _, err := stat(legacySysPath); err == nil {
 		return legacySysPath
 	}
 
@@ -163,11 +167,11 @@ func ResolveModifierStatePath(envRuntimeDir string) string {
 		runtimeDir = fmt.Sprintf("/run/user/%d", os.Getuid())
 	}
 	userPath := filepath.Join(runtimeDir, "voxi", "modifiers")
-	if _, err := os.Stat(userPath); err == nil {
+	if _, err := stat(userPath); err == nil {
 		return userPath
 	}
 	legacyUserPath := filepath.Join(runtimeDir, "harnez", "modifiers")
-	if _, err := os.Stat(legacyUserPath); err == nil {
+	if _, err := stat(legacyUserPath); err == nil {
 		return legacyUserPath
 	}
 
