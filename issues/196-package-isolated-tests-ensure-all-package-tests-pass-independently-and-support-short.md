@@ -1,6 +1,6 @@
 # 196 — Package-isolated tests: ensure all package tests pass independently and support -short
 
-**Status**: In Progress
+**Status**: Closed — Resolved by 5e84c30
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Quality
