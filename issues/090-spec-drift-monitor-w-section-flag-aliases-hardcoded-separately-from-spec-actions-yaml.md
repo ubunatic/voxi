@@ -1,6 +1,6 @@
 # 090 — Spec drift: `monitor -w` section-flag aliases hardcoded separately from spec/actions.yaml
 
-**Status**: Open
+**Status**: Closed — Resolved ParseSections aliases against spec/actions.yaml via TokenDispatch/ActionForToken with full test coverage in commit 5da501c
 **Priority**: P3 (Low)
 **Severity**: Cleanup (spec-shadowing, no user-facing breakage observed yet)
 **Category**: Spec System / Code Quality
