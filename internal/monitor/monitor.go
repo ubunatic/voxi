@@ -87,31 +87,43 @@ func DefaultResourceSections() ResourceSections {
 	return ResourceSections{Speed: visible("speed"), Hardware: visible("hardware"), Transcript: visible("transcript"), Daemons: visible("daemons"), TTS: visible("tts-box")}
 }
 
-// ParseSections parses a comma-separated list of section names or letters.
+// ParseSections parses a comma-separated list of section names or letters,
+// resolving aliases against spec/actions.yaml via loadedActions().ActionForToken.
 func ParseSections(s string) ResourceSections {
 	trimmed := strings.TrimSpace(strings.ToLower(s))
 	if trimmed == "" {
 		return DefaultResourceSections()
 	}
-	if trimmed == "all" {
-		return ResourceSections{Speed: true, Hardware: true, Transcript: true, Daemons: true, TTS: true}
-	}
+	actions := loadedActions()
 	sec := ResourceSections{}
 	for _, p := range strings.Split(trimmed, ",") {
 		p = strings.TrimSpace(p)
-		switch p {
-		case "s", "speed", "status", "voice", "v", "1":
+		if p == "" {
+			continue
+		}
+		id, ok := actions.ActionForToken(p)
+		if !ok {
+			continue
+		}
+		switch id {
+		case "speed":
 			sec.Speed = true
-		case "h", "hardware", "cpu", "gpu", "hw", "g", "2":
+		case "hardware":
 			sec.Hardware = true
-		case "t", "transcript", "sentences", "feed", "3":
+		case "transcript":
 			sec.Transcript = true
-		case "tts", "tts-box":
-			sec.TTS = true
-		case "d", "daemons", "procs", "health", "p", "4":
+		case "daemons":
 			sec.Daemons = true
-		case "c", "compact", "2box", "two-box":
+		case "tts-box":
+			sec.TTS = true
+		case "compact":
 			sec.Compact = true
+		case "all":
+			sec.Speed = true
+			sec.Hardware = true
+			sec.Transcript = true
+			sec.Daemons = true
+			sec.TTS = true
 		}
 	}
 	if !sec.Speed && !sec.Hardware && !sec.Transcript && !sec.Daemons && !sec.TTS && !sec.Compact {

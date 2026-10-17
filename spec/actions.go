@@ -8,6 +8,7 @@ package spec
 import (
 	_ "embed"
 	"fmt"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -46,6 +47,7 @@ func parseActionSpec(data []byte) (*ActionSpec, error) {
 		return nil, fmt.Errorf("spec: actions.yaml declares no actions")
 	}
 	seenKeys := make(map[string]string)
+	seenTokens := make(map[string]string)
 	for id, a := range s.Actions {
 		if a.Title == "" {
 			return nil, fmt.Errorf("spec: action %q missing title", id)
@@ -59,6 +61,7 @@ func parseActionSpec(data []byte) (*ActionSpec, error) {
 		if len(a.Keys) == 0 {
 			return nil, fmt.Errorf("spec: action %q has no keys", id)
 		}
+		tokens := []string{strings.ToLower(id), strings.ToLower(a.Short)}
 		for _, k := range a.Keys {
 			if _, err := actionKeyByte(k); err != nil {
 				return nil, fmt.Errorf("spec: action %q: %w", id, err)
@@ -67,6 +70,15 @@ func parseActionSpec(data []byte) (*ActionSpec, error) {
 				return nil, fmt.Errorf("spec: key %q used by both action %q and %q", k, other, id)
 			}
 			seenKeys[k] = id
+			if !strings.HasPrefix(k, "<") || !strings.HasSuffix(k, ">") {
+				tokens = append(tokens, strings.ToLower(k))
+			}
+		}
+		for _, tok := range tokens {
+			if other, ok := seenTokens[tok]; ok && other != id {
+				return nil, fmt.Errorf("spec: token %q used by both action %q and %q", tok, other, id)
+			}
+			seenTokens[tok] = id
 		}
 	}
 	return &s, nil
@@ -105,4 +117,30 @@ func (s *ActionSpec) KeyDispatch() map[byte]string {
 		}
 	}
 	return dispatch
+}
+
+// TokenDispatch resolves every valid action token (the action id itself, its
+// Short display label, and any printable hotkey character, all lowercased) to
+// the corresponding action id. This enables CLI parsers (such as `voxi monitor -w`
+// section flags) to resolve against spec/actions.yaml without hardcoding aliases.
+func (s *ActionSpec) TokenDispatch() map[string]string {
+	dispatch := make(map[string]string)
+	for id, a := range s.Actions {
+		dispatch[strings.ToLower(id)] = id
+		dispatch[strings.ToLower(a.Short)] = id
+		for _, k := range a.Keys {
+			if strings.HasPrefix(k, "<") && strings.HasSuffix(k, ">") {
+				continue
+			}
+			dispatch[strings.ToLower(k)] = id
+		}
+	}
+	return dispatch
+}
+
+// ActionForToken resolves one token (case-insensitively) to its action id using
+// TokenDispatch.
+func (s *ActionSpec) ActionForToken(token string) (string, bool) {
+	id, ok := s.TokenDispatch()[strings.TrimSpace(strings.ToLower(token))]
+	return id, ok
 }

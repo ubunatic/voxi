@@ -25,6 +25,53 @@ func TestParseSections(t *testing.T) {
 	}
 }
 
+func TestParseSectionsDerivableFromActionSpec(t *testing.T) {
+	actions := loadedActions()
+	tokenDispatch := actions.TokenDispatch()
+
+	for token, actionID := range tokenDispatch {
+		sec := ParseSections(token)
+		switch actionID {
+		case "speed":
+			if !sec.Speed {
+				t.Errorf("token %q (action %q) did not enable Speed section", token, actionID)
+			}
+		case "hardware":
+			if !sec.Hardware {
+				t.Errorf("token %q (action %q) did not enable Hardware section", token, actionID)
+			}
+		case "transcript":
+			if !sec.Transcript {
+				t.Errorf("token %q (action %q) did not enable Transcript section", token, actionID)
+			}
+		case "daemons":
+			if !sec.Daemons {
+				t.Errorf("token %q (action %q) did not enable Daemons section", token, actionID)
+			}
+		case "tts-box":
+			if !sec.TTS {
+				t.Errorf("token %q (action %q) did not enable TTS section", token, actionID)
+			}
+		case "compact":
+			if !sec.Compact {
+				t.Errorf("token %q (action %q) did not enable Compact section", token, actionID)
+			}
+		case "all":
+			if !sec.Speed || !sec.Hardware || !sec.Transcript || !sec.Daemons || !sec.TTS {
+				t.Errorf("token %q (action %q) did not enable all sections", token, actionID)
+			}
+		}
+	}
+}
+
+func TestParseSectionsUnrecognizedFallback(t *testing.T) {
+	def := DefaultResourceSections()
+	got := ParseSections("unrecognized,nonsense")
+	if got != def {
+		t.Fatalf("ParseSections with unrecognized tokens = %+v, want default %+v", got, def)
+	}
+}
+
 type telemetryTTSController struct{}
 
 func (telemetryTTSController) Enqueue(string) (int, error) { return 1, nil }
