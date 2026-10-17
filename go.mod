@@ -1,6 +1,6 @@
 module ubunatic.com/voxi
 
-go 1.26
+go 1.26.5
 
 require (
 	github.com/godbus/dbus/v5 v5.2.2
