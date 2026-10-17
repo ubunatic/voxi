@@ -56,7 +56,6 @@ const (
 	keyRightAlt   = 100
 	keyLeftMeta   = 125 // Super / Windows key
 	keyRightMeta  = 126
-	keyCapsLock   = 58
 
 	keyMax = 0x2ff // 767
 )
