@@ -4,6 +4,7 @@ import (
 	"embed"
 	"fmt"
 	"sort"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -13,9 +14,16 @@ var doctorFiles embed.FS
 
 // DoctorSpec contains the checks and embedded scripts for `voxi doctor`.
 type DoctorSpec struct {
-	Checks  []DoctorCheck     `yaml:"checks"`
-	Scripts map[string]string `yaml:"scripts"`
-	Settle  DoctorSettle      `yaml:"settle"`
+	Checks    []DoctorCheck     `yaml:"checks"`
+	Scripts   map[string]string `yaml:"scripts"`
+	Settle    DoctorSettle      `yaml:"settle"`
+	Snapshots DoctorSnapshots   `yaml:"snapshots"`
+}
+
+// DoctorSnapshots configures retention of pre-repair pw-dump snapshots.
+type DoctorSnapshots struct {
+	KeepCount  int `yaml:"keep_count"`
+	MaxAgeDays int `yaml:"max_age_days"`
 }
 
 // DoctorSettle bounds graph polling after service restarts.
@@ -153,5 +161,18 @@ func validateDoctorSpec(s *DoctorSpec) error {
 	if s.Settle.TimeoutMS < 1 || s.Settle.IntervalMS < 1 || s.Settle.IntervalMS > s.Settle.TimeoutMS {
 		return fmt.Errorf("spec: doctor graph settle timeout and interval must be positive and interval no longer than timeout")
 	}
+	if s.Snapshots.KeepCount < 1 || s.Snapshots.MaxAgeDays < 1 {
+		return fmt.Errorf("spec: doctor snapshots keep_count and max_age_days must be positive")
+	}
 	return nil
+}
+
+// SnapshotKeepCount returns the number of pre-repair snapshots to retain.
+func (s *DoctorSpec) SnapshotKeepCount() int {
+	return s.Snapshots.KeepCount
+}
+
+// SnapshotMaxAge returns the maximum age duration for pre-repair snapshots.
+func (s *DoctorSpec) SnapshotMaxAge() time.Duration {
+	return time.Duration(s.Snapshots.MaxAgeDays) * 24 * time.Hour
 }

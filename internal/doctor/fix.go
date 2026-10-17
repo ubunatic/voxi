@@ -293,6 +293,66 @@ func graphFingerprint(g graph) string {
 	return b.String()
 }
 
+const snapshotPrefix = "pw-dump-before-repair-"
+const snapshotSuffix = ".json"
+const snapshotTimeFormat = "20060102T150405.000000000"
+
+type snapshotEntry struct {
+	path    string
+	modTime time.Time
+}
+
+func pruneSnapshots(dir string, keepCount int, maxAge time.Duration, now time.Time) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	var snaps []snapshotEntry
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasPrefix(name, snapshotPrefix) || !strings.HasSuffix(name, snapshotSuffix) {
+			continue
+		}
+		tsStr := strings.TrimSuffix(strings.TrimPrefix(name, snapshotPrefix), snapshotSuffix)
+		t, parseErr := time.Parse(snapshotTimeFormat, tsStr)
+		if parseErr != nil {
+			info, infoErr := entry.Info()
+			if infoErr != nil {
+				continue
+			}
+			t = info.ModTime()
+		}
+		snaps = append(snaps, snapshotEntry{
+			path:    filepath.Join(dir, name),
+			modTime: t,
+		})
+	}
+
+	sort.Slice(snaps, func(i, j int) bool {
+		if snaps[i].modTime.Equal(snaps[j].modTime) {
+			return snaps[i].path > snaps[j].path
+		}
+		return snaps[i].modTime.After(snaps[j].modTime)
+	})
+
+	for i, snap := range snaps {
+		shouldPrune := false
+		if keepCount > 0 && i >= keepCount {
+			shouldPrune = true
+		}
+		if maxAge > 0 && now.Sub(snap.modTime) > maxAge {
+			shouldPrune = true
+		}
+		if shouldPrune {
+			_ = os.Remove(snap.path)
+		}
+	}
+	return nil
+}
+
 func (d HostDoctor) snapshot(ctx context.Context, stateDir string) (string, []byte, error) {
 	dump, err := d.Host.Run(ctx, "pw-dump")
 	if err != nil {
@@ -304,9 +364,13 @@ func (d HostDoctor) snapshot(ctx context.Context, stateDir string) (string, []by
 	if err := os.MkdirAll(stateDir, 0o700); err != nil {
 		return "", nil, fmt.Errorf("doctor: create state directory: %w", err)
 	}
-	path := filepath.Join(stateDir, "pw-dump-before-repair-"+time.Now().Format("20060102T150405.000000000")+".json")
+	now := time.Now()
+	path := filepath.Join(stateDir, snapshotPrefix+now.Format(snapshotTimeFormat)+snapshotSuffix)
 	if err := os.WriteFile(path, dump, 0o600); err != nil {
 		return "", nil, fmt.Errorf("doctor: save pw-dump snapshot: %w", err)
+	}
+	if d.Spec != nil {
+		_ = pruneSnapshots(stateDir, d.Spec.SnapshotKeepCount(), d.Spec.SnapshotMaxAge(), now)
 	}
 	return path, dump, nil
 }

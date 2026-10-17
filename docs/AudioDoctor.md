@@ -34,7 +34,8 @@ Exit status: 0 all OK/WARN/SKIP, 1 any FAULT, 2 a check errored.
 - **Repair order:** services → Bluetooth card profile → defaults → mic → routing. A repair whose
   effect an earlier one covered (two WirePlumber restarts) is skipped, then re-checked.
 - **Snapshot first.** A `pw-dump` is saved to `~/.local/state/voxi/doctor/` before the first
-  repair, so a broken state survives as evidence (and as test data).
+  repair, so a broken state survives as evidence (and as test data). Snapshots are pruned
+  according to `spec/doctor.yaml` retention limits (`keep_count`, `max_age_days`).
 - **Host boundary.** All commands run through a host interface; tests use fixtures in
   `internal/doctor/testdata/` (anonymised: fake MACs, user and host names).
 
@@ -74,5 +75,4 @@ Every `After repair:` block must show all checks OK; then play a sound.
 
 - The real "active but not routing" wedge has not been reproduced on demand; stopping WirePlumber
   is the stand-in.
-- Snapshots in `~/.local/state/voxi/doctor/` are never pruned.
 - Only one Bluetooth headset (Mifa A10) and the T14 AMD audio were tested.

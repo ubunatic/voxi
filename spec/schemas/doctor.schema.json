@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Voxi Audio Doctor",
   "type": "object",
-  "required": ["checks", "scripts", "settle"],
+  "required": ["checks", "scripts", "settle", "snapshots"],
   "properties": {
     "checks": {
       "type": "array",
@@ -28,7 +28,16 @@
       }
     },
     "scripts": {"type": "object", "required": ["routing-probe.sh"], "properties": {"routing-probe.sh": {"type": "string", "minLength": 1}}, "additionalProperties": false},
-    "settle": {"type": "object", "required": ["timeout_ms", "interval_ms"], "properties": {"timeout_ms": {"type": "integer", "minimum": 1}, "interval_ms": {"type": "integer", "minimum": 1}}, "additionalProperties": false}
+    "settle": {"type": "object", "required": ["timeout_ms", "interval_ms"], "properties": {"timeout_ms": {"type": "integer", "minimum": 1}, "interval_ms": {"type": "integer", "minimum": 1}}, "additionalProperties": false},
+    "snapshots": {
+      "type": "object",
+      "required": ["keep_count", "max_age_days"],
+      "properties": {
+        "keep_count": {"type": "integer", "minimum": 1},
+        "max_age_days": {"type": "integer", "minimum": 1}
+      },
+      "additionalProperties": false
+    }
   },
   "definitions": {
     "service": {"type": "object", "required": ["scope", "unit"], "properties": {"scope": {"type": "string", "enum": ["user", "system"]}, "unit": {"type": "string"}}, "additionalProperties": false},

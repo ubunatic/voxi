@@ -518,3 +518,142 @@ func healthyHost(t *testing.T) *fixtureHost {
 		}
 	}}
 }
+
+func TestPruneSnapshots(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Date(2026, 10, 17, 12, 0, 0, 0, time.UTC)
+
+	// Create 6 snapshots with timestamps from 1 to 6 days ago.
+	dates := []time.Time{
+		now.Add(-1 * 24 * time.Hour),
+		now.Add(-2 * 24 * time.Hour),
+		now.Add(-3 * 24 * time.Hour),
+		now.Add(-4 * 24 * time.Hour),
+		now.Add(-5 * 24 * time.Hour),
+		now.Add(-6 * 24 * time.Hour),
+	}
+
+	for _, d := range dates {
+		filename := fmt.Sprintf("%s%s%s", snapshotPrefix, d.Format(snapshotTimeFormat), snapshotSuffix)
+		if err := os.WriteFile(filepath.Join(dir, filename), []byte("{}"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Also create an unrelated file that should not be touched
+	unrelated := filepath.Join(dir, "notes.txt")
+	if err := os.WriteFile(unrelated, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Prune with keepCount=3 and maxAge=10 days:
+	// Only the newest 3 snapshots should remain.
+	if err := pruneSnapshots(dir, 3, 10*24*time.Hour, now); err != nil {
+		t.Fatalf("pruneSnapshots error = %v", err)
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var remainingSnapshots []string
+	foundUnrelated := false
+	for _, e := range entries {
+		if e.Name() == "notes.txt" {
+			foundUnrelated = true
+		} else if strings.HasPrefix(e.Name(), snapshotPrefix) {
+			remainingSnapshots = append(remainingSnapshots, e.Name())
+		}
+	}
+
+	if !foundUnrelated {
+		t.Error("expected notes.txt to remain untouched")
+	}
+	if len(remainingSnapshots) != 3 {
+		t.Fatalf("remaining snapshots = %d, want 3 (%v)", len(remainingSnapshots), remainingSnapshots)
+	}
+
+	// Ensure the remaining ones are the newest (1, 2, 3 days ago)
+	for _, expectedDate := range dates[:3] {
+		expectedFile := fmt.Sprintf("%s%s%s", snapshotPrefix, expectedDate.Format(snapshotTimeFormat), snapshotSuffix)
+		if _, err := os.Stat(filepath.Join(dir, expectedFile)); err != nil {
+			t.Errorf("expected snapshot %s to exist: %v", expectedFile, err)
+		}
+	}
+
+	// 2. Prune with maxAge=1.5 days:
+	// Snapshots older than 1.5 days should be deleted, leaving only the 1-day-old one.
+	if err := pruneSnapshots(dir, 5, 36*time.Hour, now); err != nil {
+		t.Fatalf("pruneSnapshots error = %v", err)
+	}
+
+	entriesAfterAge, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var snapsAfterAge []string
+	for _, e := range entriesAfterAge {
+		if strings.HasPrefix(e.Name(), snapshotPrefix) {
+			snapsAfterAge = append(snapsAfterAge, e.Name())
+		}
+	}
+	if len(snapsAfterAge) != 1 {
+		t.Fatalf("remaining snapshots after age prune = %d, want 1 (%v)", len(snapsAfterAge), snapsAfterAge)
+	}
+}
+
+func TestSnapshotPrunesOldFiles(t *testing.T) {
+	s := loadDoctorSpec(t)
+	keepCount := s.SnapshotKeepCount()
+	if keepCount < 1 {
+		t.Fatalf("keepCount = %d, want >= 1", keepCount)
+	}
+
+	stateDir := t.TempDir()
+	now := time.Now()
+
+	// Pre-create keepCount + 2 older snapshots
+	for i := 1; i <= keepCount+2; i++ {
+		ts := now.Add(-time.Duration(i) * time.Hour)
+		name := fmt.Sprintf("%s%s%s", snapshotPrefix, ts.Format(snapshotTimeFormat), snapshotSuffix)
+		if err := os.WriteFile(filepath.Join(stateDir, name), []byte("{}"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	h := &fixtureHost{run: func(name string, _ ...string) commandResult {
+		if name == "pw-dump" {
+			return commandResult{output: `[{"id": 0}]`}
+		}
+		return commandResult{err: errors.New("unexpected command")}
+	}}
+
+	doctor := HostDoctor{Host: h, Spec: s}
+	path, dump, err := doctor.snapshot(context.Background(), stateDir)
+	if err != nil {
+		t.Fatalf("doctor.snapshot error = %v", err)
+	}
+	if len(dump) == 0 {
+		t.Fatal("empty dump returned")
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("new snapshot file not found: %v", err)
+	}
+
+	entries, err := os.ReadDir(stateDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var snapshots []string
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), snapshotPrefix) {
+			snapshots = append(snapshots, e.Name())
+		}
+	}
+
+	if len(snapshots) != keepCount {
+		t.Fatalf("snapshot count after prune = %d, want %d (%v)", len(snapshots), keepCount, snapshots)
+	}
+}

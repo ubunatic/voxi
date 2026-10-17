@@ -100,3 +100,6 @@ scripts:
 settle:
   timeout_ms: 5000
   interval_ms: 100
+snapshots:
+  keep_count: 5
+  max_age_days: 14
