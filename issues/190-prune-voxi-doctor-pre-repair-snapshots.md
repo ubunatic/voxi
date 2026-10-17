@@ -1,6 +1,6 @@
 # 190 — Prune voxi doctor pre-repair snapshots
 
-**Status**: Open
+**Status**: Closed — Pruned doctor pre-repair snapshots by keep_count and max_age_days in spec/doctor.yaml (4719a7d)
 **Priority**: P3 (Low)
 **Severity**: Minor
 **Category**: Feature
