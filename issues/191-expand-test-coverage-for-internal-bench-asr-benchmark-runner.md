@@ -1,6 +1,6 @@
 # 191 — Expand test coverage for internal/bench ASR benchmark runner
 
-**Status**: Open
+**Status**: Closed — Expanded internal/bench test coverage to 79.3% in commit 13d8f68
 **Priority**: P3 (Low)
 **Severity**: Minor
 **Category**: Code Quality / Test Coverage
