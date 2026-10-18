@@ -1,6 +1,6 @@
 # GitHub CI: parallel jobs, timing summary, flake hunt
 
-Status: In Progress — owned by the Claude cloud agent (ccr branch)
+Status: Closed — single job kept (split was slower), race step reports through gotest-report (run 39027438240); fast-forwarded to main
 
 Scope: .github/ only — same design as harnez issue 809 (no flake workflow:
 the sprint scopes the flake hunt to harnez and loom).
