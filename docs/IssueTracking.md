@@ -1,7 +1,7 @@
 <!-- harnez:variant=lite -->
 # Issue Tracking Rules (Lite)
 
-In-repo tracker in `issues/`, one file per ticket (`issues/NNN-kebab-case-title.md`). Full doc with rationale: `harnez docs variant issue-tracking full`.
+In-repo tracker in `issues/`, one file per ticket (`issues/NNN-kebab-case-title.md` or `issues/GH<n>-kebab-case-title.md`). Full doc with rationale: `harnez docs variant issue-tracking full`.
 
 ## 1. Priority Schema — Scheduling Urgency
 
@@ -23,8 +23,13 @@ In-repo tracker in `issues/`, one file per ticket (`issues/NNN-kebab-case-title.
 ### 3.1 Allocation & Status CLI
 - `harnez find issues next [--json]` — Read-only next free number (`max(allocated)+1`). Never ad hoc shell (`ls | grep`).
 - `harnez issues new ["Title"] [--json]` — Atomically reserve number + create placeholder with `O_CREATE|O_EXCL`. Write directly to printed path.
+- Cloud agents use `harnez issues new --remote "Title"`: authenticated `gh issue create` on the repo's `github` remote allocates permanent `GH<n>`, writes `issues/GH<n>-<slug>.md` with `# GH<n> — Title`, and links the GitHub body to that path. Missing/unauthenticated gh fails; no local fallback counter. Failures after creation identify the existing GitHub issue.
+- Setting `CLAUDE_CODE_REMOTE` (including empty) selects remote mode automatically. `new` prints the selected mode to stderr. GH IDs cannot be renumbered; local next-number allocation ignores them.
+- All status verbs, show/find/index/lint accept both namespaces: `GH42` and `gh42` select GH42; `42` stays local 042. README sorts local tickets first, then GH IDs numerically. Duplicate GH IDs are errors; reconcile the files preserving the ID (local renumber repair below does not apply).
 - `harnez issues <verb> <n> [reason]` — Update Status, regenerate index, commit in one step (`open`, `start`, `block` [reason req], `close`, `done` [alias for close], `draft`).
-- `harnez issues mv <old> [new]` — Renumber ticket, rename file, rewrite title header, resync index.
+- `harnez issues close <n> [reason]` (or `done`) — Already Closed: exit 0, preserve existing reason, no writes or commit. Use `--amend-reason` to explicitly correct the reason in one commit; requires an already-Closed ticket.
+- `harnez issues mv <old> [new]` — Renumber ticket, rename file, rewrite title header and exact filename references in issues/ and docs/, resync index, commit. Bare numbers stay unchanged.
+- Duplicate numbers after a merge: `harnez index` and `harnez status` fail with all colliding paths. Run `harnez issues mv -d . issues/NNN-extra-ticket.md` for each extra file (next free number by default); use the path because the number is ambiguous. If the title lacks a number, add `# NNN — Title` before retrying.
 - `harnez issues list [filter]` — List matching tickets (default `is:open`).
 
 ### 3.2 Metadata Header (Top of Every Ticket)

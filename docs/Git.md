@@ -33,13 +33,19 @@ commonly stored in an `AGENTS.md` file at the repository root.
 - Do not commit PII.
 
 ## Remotes
-- Canonical origin: `codeberg.org/<username>/<reponame>`.
-- A "mirror" may exist at `github.com/<same-username>/<same-repo>`.
-- The mirror's default branch is kept in sync via Codeberg's platform sync — do not push it there directly.
-- The mirror may carry contributor branches so GitHub users can contribute there.
+- Two dev remotes: Codeberg (`codeberg.org/<username>/<reponame>`) and GitHub (same path).
+  Development happens on both; neither is a mirror.
+- Codeberg is canonical for releases: `go get` resolves there, so tags go to Codeberg first.
+- Keep both `main` branches equal: every `main` update fast-forwards and goes to both remotes.
+  Never force either `main`; never set a push mirror (it overwrites the other side).
 
-Only if explicitly asked:
-- push to the mirror to keep it in sync
-- pull from mirror contributor branches to integrate contributions
+### Branches from either remote
+Cloud agents (Claude Code web, Jules, Codex) usually work on GitHub branches.
+- At start and before the final push, merge Codeberg `main`:
+  `git fetch https://codeberg.org/<username>/<reponame> main && git merge FETCH_HEAD`.
+- Reserve ticket numbers after that fetch; on a clash, renumber yours.
+- Integrate by fast-forward, then push `main` (and tags) to both remotes
+  (`<cb>`/`<gh>` = your remote names, e.g. `origin`/`github`):
+  `git merge --ff-only <branch> && git push <cb> main && git push <gh> main`.
 
 <!-- harnez:stop -->

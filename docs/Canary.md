@@ -192,5 +192,17 @@ defeats its purpose as an isolated, stable probe of an environment mechanism.
 "Done." proves nothing about the mechanism. Assert the side effect instead:
 a record in a log, a file on disk, a measured number that changed. (harnez
 issue 594: `/compact` sent as a Codex prompt only produced the reply text.)
+The same holds for a tool's own status field: Claude reports a failed `/compact`
+as `result` subtype `success` with an error in the text (harnez issue 673).
+
+**Probing agent CLIs with an expensive model.** Live probes and verification runs
+of an agent CLI test the mechanism, not the model. Use the provider's cheapest
+model: `haiku` for Claude (`claude:haiku:low` in harnez). Use a stronger model
+only when the mechanism itself depends on the model.
+
+**Probing with a hand-written command line.** Run the exact argv the code sends,
+copied from the code or a debug log, not an equivalent you typed. (harnez issue
+673: probes with `--model sonnet` worked, while the code sent `--model ""` and
+every Claude `/compact` failed with a 400 that Claude reported as success.)
 
 <!-- harnez:stop -->

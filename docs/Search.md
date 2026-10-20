@@ -10,7 +10,7 @@ Use Harnez finders for code and documentation discovery before broad shell searc
 - `harnez find docs "query"` searches documentation; built-in fuzzy matching remains available.
 - Use `--via <name>` to select one configured finder, `-k N` to limit results, and `--json` or `--jsonl` for structured output. MCP clients can use `harnez_find` with the same scopes and result fields.
 - A result contains `path`, `line`, `title`, `snippet`, `score`, and `kind`. Scores express merged rank and are not comparable across separate searches.
-- Check finder status diagnostics when results may be partial. A timeout, backend error, or unindexed neus root appears separately from successful results.
+- Check finder status diagnostics when results may be partial. A timeout, backend error, or unindexed neus root appears separately from successful results; status `partial` means rg skipped unreadable paths but kept its matches. Errors name the failing command, exit status and stderr.
 - Do not repeat the same query to refresh an index. neus indexes itself on first use when its root is not indexed.
 
 ## Use `rg` directly

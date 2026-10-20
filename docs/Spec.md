@@ -148,6 +148,7 @@ Integrity tests ensure that code and specifications remain in lockstep.
 - **Handler completeness**: Assert that every action identifier present in the spec maps to an implemented code branch/handler.
 - **No unused spec entries**: Assert that every defined item is referenced in the active configuration or layout.
 - **Loader fidelity**: Verify that loaders read directly from the embedded spec without falling back to hidden default maps.
+- **Read values, don't copy them**: Tests that need a changeable spec value (a default, a model name) should read it from the embedded spec. A literal copy in a test breaks on every deliberate spec edit.
 
 ### Spec Modifications & Agent Test Alignment
 - **Spec is Intent**: If a spec file in `spec/*.yaml` has been modified (check `git log` and file modification time), agents must assume the spec reflects deliberate user intent.

@@ -3,7 +3,7 @@
 
 `harnez release` + `goreleaser` + `minisign` + Forgejo (`fj`). Language-agnostic: Go is the
 common case, but Python/Zig/Rust and compile-nothing projects release the same way. Full doc
-carries the rationale and worked examples.
+carries the rationale and worked examples: `harnez docs variant gorelease full`.
 
 ## 1. Prerequisites — in `$PATH`
 
@@ -130,6 +130,14 @@ harnez release --continue        # resume a failed/interrupted publish
 DON'T delete or move tags when GoReleaser succeeded or tags were pushed but publishing hit a
 network/forge error — `--continue` resumes safely.
 
+`--continue` skips build and signing when `dist/SHA256SUMS`, its `.minisig`, and all
+listed archives for this version exist and their hashes verify. Missing files rebuild;
+checksum corruption fails. Before upload, fj lists existing assets and downloads
+published `SHA256SUMS`: existing names print `exists, skipped`; differing checksum
+sets fail for manual recovery without deleting remote assets. A nonempty release
+without `SHA256SUMS` also stops. Runtime errors suppress usage; auth failures suggest
+`fj auth login`, followed by `harnez release --continue`.
+
 ### 4.1 `go.work` and local co-development
 
 Build step forces `GOWORK=off` by default: an enclosing `go.work` silently substitutes an
@@ -153,6 +161,9 @@ Automatic drift catch: the `check` target (this project's `Makefile` and
 harmless with no `go.work` active, catches this bug at `make check` time instead of release
 time. `check-fast` intentionally does NOT force it, so the inner loop can still test against an
 uncommitted sibling checkout.
+
+**Pitfall — `@latest` lags right after a release:** the Go proxy caches `@latest` for a while
+after a new tag. Right after a release, `go install <module>@vX.Y.Z` with the exact version.
 
 ## 5. Non-Go / scripted projects
 
@@ -212,6 +223,8 @@ harnez release --build-cmd "make dist"
 - **Published assets**: publish attaches everything in `dist/` matching `*.tar.gz`, `*.zip`,
   `*.minisig`, `SHA256SUMS`, `<project>-*`. A scripted project ends up with the same three
   assets as a Go one: tarball, `SHA256SUMS`, `SHA256SUMS.minisig`.
+- **Pitfall**: publish still fails when `dist/` is missing or has no matching file, so a
+  repo without artifacts cannot be released yet (harnez issue 734).
 
 ## 6. Exit criteria — assert link liveness, not link presence
 

@@ -1,4 +1,4 @@
-**Before any work, read all Harnez rules in one call: `harnez read .harnez/rules/Tools.md .harnez/rules/Issues.md .harnez/rules/Quota.md .harnez/rules/Subagents.md .harnez/rules/Output.md .harnez/rules/Local.md`. This follows Index.md order; Local.md overrides the other rules.**
+**Once per session, before your first task, read all Harnez rules in one call: `harnez read .harnez/rules/Tools.md .harnez/rules/Issues.md .harnez/rules/Quota.md .harnez/rules/Subagents.md .harnez/rules/Output.md .harnez/rules/Local.md`. Skip this if you already read them in this session. This follows Index.md order; Local.md overrides the other rules.**
 
 Adhere to the following conventions.
 
@@ -61,6 +61,8 @@ Docs in `./docs/` are managed by harnez. <!-- harnez:bundled -->
   harnez find code/docs, finder configuration, partial results, and rg fallback
 - Spec system @docs/Spec.md,
   YAML spec files as single source of truth; Go code must not duplicate spec values
+- Test Tiers @docs/TestTiers.md,
+  make lint / test-pkg / test-short / test / container-test; no sleeps, raceFactor budgets, PTY tests in the full tier
 <!-- harnez:end Language Conventions -->
 
 ## Workspace (uman)

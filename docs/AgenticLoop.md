@@ -6,8 +6,7 @@ weight: 40
 
 # Agentic Loop Practices — Lite
 
-Tagline-only variant. Same rules as the full doc, no prose/case-studies. See
-`AgenticLoop.md` (`harnez docs variant <name> full`) for rationale and examples.
+Tagline-only variant. Same rules as the full doc, no prose/case-studies. See `AgenticLoop.md` (`harnez docs variant agentic-loop full`) for rationale and examples.
 
 ## 1. Core Invariants
 For TUI layout work, use a checked-in `.ansi` mockup under `docs/data/` as the visual spec; have the host draft it and dispatch implementation against it. See `TUIDesign.md` for details.
@@ -20,21 +19,22 @@ For TUI layout work, use a checked-in `.ansi` mockup under `docs/data/` as the v
 6. **Context Discipline & Range-Bounded Ingestion** — never whole-file-read `AGENTS.md`/active system rules; avoid native tool slices on >100 line files; use `harnez read -L`/`-n` via CLI (`harnez read -I` is paused until issue 543, a memory blow-up, is fixed).
 7. **Media & Demo Verification Gate** — **always ask the user for explicit confirmation** of recorded output before publishing/embedding.
 8. **Deployment Transparency — 3-State Grounding (when applicable)** — **Local State**, **Deployed Artifact State**, and **Active Daemon State** are independent; local build/test proves nothing about the other two (remote-deploying projects only).
-9. **One-Level Delegation** — `harnez agent --role orchestrator|developer|reviewer|advisor`: only an orchestrator starts helpers (one writer at a time); developers, reviewers and advisors are leaf workers that never run `harnez agent`, native subagents or delegating skills. harnez enforces it. Live checks that need an agent session are run by the orchestrator.
+9. **One-Level Delegation** — `harnez agent --role orchestrator|developer|reviewer|advisor`: only an orchestrator starts helpers (one writer at a time); developers, reviewers and advisors are leaf workers that never run `harnez agent`, native subagents or delegating skills. harnez enforces it. Live checks that need an agent session are run by the orchestrator. **Completion Evidence**: host verifies every worker's "done" report with `git show --stat <commit>` and the built output; ticket-closing workers cite the commit that changed non-issue files.
 
 ### Multi-session peer assistance
 `/peer-assistant` uses available native session messaging for explicit peer requests; it does not imply an always-on watcher. Persist handoffs and findings in tickets/docs, keep one writer per workspace, and track/clean up helpers.
+Tickets carry the work; messages (`harnez agent send`) only nudge: "see ticket N in repo X".
 
 ## 2. The 5-Phase Sprint Loop
-Each phase's **Mechanics** and **Constraints** are summarized inline below; see the full doc for step-by-step detail.
-- **### Phase 1: Parallel Advisory Discovery (Read-Only)** — concurrent read-only advisors find exact line ranges, return plans; never write or spawn side effects. **Kickoff & Commit Policy**: agree upfront whether subagents commit directly or return diffs.
-- **### Phase 2: Sequential Development & Test Verification (Single-Threaded)** — one ticket at a time, TDD, workspace stays green every step. **Repro-before-fix for defect-shaped tickets**: bug/race tickets need a numeric baseline before the fix, not just passing gates. **Commit stale/failed work before discarding it**: commit/branch an abandoned attempt before reverting, except trivial one-liners. **Model selection:** escalate tier on ambiguity/architecture/security/scope growth, never trade away verification for speed.
-- **### Phase 3: Pre-Commit Review Gate (Independent Reviewer)** — reviewer checks Test Assertion Rigor, **Docs & Ticket Sync**, **Backward Compatibility & Invariants**, **Token Efficiency & Code Clarity**, **Live/Real-Environment Verification for hooks & env-resolution features** (unit tests alone don't prove it live), **Root Cause vs. Symptom** for defensive fixes. Exit condition: commit or explicit user authorization — not "reviewed and left uncommitted."
-- **### Phase 4: Process & Subagent Hygiene (Teardown & Drain)** — inspect and kill/drain lingering tasks, timers, subagents.
-- **### Phase 5: Agentic Flow Quality Retrospective (Learning Capture)** — record friction in a durable doc/ticket; sync tracker (`issues/README.md`, `harnez status`/`index`); **Single Status field per ticket** kept in sync everywhere; **Closing gate**: close shipped+verified tickets before ending; `git status` before the retro.
+Each phase's **Mechanics** and **Constraints** are summarized inline below; see `(harnez docs variant agentic-loop full)` for step-by-step detail.
+- **Phase 1: Parallel Advisory Discovery (Read-Only)** — concurrent read-only advisors find exact line ranges, return plans; never write or spawn side effects. **Kickoff & Commit Policy**: agree upfront whether subagents commit directly or return diffs.
+- **Phase 2: Sequential Development & Test Verification (Single-Threaded)** — one ticket at a time, TDD, workspace stays green every step. **Repro-before-fix for defect-shaped tickets**: bug/race tickets need a numeric baseline before the fix, not just passing gates. **Commit stale/failed work before discarding it**: commit/branch an abandoned attempt before reverting, except trivial one-liners. **Model selection:** escalate tier on ambiguity/architecture/security/scope growth, never trade away verification for speed.
+- **Phase 3: Pre-Commit Review Gate (Independent Reviewer)** — reviewer checks Test Assertion Rigor, **Docs & Ticket Sync**, **Backward Compatibility & Invariants**, **Token Efficiency & Code Clarity**, **Live/Real-Environment Verification for hooks & env-resolution features** (unit tests alone don't prove it live), **Root Cause vs. Symptom** for defensive fixes. Exit condition: commit or explicit user authorization — not "reviewed and left uncommitted."
+- **Phase 4: Process & Subagent Hygiene (Teardown & Drain)** — inspect and kill/drain lingering tasks, timers, subagents.
+- **Phase 5: Agentic Flow Quality Retrospective (Learning Capture)** — record friction in a durable doc/ticket; sync tracker (`issues/README.md`, `harnez status`/`index`); **Single Status field per ticket** kept in sync everywhere; **Closing gate**: close shipped+verified tickets before ending; `git status` before the retro.
 
-## 3. Lean Fresh-Handoff Pattern (`/lean-sprint`)
-For a single focused ticket: **Clean Goal Handoff** (one objective; **Trust the Base Framework** — don't restate base rules already in the system prompt; stay responsive) → **Autonomous Execution & Self-Verification** → **Confidence-Gated Inline Review** (skip a formal reviewer when tests pass and confidence is high; escalate on cross-subsystem risk) → **Fast Hygiene** / **Fast Hygiene & Status Sync** (kill children immediately). ### Workflow Selection Matrix: **Overhead** and **Host Responsiveness** both favor the full 5-phase loop for multi-ticket/major/broad work; lean fresh-handoff for one ticket/bug fix.
+## 3. Two-Agent Lean Sprint (`/lean-sprint`)
+For a single focused ticket: Host Orchestrator (**zero coding, no exploratory repo digging, diff-first review**) → Cheap Searcher (`luna:low` / `luna-search`; bounded read-only audits, questions, API/spec exploration) → Focused Developer (`luna:high` / `sol:low`; TDD, unit tests, verification, milestone commits) → Host review and hygiene. Prefer `luna` first; use `sol` when stronger judgment is needed; avoid `agy` models for developer work. Maintain a running report in `docs/studies/` when present; otherwise, keep the same progress notes in the target issue as a fallback. Use a date-prefixed `two-agent-lean-sprint` filename and short task slug, recording findings, milestones, verification, and token/time observations. Use prompt files for long or complex handoffs. The legacy single-developer workflow remains available via `/lean-sprint-v1`.
 
 ## 4. Calibrated Friction Reporting
 **Substantive Sessions Only** (real hurdles, not routine) · **Zero Repetitive Noise** (no boilerplate on known quirks) · **Actionable Root Causes** (blocker, failure mode, workaround tried, recommended fix).
@@ -62,6 +62,7 @@ For a single focused ticket: **Clean Goal Handoff** (one objective; **Trust the 
 - **Baking Real Credentials In For A Fast Dev Loop** — no real hostnames/MACs/credentials "temporarily"; use RFC-1918/example values + a secret scanner from commit one.
 - **Orphaned Background Tasks** — leftover `tail -f`/watch loops/timers after work is done.
 - **Shell `&` Detaching** — never `&`/`nohup`/`disown` a command; use the harness's tracked background facility.
+- **Machine-Background Workers** — run `HTO=0 harnez agent start/resume` as one session-background job (Claude Code: Bash `run_in_background: true`, finish within 30 minutes; AGY: `run_command` with small `WaitMsBeforeAsync`; Codex: `exec_command` + `write_stdin` until exit). Your own background tool is the only completion signal; no polling. See `harnez agent start --help`.
 - **Lost Context / Ephemeral-Only Retrospectives** — friction/bugs discussed in chat but never written to a durable doc/ticket.
 - **Rubber-Stamp Reviews** — a review that doesn't actually inspect assertions or diffs.
 - **Unbounded Doc Ingestion** — whole-file-reading `AGENTS.md`/bundled docs already in the active prompt.
