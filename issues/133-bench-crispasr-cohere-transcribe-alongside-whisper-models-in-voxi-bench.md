@@ -1,6 +1,6 @@
 # 133 — Bench Cohere Transcribe via crispasr alongside whisper models in voxi bench
 
-**Status**: Open
+**Status**: Closed — Added crispasr Cohere Transcribe model to voxi bench with non-aborting multi-engine dispatch, build/run backend detection, and passing tests
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Performance
