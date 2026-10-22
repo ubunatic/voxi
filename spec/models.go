@@ -221,6 +221,28 @@ func (s *ModelSpec) ResolveModel(name string, gpuAvailable bool) (resolved strin
 	return m.CPUFallback, true, nil
 }
 
+// Engine identifiers used across models.yaml and runtime engine drivers.
+const (
+	EngineWhisper          = "whisper"
+	EngineCohereTranscribe = "cohere-transcribe"
+	EngineOpenAITranscribe = "openai-transcribe"
+)
+
+// Engine returns the engine name for model name (e.g. "whisper",
+// "cohere-transcribe", "openai-transcribe"). If name is not found in
+// models.yaml, it returns "". An empty engine field in the spec defaults to
+// EngineWhisper.
+func (s *ModelSpec) Engine(name string) string {
+	m, ok := s.Models[name]
+	if !ok {
+		return ""
+	}
+	if m.Engine == "" {
+		return EngineWhisper
+	}
+	return m.Engine
+}
+
 // IsWhisperEngine reports whether name resolves to the "whisper" engine
 // (including the legacy empty engine value, which means whisper). An
 // unknown name reports false rather than panicking on a missing map entry.
@@ -229,7 +251,12 @@ func (s *ModelSpec) IsWhisperEngine(name string) bool {
 	if !ok {
 		return false
 	}
-	return m.Engine == "" || m.Engine == "whisper"
+	return m.Engine == "" || m.Engine == EngineWhisper
+}
+
+// IsCohereEngine reports whether name resolves to the "cohere-transcribe" engine.
+func (s *ModelSpec) IsCohereEngine(name string) bool {
+	return s.Engine(name) == EngineCohereTranscribe
 }
 
 // DefaultWhisperModel returns the model name for tooling that is hard-wired
