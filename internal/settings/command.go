@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -106,6 +108,54 @@ func NewCommand(d deps.Dependencies, availableASRModels []string) *cobra.Command
 	testSubCmd.Flags().BoolVar(&asJSON, "json", false, "output diagnostic results as JSON")
 	testSubCmd.Flags().StringVar(&format, "format", "text", "output format: text or json")
 	cmd.AddCommand(testSubCmd)
+
+	setSubCmd := &cobra.Command{
+		Use:   "set KEY VALUE",
+		Short: "Set a configuration setting non-interactively",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			home := d.Getenv("HOME")
+			if home == "" {
+				if h, err := os.UserHomeDir(); err == nil {
+					home = h
+				}
+			}
+			s, err := config.LoadUserSettings(home)
+			if err != nil {
+				return fmt.Errorf("load settings: %w", err)
+			}
+			key := strings.ToLower(strings.ReplaceAll(args[0], "-", "_"))
+			val := args[1]
+			switch key {
+			case "model", "asr_model":
+				s.ASRModel = val
+			case "cleanup_model":
+				s.CleanupModel = val
+			case "llm_cleaner":
+				s.LLMCleaner = val == "true" || val == "1" || val == "on"
+			case "tts", "tts_enabled":
+				s.TTSEnabled = val == "true" || val == "1" || val == "on"
+			case "type_delay_ms":
+				ms, err := strconv.Atoi(val)
+				if err != nil {
+					return fmt.Errorf("invalid milliseconds %q: %w", val, err)
+				}
+				s.TypeDelayMs = ms
+			case "dictation_history", "history":
+				s.DictationHistory = val == "true" || val == "1" || val == "on"
+			case "modifier_gating", "modifiers":
+				s.ModifierGating = val == "true" || val == "1" || val == "on"
+			default:
+				return fmt.Errorf("unknown settings key %q", args[0])
+			}
+			if err := config.SaveUserSettings(home, s); err != nil {
+				return fmt.Errorf("save settings: %w", err)
+			}
+			fmt.Fprintf(d.Stdout, "Setting %s updated to %s\n", args[0], val)
+			return nil
+		},
+	}
+	cmd.AddCommand(setSubCmd)
 
 	cmd.Flags().BoolVarP(&dump, "dump", "d", false, "print current settings non-interactively")
 	cmd.Flags().BoolVarP(&testMode, "test", "t", false, "run end-to-end diagnostic checks on all configured settings and dependencies")

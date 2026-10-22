@@ -146,3 +146,26 @@ func TestCheckASRBackendStateNotApplicable(t *testing.T) {
 		}
 	}
 }
+
+func TestCheckASRBackendStateOfflineAdvice(t *testing.T) {
+	d := deps.DefaultDependencies(nil, nil)
+	d.DialTimeout = func(network, addr string, timeout time.Duration) (net.Conn, error) {
+		return nil, net.ErrClosed
+	}
+
+	state := checkASRBackendState(d, "r2t2-confucius4")
+	if !state.Applicable || state.Online {
+		t.Fatalf("expected Applicable=true and Online=false, got: %+v", state)
+	}
+	if !strings.Contains(state.Advice, "lmcoder") || !strings.Contains(state.Advice, "voxi doctor --fix") {
+		t.Fatalf("expected lmcoder and doctor advice for r2t2-confucius4, got: %q", state.Advice)
+	}
+	if !strings.Contains(state.Warning, state.Advice) {
+		t.Fatalf("expected warning to include advice, got: %q", state.Warning)
+	}
+
+	line := formatASRBackendLine(state)
+	if !strings.Contains(line, "OFFLINE") || !strings.Contains(line, state.Advice) {
+		t.Fatalf("expected rendered line to include OFFLINE and advice, got: %q", line)
+	}
+}

@@ -656,3 +656,14 @@ func TestInstallDownloadFailureProvidesActionableRemediation(t *testing.T) {
 		t.Fatalf("expected detailed actionable error message, got: %s", msg)
 	}
 }
+
+func TestDefaultEffectsRunCapturesStderr(t *testing.T) {
+	e := DefaultEffects()
+	err := e.Run(context.Background(), "sh", "-c", "echo 'permission denied on /usr/local/bin' >&2; exit 1")
+	if err == nil {
+		t.Fatal("expected command to fail")
+	}
+	if !strings.Contains(err.Error(), "permission denied on /usr/local/bin") {
+		t.Fatalf("expected stderr output in error message, got: %v", err)
+	}
+}

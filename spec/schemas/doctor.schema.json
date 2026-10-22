@@ -6,12 +6,12 @@
   "properties": {
     "checks": {
       "type": "array",
-      "minItems": 7,
+      "minItems": 8,
       "items": {
         "type": "object",
         "required": ["id", "title", "order", "repair"],
         "properties": {
-          "id": {"type": "string", "enum": ["services", "default-devices", "bt-card-profile-off", "journal-signals", "coredumps", "mic", "stream-routing"]},
+          "id": {"type": "string", "enum": ["services", "default-devices", "bt-card-profile-off", "journal-signals", "coredumps", "mic", "stream-routing", "asr-engine"]},
           "title": {"type": "string", "minLength": 1},
           "order": {"type": "integer", "minimum": 1},
           "repair_order": {"type": "integer", "minimum": 1},

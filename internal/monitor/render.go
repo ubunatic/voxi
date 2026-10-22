@@ -670,7 +670,11 @@ func formatASRBackendLine(s ASRBackendState) string {
 	if s.Online {
 		return fmt.Sprintf("\x1b[32masr: %s @ %s (online)\x1b[0m", s.Engine, addr)
 	}
-	return fmt.Sprintf("\x1b[31;1masr: %s @ %s (OFFLINE)\x1b[0m", s.Engine, addr)
+	line := fmt.Sprintf("\x1b[31;1masr: %s @ %s (OFFLINE)\x1b[0m", s.Engine, addr)
+	if s.Advice != "" {
+		line += fmt.Sprintf(" \x1b[33m[%s]\x1b[0m", s.Advice)
+	}
+	return line
 }
 
 func actionKeyAndLabel(id string) (key, short string) {

@@ -365,6 +365,7 @@ type ASRBackendState struct {
 	Endpoint   string
 	Binary     string
 	Warning    string
+	Advice     string
 }
 
 // checkASRBackendState resolves modelName's engine and, for the
@@ -417,12 +418,26 @@ func checkASRBackendState(d deps.Dependencies, modelName string) ASRBackendState
 	}
 
 	online, warning := probeASRBackendState(d, baseURL)
+	advice := ""
+	if !online {
+		if model.Manager == "lmcoder" || strings.Contains(baseURL, ":8735") {
+			advice = "check 'lmcoder status' or 'systemctl --user status lmcoder-proxy'; run 'voxi doctor --fix'"
+		} else if modelName == "r2t2-confucius4-voxi" || strings.Contains(baseURL, ":18131") {
+			advice = "run 'systemctl --user restart voxi-r2t2' or 'voxi doctor --fix'"
+		} else {
+			advice = "run 'voxi doctor --fix'"
+		}
+		if warning != "" && advice != "" {
+			warning += fmt.Sprintf(" — %s", advice)
+		}
+	}
 	return ASRBackendState{
 		Applicable: true,
 		Online:     online,
 		Engine:     model.Engine,
 		Endpoint:   baseURL,
 		Warning:    warning,
+		Advice:     advice,
 	}
 }
 

@@ -79,7 +79,7 @@ type HostDoctor struct {
 
 // CheckIDs is the set of check IDs dispatched by the implementation.
 func CheckIDs() []string {
-	return []string{"services", "default-devices", "bt-card-profile-off", "journal-signals", "coredumps", "mic", "stream-routing"}
+	return []string{"services", "default-devices", "bt-card-profile-off", "journal-signals", "coredumps", "mic", "stream-routing", "asr-engine"}
 }
 
 // Run executes the six checks in spec order and returns their report.
@@ -118,6 +118,8 @@ func (d HostDoctor) check(ctx context.Context, check spec.DoctorCheck, opts Opti
 		return d.checkMic(ctx, check, opts.PWDump), nil
 	case "stream-routing":
 		return d.checkRouting(ctx, check, opts.NoProbe, opts.PWDump), nil
+	case "asr-engine":
+		return d.checkAsrEngine(ctx, check), nil
 	default:
 		return Result{}, fmt.Errorf("doctor: no implementation for check %q", check.ID)
 	}

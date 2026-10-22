@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -104,6 +105,17 @@ func transcribeOpenAIWAV(ctx context.Context, wavPath, baseURL, model, responseF
 	client := &http.Client{}
 	resp, err := client.Do(httpReq)
 	if err != nil {
+		if strings.Contains(baseURL, ":8735") {
+			for _, fallbackURL := range []string{"http://127.0.0.1:18131/v1", "http://127.0.0.1:8749/v1"} {
+				hostPort := strings.TrimPrefix(strings.TrimPrefix(fallbackURL, "http://"), "https://")
+				hostPort = strings.TrimSuffix(hostPort, "/v1")
+				conn, dialErr := net.DialTimeout("tcp", hostPort, 150*time.Millisecond)
+				if dialErr == nil {
+					conn.Close()
+					return transcribeOpenAIWAV(ctx, wavPath, fallbackURL, model, responseFormat, stripBeforeMarker)
+				}
+			}
+		}
 		return "", fmt.Errorf("openai-transcribe: POST %s: %w", reqURL, err)
 	}
 	defer resp.Body.Close()

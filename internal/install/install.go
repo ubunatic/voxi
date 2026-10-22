@@ -72,14 +72,31 @@ func DefaultEffects() Effects {
 		WriteFile: os.WriteFile,
 		Chmod:     os.Chmod,
 		Run: func(ctx context.Context, name string, args ...string) error {
-			return exec.CommandContext(ctx, name, args...).Run()
+			cmd := exec.CommandContext(ctx, name, args...)
+			cmd.Stdin = os.Stdin
+			var stderr bytes.Buffer
+			cmd.Stderr = &stderr
+			if err := cmd.Run(); err != nil {
+				if msg := strings.TrimSpace(stderr.String()); msg != "" {
+					return fmt.Errorf("%w: %s", err, msg)
+				}
+				return err
+			}
+			return nil
 		},
 		RunInteractive: func(ctx context.Context, name string, args ...string) error {
 			cmd := exec.CommandContext(ctx, name, args...)
 			cmd.Stdin = os.Stdin
 			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			return cmd.Run()
+			var stderr bytes.Buffer
+			cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
+			if err := cmd.Run(); err != nil {
+				if msg := strings.TrimSpace(stderr.String()); msg != "" {
+					return fmt.Errorf("%w: %s", err, msg)
+				}
+				return err
+			}
+			return nil
 		},
 		Confirm: confirmOnTTY,
 		RunOutput: func(ctx context.Context, name string, args ...string) (string, error) {
@@ -89,7 +106,15 @@ func DefaultEffects() Effects {
 		RunStdin: func(ctx context.Context, stdin, name string, args ...string) error {
 			cmd := exec.CommandContext(ctx, name, args...)
 			cmd.Stdin = strings.NewReader(stdin)
-			return cmd.Run()
+			var stderr bytes.Buffer
+			cmd.Stderr = &stderr
+			if err := cmd.Run(); err != nil {
+				if msg := strings.TrimSpace(stderr.String()); msg != "" {
+					return fmt.Errorf("%w: %s", err, msg)
+				}
+				return err
+			}
+			return nil
 		},
 		Symlink:           os.Symlink,
 		Remove:            os.Remove,

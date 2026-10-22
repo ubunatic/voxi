@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"ubunatic.com/voxi/internal/config"
 	"ubunatic.com/voxi/spec"
 )
 
@@ -222,6 +223,8 @@ func TestRepairSettlesGraphUsingInjectedClock(t *testing.T) {
 			return commandResult{}
 		case "coredumpctl":
 			return commandResult{output: "No coredumps found."}
+		case "curl":
+			return commandResult{output: "ok"}
 		default:
 			return commandResult{err: fmt.Errorf("unexpected command %s", name)}
 		}
@@ -513,6 +516,8 @@ func healthyHost(t *testing.T) *fixtureHost {
 			return commandResult{}
 		case "coredumpctl":
 			return commandResult{output: "No coredumps found."}
+		case "curl":
+			return commandResult{output: "ok"}
 		default:
 			return commandResult{err: fmt.Errorf("unexpected command %s", name)}
 		}
@@ -656,4 +661,66 @@ func TestSnapshotPrunesOldFiles(t *testing.T) {
 	if len(snapshots) != keepCount {
 		t.Fatalf("snapshot count after prune = %d, want %d (%v)", len(snapshots), keepCount, snapshots)
 	}
+}
+
+func TestCheckAsrEngine(t *testing.T) {
+	s, err := spec.LoadDoctor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	check := checkFor(t, s, "asr-engine")
+
+	t.Run("healthy online openai engine", func(t *testing.T) {
+		h := &fixtureHost{run: func(name string, args ...string) commandResult {
+			if name == "curl" {
+				return commandResult{output: "ok"}
+			}
+			return commandResult{err: fmt.Errorf("unexpected: %s", name)}
+		}}
+		res := HostDoctor{Host: h, Spec: s}.checkAsrEngine(context.Background(), check)
+		if res.Status != OK {
+			t.Fatalf("expected status OK, got %+v", res)
+		}
+		if !strings.Contains(res.Detail, "online") {
+			t.Fatalf("expected detail to mention online, got: %s", res.Detail)
+		}
+	})
+
+	t.Run("offline proxy endpoint suggests repairs", func(t *testing.T) {
+		h := &fixtureHost{run: func(name string, args ...string) commandResult {
+			if name == "curl" {
+				return commandResult{err: errors.New("exit status 7")}
+			}
+			return commandResult{err: fmt.Errorf("unexpected: %s", name)}
+		}}
+		res := HostDoctor{Host: h, Spec: s}.checkAsrEngine(context.Background(), check)
+		if res.Status != FAULT {
+			t.Fatalf("expected status FAULT, got %+v", res)
+		}
+		joined := strings.Join(res.Repairs, "\n")
+		if !strings.Contains(joined, "restart lmcoder-proxy.service") || !strings.Contains(joined, "r2t2-confucius4-voxi") {
+			t.Fatalf("expected proxy restart and fallback model in repairs, got: %v", res.Repairs)
+		}
+	})
+
+	t.Run("fallback active warns when primary is back online", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		if err := config.SaveUserSettings(home, &config.UserSettings{ASRModel: "r2t2-confucius4-voxi"}); err != nil {
+			t.Fatal(err)
+		}
+		h := &fixtureHost{run: func(name string, args ...string) commandResult {
+			if name == "curl" {
+				return commandResult{output: "ok"}
+			}
+			return commandResult{err: fmt.Errorf("unexpected: %s", name)}
+		}}
+		res := HostDoctor{Host: h, Spec: s}.checkAsrEngine(context.Background(), check)
+		if res.Status != WARN {
+			t.Fatalf("expected status WARN, got %+v", res)
+		}
+		if len(res.See) == 0 || !strings.Contains(strings.Join(res.See, " "), "voxi-r2t2.service") {
+			t.Fatalf("expected see hints to revert and stop fallback service, got: %v", res.See)
+		}
+	})
 }

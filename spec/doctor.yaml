@@ -95,6 +95,16 @@ checks:
       settle_graph: true
       templates:
         restart: "systemctl --user restart wireplumber"
+  - id: asr-engine
+    title: ASR transcription engine
+    order: 8
+    repair_order: 6
+    repair:
+      prompt: Restart proxy or start local fallback ASR service.
+      templates:
+        restart_proxy: "systemctl --user restart lmcoder-proxy.service"
+        start_fallback: "systemctl --user start voxi-r2t2.service"
+        fallback_model: "voxi settings set model r2t2-confucius4-voxi"
 scripts:
   routing-probe.sh: scripts/routing-probe.sh
 settle:
