@@ -9,6 +9,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"ubunatic.com/voxi/internal/config"
 )
 
 func TestSetModePersistsAndSwitchesBackends(t *testing.T) {
@@ -243,5 +245,31 @@ func TestAgentDaemonTTSAvailableWhenASRFails(t *testing.T) {
 	status := a.Status()
 	if status.Backend.Running {
 		t.Fatalf("expected backend not running, got %+v", status)
+	}
+}
+
+func TestWatchASRFallbackRevert(t *testing.T) {
+	home := t.TempDir()
+	if err := config.SaveUserSettings(home, &config.UserSettings{ASRModel: "r2t2-confucius4-voxi"}); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := config.LoadUserSettings(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.ASRModel != "r2t2-confucius4-voxi" {
+		t.Fatalf("expected fallback model, got %s", s.ASRModel)
+	}
+
+	// Simulate primary recovery
+	s.ASRModel = "r2t2-confucius4"
+	if err := config.SaveUserSettings(home, s); err != nil {
+		t.Fatal(err)
+	}
+
+	reloaded, _ := config.LoadUserSettings(home)
+	if reloaded.ASRModel != "r2t2-confucius4" {
+		t.Fatalf("expected reverted model, got %s", reloaded.ASRModel)
 	}
 }

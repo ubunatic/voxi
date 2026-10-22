@@ -81,10 +81,11 @@ func (d HostDoctor) checkOpenAIASREngine(
 			primaryURL := "http://127.0.0.1:8735/v1/models"
 			if _, primaryErr := d.Host.Run(ctx, "curl", "-s", "-f", "-m", "1", primaryURL); primaryErr == nil {
 				return Result{
-					ID:     c.ID,
-					Status: WARN,
-					Detail: fmt.Sprintf("running fallback %s, but primary ASR endpoint (127.0.0.1:8735) is online", modelName),
-					See:    []string{"voxi settings set model " + modelSpec.DefaultModel, "systemctl --user stop voxi-r2t2.service"},
+					ID:      c.ID,
+					Status:  WARN,
+					Detail:  fmt.Sprintf("running fallback %s, but primary ASR endpoint (127.0.0.1:8735) is online", modelName),
+					See:     []string{"voxi settings set model " + modelSpec.DefaultModel, "systemctl --user stop voxi-r2t2.service"},
+					Repairs: []string{"voxi settings set model " + modelSpec.DefaultModel, "systemctl --user stop voxi-r2t2.service"},
 				}
 			}
 		}

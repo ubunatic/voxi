@@ -43,7 +43,7 @@ func (d HostDoctor) Repair(ctx context.Context, report Report, opts Options, in 
 	appliedEffects := map[string]bool{}
 	for _, check := range order {
 		idx := report.index(check.ID)
-		if idx < 0 || report.Checks[idx].Status != FAULT || len(report.Checks[idx].Repairs) == 0 {
+		if idx < 0 || (report.Checks[idx].Status != FAULT && report.Checks[idx].Status != WARN) || len(report.Checks[idx].Repairs) == 0 {
 			continue
 		}
 		current := report.Checks[idx]

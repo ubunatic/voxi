@@ -142,6 +142,13 @@ func (r Report) print(w io.Writer, fixMode bool) {
 			for _, hint := range check.See {
 				fmt.Fprintf(w, "  see: %s\n", hint)
 			}
+			for _, repair := range check.Repairs {
+				if fixMode {
+					fmt.Fprintf(w, "  repair: %s\n", repair)
+				} else {
+					fmt.Fprintf(w, "  repair (printed, not run): %s\n", repair)
+				}
+			}
 		}
 		if check.Status == FAULT {
 			for _, repair := range check.Repairs {
