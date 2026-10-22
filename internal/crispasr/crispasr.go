@@ -1,12 +1,15 @@
 package crispasr
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 
 	"ubunatic.com/voxi/internal/deps"
 )
@@ -53,11 +56,23 @@ func TranscribeArgs(modelPath, wavPath string) []string {
 // TranscribeArgsWithThreads returns the CLI arguments for crispasr transcription
 // with an explicit thread count.
 func TranscribeArgsWithThreads(modelPath, wavPath string, threads int) []string {
+	return TranscribeArgsWithBackend(modelPath, wavPath, threads, "")
+}
+
+// TranscribeArgsWithBackend returns the CLI arguments for crispasr transcription
+// with an explicit thread count and backend selection ("cpu" or "gpu" or empty).
+// If backend is "cpu", "-ng" (no-gpu) is included.
+func TranscribeArgsWithBackend(modelPath, wavPath string, threads int, backend string) []string {
 	threadStr := fmt.Sprintf("%d", threads)
 	if threads <= 0 {
 		threadStr = "6"
 	}
-	return []string{"-m", modelPath, "--backend", "cohere", "-t", threadStr, "--language", "en", "-np", "-nt", "-f", wavPath}
+	args := []string{"-m", modelPath, "--backend", "cohere", "-t", threadStr}
+	if backend == "cpu" {
+		args = append(args, "-ng")
+	}
+	args = append(args, "--language", "en", "-np", "-nt", "-f", wavPath)
+	return args
 }
 
 // EnsureWeights returns the local path to the Cohere Transcribe GGUF weights,
@@ -151,4 +166,82 @@ func DownloadFile(ctx context.Context, url, path string, minBytes int64) error {
 		return fmt.Errorf("install %s: %w", path, err)
 	}
 	return nil
+}
+
+var ggmlBackendsLineRe = regexp.MustCompile(`(?i)^\s*ggml backends\s*:\s*(.+)$`)
+var runBackendsBannerRe = regexp.MustCompile(`\[backends:\s*([^\]]+)\]`)
+
+// ParseBuildBackends parses the "ggml backends : ..." line from
+// `crispasr --version` or `crispasr --diagnostics` output.
+// It returns a list of lower-cased backend names (e.g. ["cpu"], ["cpu", "vulkan"]).
+func ParseBuildBackends(versionOrDiagOutput string) []string {
+	var backends []string
+	scanner := bufio.NewScanner(strings.NewReader(versionOrDiagOutput))
+	for scanner.Scan() {
+		line := scanner.Text()
+		m := ggmlBackendsLineRe.FindStringSubmatch(line)
+		if len(m) == 2 {
+			parts := strings.Split(m[1], ",")
+			for _, p := range parts {
+				trimmed := strings.ToLower(strings.TrimSpace(p))
+				if trimmed != "" {
+					backends = append(backends, trimmed)
+				}
+			}
+			break
+		}
+	}
+	return backends
+}
+
+// HasGPUBackend reports whether any GPU-capable backend (such as cuda, vulkan, metal, rocm)
+// is listed in the build backends.
+func HasGPUBackend(versionOrDiagOutput string) bool {
+	for _, b := range ParseBuildBackends(versionOrDiagOutput) {
+		if b != "cpu" && b != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// DetectRunBackend inspects the output/stderr emitted by crispasr during execution
+// (such as `crispasr 0.8.41 (git 340d7085, Release) [backends: cpu]`), or lines from
+// --diagnostics / --version, and returns the reported backend prefixed with "crispasr:"
+// (e.g. "crispasr:cpu", "crispasr:vulkan", "crispasr:cuda").
+// If no backend can be determined, it returns "crispasr:unknown".
+func DetectRunBackend(output string) string {
+	// First check runtime startup banner: [backends: <list>]
+	if m := runBackendsBannerRe.FindStringSubmatch(output); len(m) == 2 {
+		parts := strings.Split(m[1], ",")
+		var cleaned []string
+		for _, p := range parts {
+			c := strings.ToLower(strings.TrimSpace(p))
+			if c != "" {
+				cleaned = append(cleaned, c)
+			}
+		}
+		// If there is a GPU backend (anything other than cpu), prefer it
+		for _, b := range cleaned {
+			if b != "cpu" {
+				return "crispasr:" + b
+			}
+		}
+		if len(cleaned) > 0 {
+			return "crispasr:" + cleaned[0]
+		}
+	}
+
+	// Fallback: check ggml backends line
+	backends := ParseBuildBackends(output)
+	for _, b := range backends {
+		if b != "cpu" {
+			return "crispasr:" + b
+		}
+	}
+	if len(backends) > 0 {
+		return "crispasr:" + backends[0]
+	}
+
+	return "crispasr:unknown"
 }

@@ -104,3 +104,112 @@ func TestEnsureWeightsFileRejectsTruncatedDownload(t *testing.T) {
 		t.Fatal("DownloadFile left a .tmp file behind after a truncated download")
 	}
 }
+
+func TestTranscribeArgsWithBackend(t *testing.T) {
+	// CPU backend should include -ng
+	gotCPU := TranscribeArgsWithBackend("/cache/model.gguf", "/tmp/one.wav", 6, "cpu")
+	wantCPU := []string{"-m", "/cache/model.gguf", "--backend", "cohere", "-t", "6", "-ng", "--language", "en", "-np", "-nt", "-f", "/tmp/one.wav"}
+	if !slices.Equal(gotCPU, wantCPU) {
+		t.Fatalf("TranscribeArgsWithBackend(cpu) = %#v, want %#v", gotCPU, wantCPU)
+	}
+
+	// GPU backend should omit -ng
+	gotGPU := TranscribeArgsWithBackend("/cache/model.gguf", "/tmp/one.wav", 6, "gpu")
+	wantGPU := []string{"-m", "/cache/model.gguf", "--backend", "cohere", "-t", "6", "--language", "en", "-np", "-nt", "-f", "/tmp/one.wav"}
+	if !slices.Equal(gotGPU, wantGPU) {
+		t.Fatalf("TranscribeArgsWithBackend(gpu) = %#v, want %#v", gotGPU, wantGPU)
+	}
+}
+
+func TestParseBuildBackends(t *testing.T) {
+	tests := []struct {
+		name       string
+		fixture    string
+		want       []string
+		wantHasGPU bool
+	}{
+		{
+			name:       "cpu fixture",
+			fixture:    "testdata/version_cpu.txt",
+			want:       []string{"cpu"},
+			wantHasGPU: false,
+		},
+		{
+			name:       "vulkan fixture",
+			fixture:    "testdata/version_vulkan.txt",
+			want:       []string{"cpu", "vulkan"},
+			wantHasGPU: true,
+		},
+		{
+			name:       "cuda fixture",
+			fixture:    "testdata/version_cuda.txt",
+			want:       []string{"cpu", "cuda"},
+			wantHasGPU: true,
+		},
+		{
+			name:       "diagnostics cpu fixture",
+			fixture:    "testdata/diagnostics_cpu.txt",
+			want:       []string{"cpu"},
+			wantHasGPU: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			content, err := os.ReadFile(tc.fixture)
+			if err != nil {
+				t.Fatalf("read fixture %s: %v", tc.fixture, err)
+			}
+			got := ParseBuildBackends(string(content))
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("ParseBuildBackends() = %#v, want %#v", got, tc.want)
+			}
+			if gotGPU := HasGPUBackend(string(content)); gotGPU != tc.wantHasGPU {
+				t.Errorf("HasGPUBackend() = %v, want %v", gotGPU, tc.wantHasGPU)
+			}
+		})
+	}
+}
+
+func TestDetectRunBackend(t *testing.T) {
+	tests := []struct {
+		name   string
+		output string
+		want   string
+	}{
+		{
+			name:   "cpu banner",
+			output: "crispasr 0.8.41 (git 340d7085, Release) [backends: cpu]\n",
+			want:   "crispasr:cpu",
+		},
+		{
+			name:   "vulkan banner with cpu",
+			output: "crispasr 0.8.41 (git 340d7085, Release) [backends: cpu, vulkan]\n",
+			want:   "crispasr:vulkan",
+		},
+		{
+			name:   "cuda banner with cpu",
+			output: "crispasr 0.8.41 (git 340d7085, Release) [backends: cpu, cuda]\n",
+			want:   "crispasr:cuda",
+		},
+		{
+			name:   "fallback to ggml backends line in diagnostics",
+			output: "=== build info ===\n  ggml backends : cpu\n",
+			want:   "crispasr:cpu",
+		},
+		{
+			name:   "unknown output",
+			output: "random output without banner\n",
+			want:   "crispasr:unknown",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := DetectRunBackend(tc.output)
+			if got != tc.want {
+				t.Errorf("DetectRunBackend() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
