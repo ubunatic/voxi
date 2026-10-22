@@ -354,10 +354,10 @@ func main() {
 	var benchJSONPath string
 	benchCmd := &cobra.Command{
 		Use:   "bench",
-		Short: "Benchmark CPU vs GPU transcription speed across configured Whisper models",
-		Long: "Transcribes one audio clip through every whisper-engine model in spec/models.yaml\n" +
-			"(driven via voxtype) on each requested backend, reporting the real-time factor (RTF)\n" +
-			"and speedup for each model x backend pair. Non-whisper engines (e.g. cohere-transcribe)\n" +
+		Short: "Benchmark CPU vs GPU transcription speed across configured ASR models",
+		Long: "Transcribes one audio clip through every whisper-engine and cohere-transcribe model in spec/models.yaml\n" +
+			"(driven via voxtype or crispasr) on each requested backend, reporting the real-time factor (RTF)\n" +
+			"and speedup for each model x backend pair. Unsupported engines (e.g. openai-transcribe)\n" +
 			"are reported as skipped rather than benched. By default it uses a fixed reference clip\n" +
 			"downloaded on demand into the user cache dir (never committed to the repo); pass\n" +
 			"--record for a live microphone clip or --file for a local WAV.",
@@ -384,9 +384,9 @@ func main() {
 	benchCmd.Flags().BoolVar(&benchOpts.Record, "record", benchOpts.Record, "record live microphone audio instead of using the downloaded reference clip")
 	benchCmd.Flags().IntVar(&benchOpts.DurationSecs, "duration", benchOpts.DurationSecs, "seconds of microphone audio to record when --record is set")
 	benchCmd.Flags().StringVar(&benchOpts.WavFile, "file", benchOpts.WavFile, "use this 16kHz mono WAV instead of the reference clip or recording")
-	benchCmd.Flags().StringSliceVar(&benchOpts.Models, "models", benchOpts.Models, "comma-separated model names to bench (default: every whisper-engine model in spec/models.yaml; non-whisper models are reported as skipped)")
+	benchCmd.Flags().StringSliceVar(&benchOpts.Models, "models", benchOpts.Models, "comma-separated model names to bench (default: whisper and cohere models in spec/models.yaml)")
 	benchCmd.Flags().StringSliceVar(&benchOpts.Backends, "backends", benchOpts.Backends, fmt.Sprintf("comma-separated backends to bench: cpu, gpu (default: %s)", strings.Join(benchOpts.Backends, ",")))
-	benchCmd.Flags().IntVar(&benchOpts.Threads, "threads", benchOpts.Threads, "CPU threads passed to voxtype")
+	benchCmd.Flags().IntVar(&benchOpts.Threads, "threads", benchOpts.Threads, "threads passed to voxtype/crispasr")
 	benchCmd.Flags().StringVar(&benchJSONPath, "json", "", "write the full bench report as JSON to this path")
 
 	modelSpec, err := spec.LoadModels()
@@ -423,13 +423,13 @@ func recordHistoryEntry(path, text string, enabled bool) error {
 // printBenchReport renders a CPU-vs-GPU RTF/speedup table grouped by model.
 func printBenchReport(w io.Writer, report *bench.Report) {
 	fmt.Fprintf(w, "\nAudio: %.2fs (%s)\n", report.AudioSecs, report.AudioSource)
-	fmt.Fprintf(w, "%-20s %-10s %8s %10s %s\n", "MODEL", "BACKEND", "RTF", "SPEEDUP", "DETECTED")
+	fmt.Fprintf(w, "%-28s %-10s %8s %10s %s\n", "MODEL", "BACKEND", "RTF", "SPEEDUP", "DETECTED")
 	for _, r := range report.Results {
 		if r.Error != "" {
-			fmt.Fprintf(w, "%-20s %-10s %8s %10s %s\n", r.Model, r.Backend, "-", "-", "error: "+r.Error)
+			fmt.Fprintf(w, "%-28s %-10s %8s %10s %s\n", r.Model, r.Backend, "-", "-", "error: "+r.Error)
 			continue
 		}
-		fmt.Fprintf(w, "%-20s %-10s %8.2f %9.2fx %s\n", r.Model, r.Backend, r.RTF, r.Speedup, r.DetectedBackend)
+		fmt.Fprintf(w, "%-28s %-10s %8.2f %9.2fx %s\n", r.Model, r.Backend, r.RTF, r.Speedup, r.DetectedBackend)
 	}
 }
 

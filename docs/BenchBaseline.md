@@ -35,9 +35,11 @@ checksum-verified into `~/.cache/voxi/bench/`, never committed — see
 | Model | Backend | RTF | Speedup | Detected |
 | :--- | :--- | ---: | ---: | :--- |
 | base.en | gpu | 0.06 | 16.02x | gpu:Vulkan0 |
+| cohere-transcribe-03-2026 | gpu | - | - | error: crispasr build has no GPU backend (ggml backends: cpu) |
 | small.en | gpu | 0.18 | 5.44x | gpu:Vulkan0 |
 | large-v3-turbo | gpu | 0.59 | 1.69x | gpu:Vulkan0 |
 | base.en | cpu | 0.17 | 5.81x | cpu |
+| cohere-transcribe-03-2026 | cpu | 0.82 | 1.22x | crispasr:cpu |
 | small.en | cpu | 0.53 | 1.87x | cpu |
 | large-v3-turbo | cpu | 2.54 | 0.39x | cpu |
 
