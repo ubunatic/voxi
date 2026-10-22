@@ -330,15 +330,32 @@ func TestRecordFixedDurationMockArecord(t *testing.T) {
 	}
 }
 
-func TestRunMissingVoxtype(t *testing.T) {
+func TestRunMissingVoxtypeRecordsErrorRow(t *testing.T) {
+	wavPath := filepath.Join(t.TempDir(), "test.wav")
+	pcm := make([]byte, 16000*2) // 1s
+	if err := audio.WriteWAVAudio(wavPath, pcm, 16000); err != nil {
+		t.Fatal(err)
+	}
+
 	d := deps.Dependencies{
+		Stdout: &bytes.Buffer{},
 		LookPath: func(file string) (string, error) {
 			return "", errors.New("not found")
 		},
 	}
-	_, err := Run(context.Background(), d, Options{})
-	if err == nil || !strings.Contains(err.Error(), "voxtype not found on PATH") {
-		t.Fatalf("expected voxtype not found error, got: %v", err)
+	report, err := Run(context.Background(), d, Options{
+		WavFile:  wavPath,
+		Models:   []string{"base.en"},
+		Backends: []string{"cpu"},
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v, want per-row error result", err)
+	}
+	if len(report.Results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(report.Results))
+	}
+	if !strings.Contains(report.Results[0].Error, "voxtype not found on PATH") {
+		t.Errorf("expected voxtype error row, got: %q", report.Results[0].Error)
 	}
 }
 
@@ -408,8 +425,8 @@ exit 0
 	for _, res := range report.Results {
 		switch res.Model {
 		case "cohere-transcribe-03-2026":
-			if !strings.Contains(res.Error, "uses a non-whisper engine") {
-				t.Errorf("expected non-whisper skip error for cohere, got: %q", res.Error)
+			if !strings.Contains(res.Error, "crispasr not found on PATH") {
+				t.Errorf("expected crispasr not found error for cohere, got: %q", res.Error)
 			}
 		case "large-v3-turbo":
 			if res.Backend == "cpu" {
@@ -474,5 +491,236 @@ exit 1
 	}
 	if !strings.Contains(report.Results[0].Error, "Error: failed to load model weights") {
 		t.Errorf("expected model error line, got: %q", report.Results[0].Error)
+	}
+}
+
+func TestRunDefaultModelsIncludesWhisperAndCohere(t *testing.T) {
+	wavPath := filepath.Join(t.TempDir(), "test.wav")
+	pcm := make([]byte, 16000*2) // 1s
+	if err := audio.WriteWAVAudio(wavPath, pcm, 16000); err != nil {
+		t.Fatal(err)
+	}
+
+	d := deps.Dependencies{
+		Stdout: &bytes.Buffer{},
+		LookPath: func(file string) (string, error) {
+			return "", errors.New("not found")
+		},
+	}
+	report, err := Run(context.Background(), d, Options{
+		WavFile:  wavPath,
+		Backends: []string{"cpu"},
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	hasCohere := false
+	hasWhisper := false
+	for _, res := range report.Results {
+		if res.Model == "cohere-transcribe-03-2026" {
+			hasCohere = true
+		}
+		if res.Model == "base.en" {
+			hasWhisper = true
+		}
+	}
+	if !hasCohere {
+		t.Errorf("expected default models run to include cohere-transcribe-03-2026")
+	}
+	if !hasWhisper {
+		t.Errorf("expected default models run to include base.en")
+	}
+}
+
+func TestRunMissingVoxtypeDoesNotAbortCohere(t *testing.T) {
+	binDir := t.TempDir()
+	crispasrScript := filepath.Join(binDir, "crispasr")
+	scriptContent := `#!/bin/sh
+if [ "$1" = "--version" ]; then
+    echo "=== build info ==="
+    echo "  ggml backends : cpu"
+    exit 0
+fi
+echo "crispasr 0.8.41 (git 340d7085, Release) [backends: cpu]" >&2
+echo "Transcribed by cohere"
+exit 0
+`
+	if err := os.WriteFile(crispasrScript, []byte(scriptContent), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Fake GGUF weights so EnsureWeights doesn't try downloading from HF
+	cacheRoot := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cacheRoot)
+	weightsDir := filepath.Join(cacheRoot, "voxi", "models")
+	if err := os.MkdirAll(weightsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(weightsDir, "cohere-transcribe-q5_0.gguf"), make([]byte, 1024), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	wavPath := filepath.Join(t.TempDir(), "test.wav")
+	pcm := make([]byte, 16000*2) // 1s
+	if err := audio.WriteWAVAudio(wavPath, pcm, 16000); err != nil {
+		t.Fatal(err)
+	}
+
+	d := deps.Dependencies{
+		Stdout: &bytes.Buffer{},
+		LookPath: func(file string) (string, error) {
+			if file == "crispasr" {
+				return crispasrScript, nil
+			}
+			return "", errors.New("not found")
+		},
+	}
+
+	opts := Options{
+		WavFile:  wavPath,
+		Models:   []string{"base.en", "cohere-transcribe-03-2026"},
+		Backends: []string{"cpu"},
+	}
+
+	report, err := Run(context.Background(), d, opts)
+	if err != nil {
+		t.Fatalf("Run() error: %v", err)
+	}
+	if len(report.Results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(report.Results))
+	}
+
+	for _, res := range report.Results {
+		if res.Model == "base.en" {
+			if !strings.Contains(res.Error, "voxtype not found on PATH") {
+				t.Errorf("expected voxtype not found error, got: %q", res.Error)
+			}
+		} else if res.Model == "cohere-transcribe-03-2026" {
+			if res.Error != "" {
+				t.Errorf("expected cohere to succeed, got error: %q", res.Error)
+			}
+			if res.DetectedBackend != "crispasr:cpu" {
+				t.Errorf("expected DetectedBackend crispasr:cpu, got: %q", res.DetectedBackend)
+			}
+		}
+	}
+}
+
+func TestRunCrispasrGPURowOnCPUBuildErrors(t *testing.T) {
+	binDir := t.TempDir()
+	crispasrScript := filepath.Join(binDir, "crispasr")
+	scriptContent := `#!/bin/sh
+if [ "$1" = "--version" ]; then
+    echo "=== build info ==="
+    echo "  ggml backends : cpu"
+    exit 0
+fi
+exit 0
+`
+	if err := os.WriteFile(crispasrScript, []byte(scriptContent), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	wavPath := filepath.Join(t.TempDir(), "test.wav")
+	pcm := make([]byte, 16000*2) // 1s
+	if err := audio.WriteWAVAudio(wavPath, pcm, 16000); err != nil {
+		t.Fatal(err)
+	}
+
+	d := deps.Dependencies{
+		Stdout: &bytes.Buffer{},
+		LookPath: func(file string) (string, error) {
+			if file == "crispasr" {
+				return crispasrScript, nil
+			}
+			return "", errors.New("not found")
+		},
+	}
+
+	opts := Options{
+		WavFile:  wavPath,
+		Models:   []string{"cohere-transcribe-03-2026"},
+		Backends: []string{"gpu"},
+	}
+
+	report, err := Run(context.Background(), d, opts)
+	if err != nil {
+		t.Fatalf("Run() error: %v", err)
+	}
+	if len(report.Results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(report.Results))
+	}
+	res := report.Results[0]
+	if !strings.Contains(res.Error, "crispasr build has no GPU backend (ggml backends: cpu)") {
+		t.Errorf("expected no GPU backend error, got: %q", res.Error)
+	}
+}
+
+func TestRunCrispasrGPUSuccessWithDetectedBackend(t *testing.T) {
+	binDir := t.TempDir()
+	crispasrScript := filepath.Join(binDir, "crispasr")
+	scriptContent := `#!/bin/sh
+if [ "$1" = "--version" ]; then
+    echo "=== build info ==="
+    echo "  ggml backends : cpu, vulkan"
+    exit 0
+fi
+echo "crispasr 0.8.41 (git 340d7085, Release) [backends: cpu, vulkan]" >&2
+echo "Transcribed text on vulkan"
+exit 0
+`
+	if err := os.WriteFile(crispasrScript, []byte(scriptContent), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	cacheRoot := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cacheRoot)
+	weightsDir := filepath.Join(cacheRoot, "voxi", "models")
+	if err := os.MkdirAll(weightsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(weightsDir, "cohere-transcribe-q5_0.gguf"), make([]byte, 1024), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	wavPath := filepath.Join(t.TempDir(), "test.wav")
+	pcm := make([]byte, 16000*2) // 1s
+	if err := audio.WriteWAVAudio(wavPath, pcm, 16000); err != nil {
+		t.Fatal(err)
+	}
+
+	d := deps.Dependencies{
+		Stdout: &bytes.Buffer{},
+		LookPath: func(file string) (string, error) {
+			if file == "crispasr" {
+				return crispasrScript, nil
+			}
+			return "", errors.New("not found")
+		},
+	}
+
+	opts := Options{
+		WavFile:  wavPath,
+		Models:   []string{"cohere-transcribe-03-2026"},
+		Backends: []string{"gpu"},
+	}
+
+	report, err := Run(context.Background(), d, opts)
+	if err != nil {
+		t.Fatalf("Run() error: %v", err)
+	}
+	if len(report.Results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(report.Results))
+	}
+	res := report.Results[0]
+	if res.Error != "" {
+		t.Fatalf("unexpected error: %q", res.Error)
+	}
+	if res.DetectedBackend != "crispasr:vulkan" {
+		t.Errorf("expected DetectedBackend crispasr:vulkan, got: %q", res.DetectedBackend)
+	}
+	if !strings.Contains(res.Text, "Transcribed text on vulkan") {
+		t.Errorf("expected text, got: %q", res.Text)
 	}
 }

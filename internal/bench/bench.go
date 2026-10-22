@@ -40,6 +40,7 @@ import (
 
 	"ubunatic.com/voxi/internal/asr"
 	"ubunatic.com/voxi/internal/audio"
+	"ubunatic.com/voxi/internal/crispasr"
 	"ubunatic.com/voxi/internal/deps"
 	spec "ubunatic.com/voxi/spec"
 )
@@ -118,10 +119,8 @@ func detectBackend(output string) string {
 // (e.g. the "speak now" recording prompt); per-result output is the
 // caller's responsibility.
 func Run(ctx context.Context, d deps.Dependencies, opts Options) (*Report, error) {
-	voxtypePath, err := d.LookPath("voxtype")
-	if err != nil {
-		return nil, fmt.Errorf("voxtype not found on PATH: %w", err)
-	}
+	voxtypePath, voxtypeErr := d.LookPath("voxtype")
+	crispasrPath, crispasrErr := d.LookPath(crispasr.Binary)
 
 	modelSpec, err := spec.LoadModels()
 	if err != nil {
@@ -129,15 +128,9 @@ func Run(ctx context.Context, d deps.Dependencies, opts Options) (*Report, error
 	}
 	models := opts.Models
 	if len(models) == 0 {
-		// bench drives voxtype exclusively (see the package doc comment), so
-		// an auto-selected default run must stick to whisper-engine models;
-		// since issue 074 the registry can carry non-whisper entries (e.g.
-		// cohere-transcribe), which voxtype cannot run. A model explicitly
-		// named via opts.Models still goes through -- it is caught and
-		// reported per-result below instead of silently mis-invoked. See
-		// issue 077.
+		// By default, bench includes whisper models and cohere-transcribe models.
 		for _, name := range modelSpec.Names() {
-			if modelSpec.IsWhisperEngine(name) {
+			if modelSpec.IsWhisperEngine(name) || modelSpec.IsCohereEngine(name) {
 				models = append(models, name)
 			}
 		}
@@ -168,7 +161,9 @@ func Run(ctx context.Context, d deps.Dependencies, opts Options) (*Report, error
 		}
 		defer os.RemoveAll(tmpDir)
 		wavPath = filepath.Join(tmpDir, "bench.wav")
-		fmt.Fprintf(d.Stdout, "Recording %ds of audio for benchmark — speak now...\n", duration)
+		if d.Stdout != nil {
+			fmt.Fprintf(d.Stdout, "Recording %ds of audio for benchmark — speak now...\n", duration)
+		}
 		if err := recordFixedDuration(ctx, d, wavPath, duration); err != nil {
 			return nil, fmt.Errorf("record benchmark audio: %w", err)
 		}
@@ -193,27 +188,53 @@ func Run(ctx context.Context, d deps.Dependencies, opts Options) (*Report, error
 	report := &Report{GeneratedAt: time.Now(), AudioSecs: audioSecs, AudioSource: audioSource}
 	for _, backend := range backends {
 		for _, model := range models {
-			if !modelSpec.IsWhisperEngine(model) {
+			switch {
+			case modelSpec.IsWhisperEngine(model):
+				if voxtypeErr != nil {
+					report.Results = append(report.Results, Result{
+						Model: model, Backend: backend, AudioSecs: audioSecs,
+						Error: fmt.Sprintf("voxtype not found on PATH: %v", voxtypeErr),
+					})
+					continue
+				}
+				if backend == "cpu" && !modelSpec.AllowsCPU(model) {
+					report.Results = append(report.Results, Result{
+						Model: model, Backend: backend, AudioSecs: audioSecs,
+						Error: "skipped: model requires_gpu (see spec/models.yaml)",
+					})
+					continue
+				}
+				report.Results = append(report.Results, runOneWhisper(ctx, voxtypePath, model, backend, threads, wavPath, audioSecs, modelSpec.StopWords(model)))
+
+			case modelSpec.IsCohereEngine(model):
+				if crispasrErr != nil {
+					report.Results = append(report.Results, Result{
+						Model: model, Backend: backend, AudioSecs: audioSecs,
+						Error: fmt.Sprintf("crispasr not found on PATH: %v", crispasrErr),
+					})
+					continue
+				}
+				if backend == "cpu" && !modelSpec.AllowsCPU(model) {
+					report.Results = append(report.Results, Result{
+						Model: model, Backend: backend, AudioSecs: audioSecs,
+						Error: "skipped: model requires_gpu (see spec/models.yaml)",
+					})
+					continue
+				}
+				report.Results = append(report.Results, runOneCohere(ctx, d, crispasrPath, model, backend, threads, wavPath, audioSecs, modelSpec.StopWords(model)))
+
+			default:
 				report.Results = append(report.Results, Result{
 					Model: model, Backend: backend, AudioSecs: audioSecs,
-					Error: fmt.Sprintf("skipped: model %q uses a non-whisper engine; bench only drives voxtype (see spec/models.yaml)", model),
+					Error: fmt.Sprintf("skipped: model %q uses unsupported engine %q (see spec/models.yaml)", model, modelSpec.Engine(model)),
 				})
-				continue
 			}
-			if backend == "cpu" && !modelSpec.AllowsCPU(model) {
-				report.Results = append(report.Results, Result{
-					Model: model, Backend: backend, AudioSecs: audioSecs,
-					Error: "skipped: model requires_gpu (see spec/models.yaml)",
-				})
-				continue
-			}
-			report.Results = append(report.Results, runOne(ctx, voxtypePath, model, backend, threads, wavPath, audioSecs, modelSpec.StopWords(model)))
 		}
 	}
 	return report, nil
 }
 
-func runOne(ctx context.Context, voxtypePath, model, backend string, threads int, wavPath string, audioSecs float64, stopWords []string) Result {
+func runOneWhisper(ctx context.Context, voxtypePath, model, backend string, threads int, wavPath string, audioSecs float64, stopWords []string) Result {
 	result := Result{Model: model, Backend: backend, AudioSecs: audioSecs}
 
 	cmdArgs := []string{"--model", model, "--threads", fmt.Sprintf("%d", threads), "-v", "transcribe", wavPath}
@@ -239,6 +260,66 @@ func runOne(ctx context.Context, voxtypePath, model, backend string, threads int
 		return result
 	}
 	result.Text = asr.CleanWhisperTranscript(output, stopWords)
+	result.RTF = result.TranscribeSecs / audioSecs
+	if result.RTF > 0 {
+		result.Speedup = 1.0 / result.RTF
+	}
+	return result
+}
+
+func runOneCohere(ctx context.Context, d deps.Dependencies, crispasrPath, model, backend string, threads int, wavPath string, audioSecs float64, stopWords []string) Result {
+	result := Result{Model: model, Backend: backend, AudioSecs: audioSecs}
+
+	// 1. Probe crispasr --version for build backends
+	verCmd := exec.CommandContext(ctx, crispasrPath, "--version")
+	var verOut bytes.Buffer
+	verCmd.Stdout = &verOut
+	verCmd.Stderr = &verOut
+	if err := verCmd.Run(); err != nil {
+		result.Error = fmt.Sprintf("crispasr --version failed: %v", err)
+		return result
+	}
+	verStr := verOut.String()
+	buildBackends := crispasr.ParseBuildBackends(verStr)
+
+	// If backend is GPU but build has no GPU backend, fail with clear error
+	if backend == "gpu" && !crispasr.HasGPUBackend(verStr) {
+		backendsDesc := strings.Join(buildBackends, ", ")
+		if backendsDesc == "" {
+			backendsDesc = "none"
+		}
+		result.Error = fmt.Sprintf("crispasr build has no GPU backend (ggml backends: %s)", backendsDesc)
+		return result
+	}
+
+	// 2. Ensure weights are present (timed separately so download is NOT counted towards transcription RTF)
+	weightsPath, err := crispasr.EnsureWeights(ctx, d)
+	if err != nil {
+		result.Error = fmt.Sprintf("ensure weights: %v", err)
+		return result
+	}
+
+	// 3. Run crispasr transcription
+	cmdArgs := crispasr.TranscribeArgsWithBackend(weightsPath, wavPath, threads, backend)
+	cmd := exec.CommandContext(ctx, crispasrPath, cmdArgs...)
+	cmd.Env = append(os.Environ(), "NO_COLOR=1", "RUST_LOG=error")
+	var outBuf bytes.Buffer
+	var errBuf bytes.Buffer
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &errBuf
+
+	start := time.Now()
+	err = cmd.Run()
+	result.TranscribeSecs = time.Since(start).Seconds()
+
+	combinedOutput := errBuf.String() + "\n" + outBuf.String()
+	result.DetectedBackend = crispasr.DetectRunBackend(combinedOutput)
+
+	if err != nil {
+		result.Error = firstErrorLine(combinedOutput, err)
+		return result
+	}
+	result.Text = asr.CleanWhisperTranscript(outBuf.String(), stopWords)
 	result.RTF = result.TranscribeSecs / audioSecs
 	if result.RTF > 0 {
 		result.Speedup = 1.0 / result.RTF
@@ -280,7 +361,9 @@ func fetchAndCacheClip(ctx context.Context, d deps.Dependencies, url, wantSHA256
 		return path, nil
 	}
 
-	fmt.Fprintf(d.Stdout, "Downloading reference clip: %s\n", url)
+	if d.Stdout != nil {
+		fmt.Fprintf(d.Stdout, "Downloading reference clip: %s\n", url)
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return "", fmt.Errorf("build request: %w", err)
