@@ -1,0 +1,11 @@
+=== build info ===
+  version       : 0.8.41
+  git sha       : 340d7085
+  git date      : 2026-10-02T15:21:27Z
+  git subject   : release-_bump_VERSION_to_0.8.41
+  build date    : 2026-10-02T15:52:37Z
+  build type    : Release
+  compiler      : gcc 11.4.0
+  os            : linux
+  arch          : x86_64
+  ggml backends : cpu, cuda
