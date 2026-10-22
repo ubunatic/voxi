@@ -55,6 +55,7 @@ In-depth references for architecture, decisions, and operations of the Voxi Linu
 | [studies/2026-09-26-linux-desktop-tts-reading-pipeline.md](studies/2026-09-26-linux-desktop-tts-reading-pipeline.md) | Text-to-Speech (TTS) engine, GNOME Wayland selection reading hotkeys, LLM document narration, pip-free native Piper ONNX runtime, multi-voice library, and persistent systemd daemon queue ownership with STT recording epoch muting. |
 | [studies/2026-09-27-local-voice-cloning-research.md](studies/2026-09-27-local-voice-cloning-research.md) | Local voice cloning research (2026-09-27) |
 | [studies/2026-10-04-linux-voice-input-and-sample-store-story.md](studies/2026-10-04-linux-voice-input-and-sample-store-story.md) | From voice typing to a maintainable sample store |
+| [studies/2026-10-22-robust-asr-fallbacks-doctor-repairs-and-offline-upstream-resilience.md](studies/2026-10-22-robust-asr-fallbacks-doctor-repairs-and-offline-upstream-resilience.md) | `voxi` (desktop voice typing daemon, monitor, doctor) & `lmcoder` (local/distributed LLM & ASR proxy) |
 <!-- harnez:end docs-studies-index -->
 
 
