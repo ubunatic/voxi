@@ -170,15 +170,35 @@ voxtype/crispasr. Probing is a 300 ms TCP dial rather than `GET /health`, becaus
 `/health` is a llama.cpp route, not part of the OpenAI-compatible surface; the
 result is cached 5 s so the TUI never stalls.
 
-**Placement matters as much as wording**: the first implementation appended the
-line to an already-overflowing daemons line, so it was truncated away and never
-seen. A status line that can be truncated out of view is not a status line.
+**Placement and actionable advice (issue 198)**: when the backend is OFFLINE, the
+monitor explicitly identifies which component provides the endpoint (e.g.
+`lmcoder-proxy.service` vs `voxi-r2t2.service`) and advises running `voxi doctor --fix`
+or inspecting the corresponding systemd unit.
+
+## Robust Fallbacks, Client Failover, and Self-Healing (issues 196, 197)
+
+Multi-tier resilience protects against offline upstream hosts (e.g. `x600` down) and
+backend crashes:
+1. **Lmcoder Proxy Degraded Mode (lmcoder issue 196)**: `lmcoder proxy` tolerates initial
+   SSH tunnel failures at startup when `upstream` is configured, immediately opening port
+   `8735`, serving local models on `GET /v1/models`, and routing ASR requests to the local
+   `lmcoder-asr.service` (port 8749) via `upstream_first: [asr]`.
+2. **Eager Transcription Failover (voxi issue 197)**: If port 8735 fails during an eager
+   dictation session, `transcribeOpenAIWAV` automatically attempts local fallback endpoints
+   (`http://127.0.0.1:18131/v1` and `http://127.0.0.1:8749/v1`) before giving up, ensuring
+   spoken utterances are not dropped.
+3. **Doctor Health & Automated Repair**: `voxi doctor` probes the active ASR engine (`asr-engine`
+   check) and provides concrete repair actions: restarting `lmcoder-proxy.service`, starting
+   `voxi-r2t2.service`, or switching the active model to `r2t2-confucius4-voxi`.
+4. **Automatic Reversion Watchdog**: `voxi-agent.service` runs a background loop that probes
+   primary port 8735 when a fallback model (`r2t2-confucius4-voxi`) is active. As soon as the
+   primary endpoint recovers, it automatically reverts settings to `r2t2-confucius4` and stops
+   `voxi-r2t2.service` to reclaim GPU VRAM and system memory.
+5. **Scriptable Configuration**: `voxi settings set model <name>` provides non-interactive,
+   programmatic model switching without requiring interactive TUI interaction.
 
 ## Open gaps
 
-- No supervision for `llama-server`: it does not survive a reboot. Deliberate —
-  an auto-start path is a second place the `-c` cap can rot — but a user systemd
-  unit carrying the capped command is the intended fix.
 - `voxi bench` and `scripts/speech_context_bench` are whisper-only, so RTF and WER
   cannot be compared across engines in one table (issues 133, and 131 option 2).
 - Keyterms are not wired into the request prompt yet.

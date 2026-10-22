@@ -39,6 +39,18 @@ disables TTS playback/MPRIS. Set it back to `true` and rerun the installer to
 enable TTS again. The `--modifierd` flag remains the separate explicit
 privilege boundary for installing and enabling `voxi-modifierd.service`.
 
+### Privileged Execution & Diagnostic Visibility (issue 198)
+
+When installing privileged components (`--modifierd` system units or TTS system
+packages via `sudo`), the installer's execution layer (`DefaultEffects().Run`,
+`RunInteractive`, `RunStdin`) explicitly connects `os.Stdin` and captures `Stderr`.
+This ensures:
+1. PAM authentication prompts (such as `Place your finger on the fingerprint reader`
+   from `pam_fprintd`, or password requests) remain interactive and visible on the terminal.
+2. In non-interactive or failing runs, stderr is captured and formatted into the returned
+   error (`exit status 1: <stderr output>`) rather than silently swallowed, avoiding
+   cryptic unassisted failures.
+
 The release download script also invokes `voxi install` after placing the
 prebuilt binaries. `make install-all` is a compatibility alias for `make install`;
 `make install-user-services` and `make install-dotoold` are compatibility

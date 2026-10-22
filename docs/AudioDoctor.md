@@ -31,8 +31,15 @@ Exit status: 0 all OK/WARN/SKIP, 1 any FAULT, 2 a check errored.
   `wpctl set-default` and `systemctl --user restart`.
 - **Faults vs evidence.** `journal-signals` and `coredumps` report `WARN` with a `see:` hint. Their
   lines stay in the log after a repair, so they can never clear and must not drive repairs.
-- **Repair order:** services → Bluetooth card profile → defaults → mic → routing. A repair whose
+- **Repair order:** services → Bluetooth card profile → defaults → mic → routing → ASR engine. A repair whose
   effect an earlier one covered (two WirePlumber restarts) is skipped, then re-checked.
+- **ASR Engine Diagnostics (issue 197).** `voxi doctor` verifies the configured transcription engine
+  (OpenAI-compatible HTTP endpoint on 8735/18131, or local `crispasr`/`voxtype` binaries). When the endpoint
+  is unreachable (e.g. `lmcoder-proxy` crashed or upstream `x600` is offline), it reports `FAULT` and
+  offers automated repairs: restarting `lmcoder-proxy.service`, starting `voxi-r2t2.service`, or switching
+  the active model via `voxi settings set model r2t2-confucius4-voxi`. When running on a fallback model and
+  the primary endpoint on 8735 recovers, it reports `WARN` and offers to switch back to the default model
+  and stop the fallback service.
 - **Snapshot first.** A `pw-dump` is saved to `~/.local/state/voxi/doctor/` before the first
   repair, so a broken state survives as evidence (and as test data). Snapshots are pruned
   according to `spec/doctor.yaml` retention limits (`keep_count`, `max_age_days`).
@@ -68,6 +75,7 @@ Unit tests cannot fake WirePlumber timing. Inject each fault live and run `voxi 
 | Card off | `pactl set-card-profile bluez_card.<MAC> off` |
 | Dangling default | `pw-metadata 0 default.audio.sink '{"name":"bluez_output.DE_AD_00_00_00_00.1"}' Spa:String:JSON` |
 | WirePlumber down | `systemctl --user stop wireplumber` (repeat 3 times) |
+| ASR endpoint down | `systemctl --user stop lmcoder-proxy.service` |
 
 Every `After repair:` block must show all checks OK; then play a sound.
 
