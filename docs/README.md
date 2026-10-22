@@ -1,3 +1,4 @@
+<!-- managed by harnez index: only the studies table is generated; evergreen documentation and other tables are hand-written -->
 # Voxi Documentation
 
 In-depth references for architecture, decisions, and operations of the Voxi Linux Voice Input & Synthetic Typing Engine.
@@ -36,6 +37,7 @@ In-depth references for architecture, decisions, and operations of the Voxi Linu
 
 ## Technical Case Studies (**`docs/studies/`**)
 
+<!-- harnez:begin docs-studies-index -->
 | File | Topic |
 |------|-------|
 | [studies/2026-08-18-continuous-eager-streaming-and-resource-monitor.md](studies/2026-08-18-continuous-eager-streaming-and-resource-monitor.md) | Continuous Eager Sentence Streaming, AMD Radeon Vulkan 1.4 GPU acceleration, plosive & stop-consonant audio protection, zombie pipeline teardown, and Option A Btop Grid Resource Monitor TUI |
@@ -53,6 +55,8 @@ In-depth references for architecture, decisions, and operations of the Voxi Linu
 | [studies/2026-09-26-linux-desktop-tts-reading-pipeline.md](studies/2026-09-26-linux-desktop-tts-reading-pipeline.md) | Text-to-Speech (TTS) engine, GNOME Wayland selection reading hotkeys, LLM document narration, pip-free native Piper ONNX runtime, multi-voice library, and persistent systemd daemon queue ownership with STT recording epoch muting. |
 | [studies/2026-09-27-local-voice-cloning-research.md](studies/2026-09-27-local-voice-cloning-research.md) | Local voice cloning research (2026-09-27) |
 | [studies/2026-10-04-linux-voice-input-and-sample-store-story.md](studies/2026-10-04-linux-voice-input-and-sample-store-story.md) | From voice typing to a maintainable sample store |
+<!-- harnez:end docs-studies-index -->
+
 
 
 <!-- End of studies index. -->
