@@ -1,6 +1,6 @@
 # 199 — Catalog tested ASR and TTS models with hardware, runtimes, benchmarks, and verdicts
 
-**Status**: Open
+**Status**: Closed — Compiled and committed comprehensive TestedModels.md catalog covering all tested ASR/TTS models with hardware profiles, runtimes, benchmarks, and verdicts
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Documentation
