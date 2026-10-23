@@ -38,6 +38,11 @@ Create a project-local skill `/voxi-model` (anchored in `.agents/skills/voxi-mod
    - **Containerized Spike vs. Direct Lean Extraction**:
      - *Direct Lean Extraction (Preferred)*: If an easy path exists to extract or run the lean core runtime upfront (e.g., existing GGUF checkpoint, ONNX export, `whisper.cpp`/`sherpa-onnx`/`llama-server` bindings), do so immediately to avoid downloading heavy multi-gigabyte PyTorch/CUDA environments (only model weights need to be downloaded).
      - *Containerized Spike (Fallback/Exploratory)*: For novel or complex models where only an upstream PyTorch/heavy install is available, testing in Docker/Podman is permitted to evaluate voice quality, accuracy, and latency in isolation without polluting the host environment. Once proven, proceed to Step 2: lean-extract the core runtime for desktop distribution.
+   - **Disk Space Pre-flight & External Scratch Mount**:
+     - Pre-flight free disk space check (`df -h`) before downloading models (GGUF, ONNX) or building container images.
+     - When local disk space is constrained or for large scratch builds/caches:
+       - Check for external scratch mount `/mnt/kdev/scratch` (or another path configured/specced in Voxi spec/env).
+       - If space is tight (<10 GB free) on root/home, prompt the user for permission to mount/use `/mnt/kdev` or an alternate specced external directory rather than filling the root drive.
    - License gate: Must be OSI / permissive open-source (MIT, Apache-2.0, BSD). Non-commercial licenses (CC-BY-NC) cannot be shipped.
    - Hardware target: Must specify CPU and/or Vulkan GPU expectations on `t14` / `x600`.
 3. **Phase 3: Canary-First Probing**:
