@@ -49,4 +49,5 @@
 | 186 | [186-build-a-cross-platform-gui-demo-for-voxi-features.md](186-build-a-cross-platform-gui-demo-for-voxi-features.md) | Build a cross-platform GUI demo for voxi features | Blocked — awaiting user decision on TUI host media-control scope |
 | 187 | [187-evaluate-kittentts-2-for-voice-cloning.md](187-evaluate-kittentts-2-for-voice-cloning.md) | Evaluate KittenTTS 2 for voice cloning | Open |
 | 188 | [188-add-google-cloud-speech-to-text-streaming-engine.md](188-add-google-cloud-speech-to-text-streaming-engine.md) | Add Google Cloud Speech-to-Text streaming engine | Open |
+| 200 | [200-add-local-voxi-model-skill-for-evaluating-and-onboarding-asr-tts-and-voiceclone-models.md](200-add-local-voxi-model-skill-for-evaluating-and-onboarding-asr-tts-and-voiceclone-models.md) | Add local /voxi-model skill for evaluating and onboarding ASR, TTS, and VoiceClone models | Open |
 <!-- harnez:end issues-active-index -->
