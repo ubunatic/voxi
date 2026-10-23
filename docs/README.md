@@ -20,6 +20,7 @@ In-depth references for architecture, decisions, and operations of the Voxi Linu
 | [AudioDoctor.md](AudioDoctor.md) | `voxi doctor` (issue 189): spec-driven whole-stack checks and repair wizard, faults vs evidence, `wpctl set-default` vs `pw-metadata`, WirePlumber active-but-not-routing, `auto_null`, settle after restart, live fault-injection recipe |
 | [LLMTranscriptCleanup.md](LLMTranscriptCleanup.md) | Local LLM cleanup request contract, chunk context, fallback behavior, and real-model validation limits |
 | [TTSReading.md](TTSReading.md) | `voxi say` narration, lmcoder hosts and sessions, chunk queue behavior, pause trimming, and observed model latency |
+| [TestedModels.md](TestedModels.md) | Catalog of tested ASR and TTS models with hardware, runtimes, benchmarks, and verdicts |
 | [SampleStore.md](SampleStore.md) | Decision record (issue 169): chunk vs sample glossary, `dictation`/`noise`/`voice` purposes, sample store layout, `voxi sample` command map, migration plan, implementation notes (all shipped) |
 
 ---
