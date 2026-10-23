@@ -21,9 +21,11 @@ actually bites.
 | `whisper` | `voxtype` | voxi execs per utterance | voxtype's own |
 | `cohere-transcribe` | `crispasr` | voxi execs per utterance | auto-downloaded to `~/.cache/voxi/models/` |
 | `openai-transcribe` | HTTP `POST <base_url>/audio/transcriptions` | **nobody — the user starts it** | the server's problem |
+| `gemini-transcribe` (issue 201) | HTTPS `POST .../models/...:generateContent` | Hosted Google Cloud REST API | Cloud hosted (no local weights) |
 
 The first two are self-contained: select the model and it works. The third is
-not, and that asymmetry is the source of most of this doc.
+not, and that asymmetry is the source of most of this doc. The fourth is fully
+remote, requiring an API key (`GEMINI_API_KEY`) and no local weights.
 
 ## Spec fields that drive the HTTP engine
 
@@ -197,8 +199,26 @@ backend crashes:
 5. **Scriptable Configuration**: `voxi settings set model <name>` provides non-interactive,
    programmatic model switching without requiring interactive TUI interaction.
 
+## Model Onboarding & Runtime Architecture Principles
+
+Adding new ASR or TTS models (see `@docs/TestedModels.md` for historical evaluations)
+follows strict runtime discipline:
+1. **Desktop Runtime Hygiene**: No heavy PyTorch or persistent Python environments
+   in standard desktop installations. High memory overhead, dependency bloat, and
+   breakages during distro Python upgrades conflict with Voxi's lightweight desktop goals.
+2. **Containerized Spikes First**: Exploratory evaluation of novel architectures or
+   unsupported weights runs in isolated Podman/Docker containers.
+3. **Lean Runtime Extraction**: Before production onboarding, runtime dependencies must
+   be extracted into self-contained formats: GGUF (`llama-server`), ONNX (`sherpa-onnx`,
+   `piper-phonemize`), or compiled standalone binaries (`crispasr`, `voxtype`).
+4. **Disk Quota Awareness**: Models should not fill the root partition. Pre-flight checks
+   (`df -h`) enforce >= 10 GiB free headroom before downloading large weights, redirecting
+   scratch and heavy build artifacts to `/mnt/kdev/scratch` or specced cache directories.
+
 ## Open gaps
 
-- `voxi bench` and `scripts/speech_context_bench` are whisper-only, so RTF and WER
-  cannot be compared across engines in one table (issues 133, and 131 option 2).
-- Keyterms are not wired into the request prompt yet.
+- `voxi bench` supports multi-engine dispatch (`whisper` and `cohere-transcribe` via
+  issue 133); expanding coverage to `openai-transcribe` and `gemini-transcribe` remains open.
+- Speech-context bench fixtures need migration to the sample store layout (`@docs/SampleStore.md`,
+  issue 176).
+- Keyterms are not wired into the `openai-transcribe` request prompt yet (issue 137).
