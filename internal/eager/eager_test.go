@@ -1296,7 +1296,7 @@ func TestRequireEngineBinaryCohereSucceedsWithoutVoxtype(t *testing.T) {
 	}
 }
 
-// TestRunEagerDaemonReachesReadyWithoutVoxtype is issue 077's live-readiness
+// TestRunEagerDaemonReachesReadyAndCleansTempDirOnSIGTERM is issue 077's live-readiness
 // proof for the daemon path (mirrors TestRequireEngineBinaryCohereSucceedsWithoutVoxtype's
 // direct-path proof): the actual production runEagerDaemon entry point --
 // the same function voxi-agent.service's eager child process runs -- must
@@ -1306,7 +1306,7 @@ func TestRequireEngineBinaryCohereSucceedsWithoutVoxtype(t *testing.T) {
 // unconditionally required voxtype before ever reaching model/engine
 // resolution, so this exact scenario crash-looped voxi-agent.service
 // (confirmed live via `journalctl --user -u voxi-agent.service`).
-func TestRunEagerDaemonReachesReadyWithoutVoxtype(t *testing.T) {
+func TestRunEagerDaemonReachesReadyAndCleansTempDirOnSIGTERM(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(tmp, "cache"))
 	weightsPath, err := cohereWeightsPath()
@@ -1383,14 +1383,33 @@ func TestRunEagerDaemonReachesReadyWithoutVoxtype(t *testing.T) {
 		t.Fatalf("eager daemon did not reach ready ('idle' over its control socket) within the deadline without voxtype on PATH; last status=%q err=%v", status, err)
 	}
 
-	cancel()
+	entries, err := os.ReadDir(runtimeDir)
+	if err != nil {
+		t.Fatalf("read runtime dir before SIGTERM: %v", err)
+	}
+	var daemonTempDir string
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), "voxi-eager-daemon-") {
+			daemonTempDir = filepath.Join(runtimeDir, entry.Name())
+			break
+		}
+	}
+	if daemonTempDir == "" {
+		t.Fatal("eager daemon temp dir was not created under XDG_RUNTIME_DIR")
+	}
+	if err := syscall.Kill(os.Getpid(), syscall.SIGTERM); err != nil {
+		t.Fatalf("send SIGTERM to test process: %v", err)
+	}
 	select {
 	case err := <-daemonErr:
 		if err != nil {
-			t.Fatalf("runEagerDaemon returned error after cancel: %v", err)
+			t.Fatalf("runEagerDaemon returned error after SIGTERM: %v", err)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("runEagerDaemon did not shut down promptly after context cancellation")
+		t.Fatal("runEagerDaemon did not shut down promptly after SIGTERM")
+	}
+	if _, err := os.Stat(daemonTempDir); !os.IsNotExist(err) {
+		t.Fatalf("daemon temp dir still exists after SIGTERM: stat error = %v", err)
 	}
 }
 

@@ -431,7 +431,7 @@ func PrintVoiceResourceReport(w io.Writer, r VoiceResourceReport, sec ResourceSe
 		modStr = "\x1b[90moff\x1b[0m"
 	}
 	speedLines := []string{
-		fmt.Sprintf("status:  %s (%s / %s)", formatRecordState(r.RecordStatus, r.MicLevel, r.MicAvailable), r.Mode, r.ActiveModel),
+		fmt.Sprintf("status:  %s (%s / %s)", formatRecordState(r.RecordStatus, r.MicLevel, r.MicAvailable, r.EagerAudioFailure), r.Mode, r.ActiveModel),
 		fmt.Sprintf("accel:   \x1b[32m%s\x1b[0m  ·  mods: %s", r.GPUAccel, modStr),
 	}
 	if r.ASRWarning != "" {
@@ -709,25 +709,31 @@ func formatActionLabel(id string) string {
 // static ●), so the status line doubles as the level meter instead of carrying a
 // separate level: row. spec/monitor.yaml's status_icon.always_show_loudness (issue 086)
 // extends that swap to the idle state too, so the loudness glyph is always visible.
-func formatRecordState(status string, micLevel float64, micAvailable bool) string {
+func formatRecordState(status string, micLevel float64, micAvailable bool, audioFailure *eager.EagerAudioFailureState) string {
 	alwaysLoudness := loadedMonitorSpec().StatusIcon.AlwaysShowLoudness
+	var recordState string
 	switch strings.ToLower(status) {
 	case "recording":
 		icon := "\x1b[31;1m●\x1b[0m"
 		if micAvailable {
 			icon = RenderLevelChar(micLevel)
 		}
-		return icon + " \x1b[31;1mrec\x1b[0m"
+		recordState = icon + " \x1b[31;1mrec\x1b[0m"
 	case "transcribing":
-		return "\x1b[33;1m⏳ transcribing\x1b[0m"
+		recordState = "\x1b[33;1m⏳ transcribing\x1b[0m"
 	case "idle":
 		if alwaysLoudness && micAvailable {
-			return RenderLevelChar(micLevel) + " \x1b[32midle\x1b[0m"
+			recordState = RenderLevelChar(micLevel) + " \x1b[32midle\x1b[0m"
+		} else {
+			recordState = "\x1b[32m○ idle\x1b[0m"
 		}
-		return "\x1b[32m○ idle\x1b[0m"
 	default:
-		return status
+		recordState = status
 	}
+	if audioFailure != nil && audioFailure.ConsecutiveFailures >= eager.EagerAudioFailureDegradedAfter {
+		return fmt.Sprintf("\x1b[31;1m⚠ audio degraded (%d consecutive chunk write failures)\x1b[0m · %s", audioFailure.ConsecutiveFailures, recordState)
+	}
+	return recordState
 }
 
 // PrintCompactTwoBox writes the high-density two-box compact monitor layout matching design 008.

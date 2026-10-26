@@ -60,13 +60,14 @@ type VoiceResourceReport struct {
 	// the active model's ASR backend, always populated so the daemons &
 	// health box can show one line about it, even when never probed --
 	// issue 136 M2.
-	ASRBackend     ASRBackendState
-	ModifierStatus string
-	MicLevel       float64
-	MicAvailable   bool
-	Processes      []ProcessResource
-	EagerMetrics   *eager.EagerMetrics
-	ZombieWarnings []string
+	ASRBackend        ASRBackendState
+	ModifierStatus    string
+	MicLevel          float64
+	MicAvailable      bool
+	Processes         []ProcessResource
+	EagerMetrics      *eager.EagerMetrics
+	EagerAudioFailure *eager.EagerAudioFailureState
+	ZombieWarnings    []string
 }
 
 var (
@@ -174,6 +175,7 @@ func CollectVoiceResources(ctx context.Context, d deps.Dependencies, mic audiole
 			report.EagerMetrics = &metrics
 		}
 	}
+	report.EagerAudioFailure = loadEagerAudioFailureState(runtimeDir)
 
 	report.Processes = collectVoiceProcesses()
 
@@ -192,6 +194,18 @@ func CollectVoiceResources(ctx context.Context, d deps.Dependencies, mic audiole
 	}
 
 	return report
+}
+
+func loadEagerAudioFailureState(runtimeDir string) *eager.EagerAudioFailureState {
+	data, err := os.ReadFile(eager.EagerAudioFailureStatePath(runtimeDir))
+	if err != nil {
+		return nil
+	}
+	var state eager.EagerAudioFailureState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return nil
+	}
+	return &state
 }
 
 func collectServiceMetrics(ctx context.Context, d deps.Dependencies, service string, report *VoiceResourceReport) {

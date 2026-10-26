@@ -45,7 +45,8 @@ type EagerOptions struct {
 	Vocabulary        []string
 
 	// AudioCapture optionally overrides audio capture (e.g. for testing without audio hardware).
-	AudioCapture AudioCapture
+	AudioCapture          AudioCapture
+	audioFailurePublisher *eagerAudioFailurePublisher
 }
 
 // DefaultEagerOptions returns standard defaults for eager sentence streaming dictation.
@@ -439,9 +440,11 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 			chunkID := fmt.Sprintf("%s/%d", sessionID, job.Index)
 			wavPath, err := writeEagerChunkWAV(tmpDir, job.Index, job.Audio)
 			if err != nil {
+				opts.audioFailurePublisher.Failure(err)
 				reportEagerFailure(d, "audio", sessionID, chunkID, err)
 				continue
 			}
+			opts.audioFailurePublisher.Success()
 			if !job.Eligible {
 				recordStaleDelivery(d, recorder, sessionID, chunkID, job.Index, dropCaptureBoundary)
 				_ = os.Remove(wavPath)

@@ -48,6 +48,9 @@ func (s DefaultDaemonService) Status(ctx context.Context) (string, error) {
 }
 
 func runEagerDaemon(ctx context.Context, d deps.Dependencies, opts EagerOptions) error {
+	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	runtimeDir := d.Getenv("XDG_RUNTIME_DIR")
 	if runtimeDir == "" {
 		runtimeDir = fmt.Sprintf("/run/user/%d", os.Getuid())
@@ -88,6 +91,11 @@ func runEagerDaemon(ctx context.Context, d deps.Dependencies, opts EagerOptions)
 		return fmt.Errorf("temp dir: %w", err)
 	}
 	defer os.RemoveAll(tmpDir)
+
+	audioFailurePublisher := newEagerAudioFailurePublisher(runtimeDir)
+	audioFailurePublisher.Success()
+	defer audioFailurePublisher.Success()
+	opts.audioFailurePublisher = audioFailurePublisher
 
 	writeVoxtypeState("idle")
 	defer writeVoxtypeState("inactive")
@@ -154,12 +162,18 @@ func runEagerDaemon(ctx context.Context, d deps.Dependencies, opts EagerOptions)
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGUSR1, syscall.SIGUSR2)
+	defer signal.Stop(sigChan)
 	go func() {
-		for sig := range sigChan {
-			if sig == syscall.SIGUSR1 {
-				sessions.Toggle()
-			} else if sig == syscall.SIGUSR2 {
-				sessions.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case sig := <-sigChan:
+				if sig == syscall.SIGUSR1 {
+					sessions.Toggle()
+				} else if sig == syscall.SIGUSR2 {
+					sessions.Stop()
+				}
 			}
 		}
 	}()

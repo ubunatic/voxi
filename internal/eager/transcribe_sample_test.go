@@ -14,7 +14,7 @@ import (
 // TestTranscribeCohereWAV exercises the standalone spot-check entry point
 // (issue 098's `sample list --process`) end to end against a fake crispasr
 // binary that echoes a known transcript, mirroring
-// TestRunEagerDaemonReachesReadyWithoutVoxtype's cached-weights/fake-binary
+// TestRunEagerDaemonReachesReadyAndCleansTempDirOnSIGTERM's cached-weights/fake-binary
 // setup without spinning up a real daemon.
 func TestTranscribeCohereWAV(t *testing.T) {
 	tmp := t.TempDir()
