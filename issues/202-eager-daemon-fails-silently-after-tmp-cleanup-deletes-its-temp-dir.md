@@ -38,3 +38,20 @@ so the user had no hint of what was wrong. Restarting the service fixed it.
 - Live: `make restart-service`, then `rm -rf /tmp/voxi-eager-daemon-*`, dictate, and check that
   text gets typed and the journal shows no `no such file or directory`.
 - Monitor shows a degraded state while chunks fail.
+
+## Decision
+
+- Recover in-process (`os.MkdirAll` on the session temp path right before each WAV write in
+  `internal/eager/eager.go:429`), no self-restart: the error is recoverable, and the unit's
+  `Restart=on-failure` stays as the backstop for real crashes.
+- Base dir moves to `$XDG_RUNTIME_DIR` (the unit sets it to `%t`), with a `/tmp` fallback when it is unset.
+
+## Milestones
+
+- **M1 (temp-dir recovery):** the MkdirAll before the WAV write, plus the base dir under
+  `$XDG_RUNTIME_DIR`. Write set: `internal/eager/eager.go`, `internal/eager/service.go:86`, and a focused
+  eager test. Tests: delete the dir between two chunk writes and check the second still succeeds;
+  replace the dir with a regular file and check for a clear wrapped error and no panic.
+- **M2 (monitor degraded state):** the eager daemon publishes repeated audio-write failures into a small
+  runtime state (next to the existing eager metrics JSON read by `internal/monitor/collector.go:84`),
+  and `internal/monitor/render.go` shows a degraded state. Tests for both sides.
