@@ -83,7 +83,7 @@ func runEagerDaemon(ctx context.Context, d deps.Dependencies, opts EagerOptions)
 	}
 	go typing.WatchInputSource(ctx, d, 150*time.Millisecond)
 
-	tmpDir, err := os.MkdirTemp("", "voxi-eager-daemon-*")
+	tmpDir, err := os.MkdirTemp(d.Getenv("XDG_RUNTIME_DIR"), "voxi-eager-daemon-*")
 	if err != nil {
 		return fmt.Errorf("temp dir: %w", err)
 	}

@@ -141,6 +141,17 @@ func writeVoxtypeState(state string) {
 	_ = os.WriteFile(filepath.Join(voxiDir, "voice-state"), []byte(state+"\n"), 0644)
 }
 
+func writeEagerChunkWAV(tempDir string, index int, pcm []byte) (string, error) {
+	if err := os.MkdirAll(tempDir, 0700); err != nil {
+		return "", fmt.Errorf("create eager audio temp directory %q: %w", tempDir, err)
+	}
+	wavPath := filepath.Join(tempDir, fmt.Sprintf("utt_%03d.wav", index))
+	if err := audio.WriteWAVAudio(wavPath, pcm, sampleRate); err != nil {
+		return "", fmt.Errorf("write eager audio %q: %w", wavPath, err)
+	}
+	return wavPath, nil
+}
+
 // gpuAvailable reports whether a GPU render node is present for Vulkan
 // acceleration (see internal/monitor's equivalent check).
 func gpuAvailable() bool {
@@ -426,8 +437,8 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 		defer transWg.Done()
 		for job := range jobChan {
 			chunkID := fmt.Sprintf("%s/%d", sessionID, job.Index)
-			wavPath := filepath.Join(tmpDir, fmt.Sprintf("utt_%03d.wav", job.Index))
-			if err := audio.WriteWAVAudio(wavPath, job.Audio, sampleRate); err != nil {
+			wavPath, err := writeEagerChunkWAV(tmpDir, job.Index, job.Audio)
+			if err != nil {
 				reportEagerFailure(d, "audio", sessionID, chunkID, err)
 				continue
 			}
