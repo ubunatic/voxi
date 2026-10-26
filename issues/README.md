@@ -52,4 +52,5 @@
 | 200 | [200-add-local-voxi-model-skill-for-evaluating-and-onboarding-asr-tts-and-voiceclone-models.md](200-add-local-voxi-model-skill-for-evaluating-and-onboarding-asr-tts-and-voiceclone-models.md) | Add local /voxi-model skill for evaluating and onboarding ASR, TTS, and VoiceClone models | Open |
 | 201 | [201-onboard-official-gemini-transcribe-api-as-first-class-asr-engine.md](201-onboard-official-gemini-transcribe-api-as-first-class-asr-engine.md) | Onboard official Gemini Transcribe API as first-class ASR engine | Open |
 | 203 | [203-try-and-benchmark-bark-3-0-pro-for-asr.md](203-try-and-benchmark-bark-3-0-pro-for-asr.md) | Try and benchmark Bark 3.0 Pro for ASR | Open |
+| 204 | [204-try-ming-3-0-tts-for-text-to-speech.md](204-try-ming-3-0-tts-for-text-to-speech.md) | Try Ming-3.0-tts for text-to-speech | Open |
 <!-- harnez:end issues-active-index -->
