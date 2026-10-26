@@ -1,3 +1,7 @@
+---
+kind: story
+---
+
 # Robust ASR Fallbacks, Doctor Repairs, and Offline Upstream Resilience
 
 **Date**: 2026-10-22  
@@ -27,9 +31,9 @@ When `x600` is powered off or unreachable (e.g. mobile work or network split), `
 ## 2. Executive Summary
 
 This session diagnosed and resolved the end-to-end failure cascade across both repositories:
-- **`lmcoder` Issue 196**: The proxy crashed on startup because [`startSSHTunnel`](file:///home/uwe/projects/lmcoder/cmd/lmcoder/tunnel.go) blocked synchronously trying to reach unreachable upstream `x600`. We patched [`runProxy`](file:///home/uwe/projects/lmcoder/cmd/lmcoder/proxy.go) to start in degraded local mode on initial tunnel failure, delegating reconnects to the background supervisor, and updated [`upstreamModelsHandler`](file:///home/uwe/projects/lmcoder/cmd/lmcoder/proxy.go) to serve the local catalog.
-- **`voxi` Issue 198**: `DefaultEffects().Run` in [`internal/install/install.go`](file:///home/uwe/projects/voxi/internal/install/install.go) previously discarded `Stderr` and ran with disconnected `Stdin`. Privileged `sudo install` commands failed because the user was prompted for PAM fingerprint authentication without visible output or terminal connection. We attached `os.Stdin` and captured `Stderr` to report exact error strings. We also enriched `ASRBackendState` in [`internal/monitor`](file:///home/uwe/projects/voxi/internal/monitor) with explicit service attribution and remediation commands (`run: voxi doctor --fix`).
-- **`voxi` Issue 197**: We extended [`spec/doctor.yaml`](file:///home/uwe/projects/voxi/spec/doctor.yaml) and schema with an `asr-engine` check, implemented automated repair plans in [`internal/doctor/asr.go`](file:///home/uwe/projects/voxi/internal/doctor/asr.go), added a scriptable `voxi settings set` command, and implemented multi-tier runtime fallback in [`internal/eager/openai_transcribe.go`](file:///home/uwe/projects/voxi/internal/eager/openai_transcribe.go) alongside background self-healing auto-reversion in [`internal/agent`](file:///home/uwe/projects/voxi/internal/agent).
+- **`lmcoder` Issue 196**: The proxy crashed on startup because `startSSHTunnel` in `lmcoder/cmd/lmcoder/tunnel.go` blocked synchronously trying to reach unreachable upstream `x600`. We patched `runProxy` in `lmcoder/cmd/lmcoder/proxy.go` to start in degraded local mode on initial tunnel failure, delegating reconnects to the background supervisor, and updated `upstreamModelsHandler` to serve the local catalog.
+- **`voxi` Issue 198**: `DefaultEffects().Run` in `internal/install/install.go` previously discarded `Stderr` and ran with disconnected `Stdin`. Privileged `sudo install` commands failed because the user was prompted for PAM fingerprint authentication without visible output or terminal connection. We attached `os.Stdin` and captured `Stderr` to report exact error strings. We also enriched `ASRBackendState` in `internal/monitor` with explicit service attribution and remediation commands (`run: voxi doctor --fix`).
+- **`voxi` Issue 197**: We extended `spec/doctor.yaml` and schema with an `asr-engine` check, implemented automated repair plans in `internal/doctor/asr.go`, added a scriptable `voxi settings set` command, and implemented multi-tier runtime fallback in `internal/eager/openai_transcribe.go` alongside background self-healing auto-reversion in `internal/agent`.
 
 Live validation confirmed 100% health: `voxi doctor` reports `8 OK, 0 FAULT`, `voxi settings test` reports `5 passed, 0 failed`, and `lmcoder-proxy.service` is actively serving local ASR over port 8735.
 
@@ -71,7 +75,7 @@ Live validation confirmed 100% health: `voxi doctor` reports `8 OK, 0 FAULT`, `v
 ### 3. Harnez Lint File & Function Length Boundary
 - **What happened**: Adding `checkAsrEngine` directly to `internal/doctor/doctor.go` pushed the file to 813 lines (exceeding the 800-line limit) and the function to 102 lines (exceeding the 100-line limit).
 - **How it was caught**: `make lint` flagged `internal/doctor/doctor.go` for `go-file-length` and `go-func-length`.
-- **The fix**: We extracted the ASR engine check into its own file [`internal/doctor/asr.go`](file:///home/uwe/projects/voxi/internal/doctor/asr.go) and split `checkOpenAIASREngine` into a dedicated helper, reducing `doctor.go` to ~705 lines and satisfying all linter constraints.
+- **The fix**: We extracted the ASR engine check into its own file `internal/doctor/asr.go` and split `checkOpenAIASREngine` into a dedicated helper, reducing `doctor.go` to ~705 lines and satisfying all linter constraints.
 
 ---
 
@@ -115,20 +119,20 @@ Live validation confirmed 100% health: `voxi doctor` reports `8 OK, 0 FAULT`, `v
 ## 8. File & Diff Summary
 
 ### Repository: `lmcoder`
-- [`cmd/lmcoder/proxy.go`](file:///home/uwe/projects/lmcoder/cmd/lmcoder/proxy.go): Graceful startup degradation when upstream is unreachable; local catalog fallback on `/v1/models`.
-- [`cmd/lmcoder/tunnel.go`](file:///home/uwe/projects/lmcoder/cmd/lmcoder/tunnel.go): Rate-limited tunnel reconnection logging and supervisor resilience.
-- [`cmd/lmcoder/tunnel_test.go`](file:///home/uwe/projects/lmcoder/cmd/lmcoder/tunnel_test.go): Added test for nil process handling on supervisor close.
-- [`issues/196-proxy-crashes-when-upstream-host-is-offline-instead-of-degrading-gracefully.md`](file:///home/uwe/projects/lmcoder/issues/196-proxy-crashes-when-upstream-host-is-offline-instead-of-degrading-gracefully.md): Documented and closed issue 196.
+- `cmd/lmcoder/proxy.go`: Graceful startup degradation when upstream is unreachable; local catalog fallback on `/v1/models`.
+- `cmd/lmcoder/tunnel.go`: Rate-limited tunnel reconnection logging and supervisor resilience.
+- `cmd/lmcoder/tunnel_test.go`: Added test for nil process handling on supervisor close.
+- `issues/196-proxy-crashes-when-upstream-host-is-offline-instead-of-degrading-gracefully.md`: Documented and closed issue 196.
 
 ### Repository: `voxi`
-- [`spec/doctor.yaml`](file:///home/uwe/projects/voxi/spec/doctor.yaml) & [`spec/schemas/doctor.schema.json`](file:///home/uwe/projects/voxi/spec/schemas/doctor.schema.json): Added `asr-engine` check declaration and repair templates.
-- [`internal/doctor/asr.go`](file:///home/uwe/projects/voxi/internal/doctor/asr.go): Implemented `checkAsrEngine` and `checkOpenAIASREngine` with repair suggestions.
-- [`internal/doctor/doctor.go`](file:///home/uwe/projects/voxi/internal/doctor/doctor.go) & [`internal/doctor/fix.go`](file:///home/uwe/projects/voxi/internal/doctor/fix.go): Wired `asr-engine` dispatch and enabled repair execution for warnings and faults.
-- [`internal/doctor/doctor_test.go`](file:///home/uwe/projects/voxi/internal/doctor/doctor_test.go): Added `TestCheckAsrEngine` test suite.
-- [`internal/install/install.go`](file:///home/uwe/projects/voxi/internal/install/install.go) & [`internal/install/install_test.go`](file:///home/uwe/projects/voxi/internal/install/install_test.go): Captured stderr in `Run` and `RunStdin`; attached `os.Stdin` for interactive sudo prompts; added unit test.
-- [`internal/monitor/collector.go`](file:///home/uwe/projects/voxi/internal/monitor/collector.go), [`internal/monitor/render.go`](file:///home/uwe/projects/voxi/internal/monitor/render.go), [`internal/monitor/asr_probe_test.go`](file:///home/uwe/projects/voxi/internal/monitor/asr_probe_test.go): Enriched ASR offline diagnostics with service attribution and repair advice.
-- [`internal/settings/command.go`](file:///home/uwe/projects/voxi/internal/settings/command.go): Added non-interactive `voxi settings set KEY VALUE` command.
-- [`internal/eager/openai_transcribe.go`](file:///home/uwe/projects/voxi/internal/eager/openai_transcribe.go): Added client failover to local fallback endpoints when port 8735 is unreachable.
-- [`internal/agent/command.go`](file:///home/uwe/projects/voxi/internal/agent/command.go) & [`internal/agent/agent_test.go`](file:///home/uwe/projects/voxi/internal/agent/agent_test.go): Added `watchASRFallbackRevert` background loop to restore default model and stop `voxi-r2t2.service` once primary endpoint recovers.
-- [`issues/197-robust-asr-fallbacks-and-self-healing-for-offline-upstream-and-doctor-repair.md`](file:///home/uwe/projects/voxi/issues/197-robust-asr-fallbacks-and-self-healing-for-offline-upstream-and-doctor-repair.md): Documented and closed issue 197.
-- [`issues/198-improve-error-reporting-in-voxi-install-and-monitor-for-privileged-backend-failures.md`](file:///home/uwe/projects/voxi/issues/198-improve-error-reporting-in-voxi-install-and-monitor-for-privileged-backend-failures.md): Documented and closed issue 198.
+- `spec/doctor.yaml` & `spec/schemas/doctor.schema.json`: Added `asr-engine` check declaration and repair templates.
+- `internal/doctor/asr.go`: Implemented `checkAsrEngine` and `checkOpenAIASREngine` with repair suggestions.
+- `internal/doctor/doctor.go` & `internal/doctor/fix.go`: Wired `asr-engine` dispatch and enabled repair execution for warnings and faults.
+- `internal/doctor/doctor_test.go`: Added `TestCheckAsrEngine` test suite.
+- `internal/install/install.go` & `internal/install/install_test.go`: Captured stderr in `Run` and `RunStdin`; attached `os.Stdin` for interactive sudo prompts; added unit test.
+- `internal/monitor/collector.go`, `internal/monitor/render.go`, `internal/monitor/asr_probe_test.go`: Enriched ASR offline diagnostics with service attribution and repair advice.
+- `internal/settings/command.go`: Added non-interactive `voxi settings set KEY VALUE` command.
+- `internal/eager/openai_transcribe.go`: Added client failover to local fallback endpoints when port 8735 is unreachable.
+- `internal/agent/command.go` & `internal/agent/agent_test.go`: Added `watchASRFallbackRevert` background loop to restore default model and stop `voxi-r2t2.service` once primary endpoint recovers.
+- `issues/197-robust-asr-fallbacks-and-self-healing-for-offline-upstream-and-doctor-repair.md`: Documented and closed issue 197.
+- `issues/198-improve-error-reporting-in-voxi-install-and-monitor-for-privileged-backend-failures.md`: Documented and closed issue 198.

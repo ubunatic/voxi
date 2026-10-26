@@ -134,9 +134,11 @@ sections:
 
   - id: story
     tag: Engineering story
-    title: Local dictation and the sample store
+    title: Offline resilience and self-healing ASR
     blocks:
       - text: >-
-          The purpose-based sample store separates dictation, noise and consent-gated voice material.
-          Read the [engineering story](https://codeberg.org/ubunatic/voxi/src/branch/main/docs/studies/2026-10-04-linux-voice-input-and-sample-store-story.md)
-          for the design and microphone recovery work.
+          When an optional secondary machine used for speech recognition is offline, voxi falls back to
+          local engines, `voxi doctor --fix` diagnoses and repairs the setup, and the agent switches back
+          when the primary returns. Audio still only goes to your own hardware. Read the
+          [fallback resilience study](https://codeberg.org/ubunatic/voxi/src/branch/main/docs/studies/2026-10-22-robust-asr-fallbacks-doctor-repairs-and-offline-upstream-resilience.md)
+          and the [sample store story](https://codeberg.org/ubunatic/voxi/src/branch/main/docs/studies/2026-10-04-linux-voice-input-and-sample-store-story.md).
