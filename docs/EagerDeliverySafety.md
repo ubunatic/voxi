@@ -79,6 +79,16 @@ every accepted chunk regardless of the delivery path. The transcript text itself
 is not printed. Silence here was what made both issue 115 incidents invisible
 until the telemetry database was inspected after the fact.
 
+The journal alone is not enough: after a `/tmp` cleanup deleted the daemon's
+temp dir, every chunk failed there while `voxi monitor` still looked healthy
+(issue 202). Now the daemon keeps its temp dir under `$XDG_RUNTIME_DIR`
+(falling back to `/tmp`), recreates it before each WAV write, and removes it on
+SIGTERM. Repeated audio-write failures are published to
+`$XDG_RUNTIME_DIR/voxi/eager-audio-failures.json`, and the monitor shows
+`⚠ audio degraded` from 2 consecutive failures until the next success. Runtime
+state the daemon depends on must be recreated on use, never assumed to persist
+from startup. Live check: delete the running daemon's dir, then dictate.
+
 ## Conservative transcript safety
 
 The ASR boundary rejects extreme/pathologically repetitive output before typing
