@@ -52,6 +52,14 @@ so the user had no hint of what was wrong. Restarting the service fixed it.
   `$XDG_RUNTIME_DIR`. Write set: `internal/eager/eager.go`, `internal/eager/service.go:86`, and a focused
   eager test. Tests: delete the dir between two chunk writes and check the second still succeeds;
   replace the dir with a regular file and check for a clear wrapped error and no panic.
+- **M1 delivered (temp-dir recovery):** f5fb21c. `writeEagerChunkWAV` runs MkdirAll before each WAV write,
+  and the base dir is under `$XDG_RUNTIME_DIR` (live: `/run/user/1000/voxi-eager-daemon-*`).
+- **M2 pre-work / required refinements:**
+  - After `systemctl --user restart`, the previous daemon's base dir (`/tmp/voxi-eager-daemon-1243611148`)
+    was still there. Check whether the daemon removes its base dir on SIGTERM; if not, remove it on shutdown,
+    and add a test.
+  - Schema: keep it minimal (e.g. consecutive failure count, last error, last time). Degraded = 2 or more
+    consecutive chunk failures; the next successful chunk clears it.
 - **M2 (monitor degraded state):** the eager daemon publishes repeated audio-write failures into a small
   runtime state (next to the existing eager metrics JSON read by `internal/monitor/collector.go:84`),
   and `internal/monitor/render.go` shows a degraded state. Tests for both sides.
