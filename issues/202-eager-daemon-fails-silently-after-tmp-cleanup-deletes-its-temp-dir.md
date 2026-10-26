@@ -1,6 +1,6 @@
 # 202 — Eager daemon fails silently after /tmp cleanup deletes its temp dir
 
-**Status**: Open
+**Status**: Closed — M1 recreates the daemon temp dir before each WAV write (now under XDG_RUNTIME_DIR); M2 shows '⚠ audio degraded' in monitor after 2+ consecutive failures and removes the temp dir on SIGTERM. Full make test-q1 green; live: deleted the running daemon's dir, dictation typed with no errors; injected failure state shown in voxi monitor.
 **Priority**: P1 (High)
 **Severity**: Major
 **Category**: Bug
