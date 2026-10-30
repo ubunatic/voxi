@@ -4,8 +4,16 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"slices"
 	"testing"
 )
+
+func TestPWRecordArgsUseRawPCM(t *testing.T) {
+	want := []string{"--raw", "--rate", "16000", "--channels", "1", "--format", "s16", "-"}
+	if got := pwRecordArgs(); !slices.Equal(got, want) {
+		t.Fatalf("pw-record args = %v, want %v", got, want)
+	}
+}
 
 func TestReaderAudioCapture(t *testing.T) {
 	data := make([]byte, 1280) // 2 frames of 640 bytes

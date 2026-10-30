@@ -222,7 +222,7 @@ func RunEagerDictation(ctx context.Context, d deps.Dependencies, opts EagerOptio
 	if opts.AudioCapture == nil {
 		if _, err := d.LookPath("pw-record"); err == nil {
 			recCmdName = "pw-record"
-			recArgs = []string{"--rate", "16000", "--channels", "1", "--format", "s16", "-"}
+			recArgs = pwRecordArgs()
 		} else if _, err := d.LookPath("arecord"); err == nil {
 			recCmdName = "arecord"
 			recArgs = []string{"-r", "16000", "-c", "1", "-f", "S16_LE", "-t", "raw", "-q", "-"}

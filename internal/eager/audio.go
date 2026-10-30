@@ -15,6 +15,11 @@ const (
 	frameBytes  = (sampleRate * frameMs / 1000) * 2 // 640 bytes
 )
 
+// pwRecordArgs requests raw little-endian PCM; stdout otherwise defaults to AU.
+func pwRecordArgs() []string {
+	return []string{"--raw", "--rate", "16000", "--channels", "1", "--format", "s16", "-"}
+}
+
 // AudioCapture encapsulates spawning an audio source, returning the stdout stream for PCM frames,
 // and handling termination.
 type AudioCapture interface {
