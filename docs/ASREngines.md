@@ -185,19 +185,20 @@ backend crashes:
    SSH tunnel failures at startup when `upstream` is configured, immediately opening port
    `8735`, serving local models on `GET /v1/models`, and routing ASR requests to the local
    `lmcoder-asr.service` (port 8749) via `upstream_first: [asr]`.
-2. **Eager Transcription Failover (voxi issue 197)**: If port 8735 fails during an eager
-   dictation session, `transcribeOpenAIWAV` automatically attempts local fallback endpoints
-   (`http://127.0.0.1:18131/v1` and `http://127.0.0.1:8749/v1`) before giving up, ensuring
-   spoken utterances are not dropped.
-3. **Doctor Health & Automated Repair**: `voxi doctor` probes the active ASR engine (`asr-engine`
-   check) and provides concrete repair actions: restarting `lmcoder-proxy.service`, starting
-   `voxi-r2t2.service`, or switching the active model to `r2t2-confucius4-voxi`.
-4. **Automatic Reversion Watchdog**: `voxi-agent.service` runs a background loop that probes
-   primary port 8735 when a fallback model (`r2t2-confucius4-voxi`) is active. As soon as the
-   primary endpoint recovers, it automatically reverts settings to `r2t2-confucius4` and stops
-   `voxi-r2t2.service` to reclaim GPU VRAM and system memory.
-5. **Scriptable Configuration**: `voxi settings set model <name>` provides non-interactive,
-   programmatic model switching without requiring interactive TUI interaction.
+2. **Eager failover (issues 197, 206)**: For a loopback proxy on port 8735, transport errors
+   and HTTP 502/503/504 trigger attempts at `127.0.0.1:18131/v1` then `127.0.0.1:8749/v1`.
+   Other HTTP errors and caller cancellation stop retries. Fallbacks may themselves be down;
+   this does not guarantee an utterance is delivered.
+3. **Doctor** transcribes a test clip through the active OpenAI-compatible path and reports a
+   working fallback as WARN. It avoids treating a TCP listener as proof of transcription and
+   does not automatically select an unverified fallback. Local CLI engines are WARN when only
+   their binaries are checked. The probe is not a microphone-to-typing test; see
+   [DictationQARunbook.md](DictationQARunbook.md).
+4. **Reversion is manual**: the agent does not switch away from `r2t2-confucius4-voxi` just
+   because port 8735 opens. Check the intended primary path, switch deliberately, and restart
+   the agent so its running eager process picks up the setting.
+5. **Scriptable configuration**: `voxi settings set model <name>` changes the saved model;
+   restart `voxi-agent.service` to apply it to the running agent.
 
 ## Model Onboarding & Runtime Architecture Principles
 

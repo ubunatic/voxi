@@ -35,7 +35,7 @@ If the remote server is already offline, repeat steps 1 and 2. Record whether do
 
 ## 4. Optional fault and repair validation
 
-For issue 206 closure, schedule a maintenance window and record which proxy and local ASR services were active. Tell the user which other applications may be interrupted. Inject one controlled failure at a time, inspect `voxi doctor`, and confirm that it either offers a usable repair or reports an actionable failure without claiming success. Check proposed repairs and never rely on unavailable fallback model files. Run `voxi doctor --fix` interactively only when safe; verify its recheck and repeat step 2 after an actual repair. Restore every service and setting to its recorded prior state, including on interruption. If a safe injection or restoration cannot be guaranteed, stop and report the unverified case rather than closing the issue.
+To validate offline fallback and repair, schedule a maintenance window and record which proxy and local ASR services were active. Tell the user which other applications may be interrupted. Inject one controlled failure at a time, inspect `voxi doctor`, and confirm that it either offers a usable repair or reports an actionable failure without claiming success. Check proposed repairs and never rely on unavailable fallback model files. Run `voxi doctor --fix` interactively only when safe; verify its recheck and repeat step 2 after an actual repair. Restore every service and setting to its recorded prior state, including on interruption. If a safe injection or restoration cannot be guaranteed, stop and report the unverified case rather than closing the issue.
 
 ## 5. Results
 

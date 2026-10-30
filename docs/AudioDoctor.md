@@ -33,13 +33,13 @@ Exit status: 0 all OK/WARN/SKIP, 1 any FAULT, 2 a check errored.
   lines stay in the log after a repair, so they can never clear and must not drive repairs.
 - **Repair order:** services → Bluetooth card profile → defaults → mic → routing → ASR engine. A repair whose
   effect an earlier one covered (two WirePlumber restarts) is skipped, then re-checked.
-- **ASR Engine Diagnostics (issue 197).** `voxi doctor` verifies the configured transcription engine
-  (OpenAI-compatible HTTP endpoint on 8735/18131, or local `crispasr`/`voxtype` binaries). When the endpoint
-  is unreachable (e.g. `lmcoder-proxy` crashed or upstream `x600` is offline), it reports `FAULT` and
-  offers automated repairs: restarting `lmcoder-proxy.service`, starting `voxi-r2t2.service`, or switching
-  the active model via `voxi settings set model r2t2-confucius4-voxi`. When running on a fallback model and
-  the primary endpoint on 8735 recovers, it reports `WARN` and offers to switch back to the default model
-  and stop the fallback service.
+- **ASR diagnostics (issues 197, 206).** Doctor identifies the running eager service where possible and
+  transcribes an embedded test clip through its OpenAI-compatible endpoint. A working failover is a WARN;
+  an unusable path is a FAULT. A listening proxy or successful registry lookup alone does not prove ASR
+  works. A successful clip probe does not verify the microphone, desktop typing, or which backend the proxy
+  selected. For `crispasr`/`voxtype`, binary presence alone produces WARN (transcription unverified).
+  Doctor does not automatically switch to an unverified fallback; review proposed repairs before applying.
+  The agent does not automatically revert a fallback based on an open TCP port.
 - **Snapshot first.** A `pw-dump` is saved to `~/.local/state/voxi/doctor/` before the first
   repair, so a broken state survives as evidence (and as test data). Snapshots are pruned
   according to `spec/doctor.yaml` retention limits (`keep_count`, `max_age_days`).
@@ -47,6 +47,11 @@ Exit status: 0 all OK/WARN/SKIP, 1 any FAULT, 2 a check errored.
   `internal/doctor/testdata/` (anonymised: fake MACs, user and host names).
 
 ## Pitfalls (all seen live)
+
+- **`pw-record` stdout is not necessarily raw PCM.** Without `--raw`, this host emitted an AU
+  stream whose header and big-endian samples were interpreted as little-endian PCM, producing noise
+  and empty transcripts despite a healthy microphone. Eager capture now requests `--raw`; check
+  recorded chunk playback, not just device health (issue 207).
 
 - **`wpctl set-default` does not fix a dangling active default.** It writes only
   `default.configured.audio.sink`. When `default.audio.sink` names a vanished node, WirePlumber
@@ -68,7 +73,9 @@ Exit status: 0 all OK/WARN/SKIP, 1 any FAULT, 2 a check errored.
 
 ## Verifying a Change
 
-Unit tests cannot fake WirePlumber timing. Inject each fault live and run `voxi doctor --fix --yes`:
+Unit tests cannot fake WirePlumber timing. In a maintenance window, record service and device state,
+announce interruptions, inject faults deliberately, and review `voxi doctor --fix` repairs before applying.
+Restore the prior state even if a check fails; do not blindly apply `--yes`:
 
 | Fault | Inject with |
 |---|---|
@@ -77,7 +84,9 @@ Unit tests cannot fake WirePlumber timing. Inject each fault live and run `voxi 
 | WirePlumber down | `systemctl --user stop wireplumber` (repeat 3 times) |
 | ASR endpoint down | `systemctl --user stop lmcoder-proxy.service` |
 
-Every `After repair:` block must show all checks OK; then play a sound.
+After repair, verify the relevant fault cleared; historical journal warnings may remain. Play a sound
+for audio routing, and for ASR repeat real dictation through capture, transcription and typing. See
+[DictationQARunbook.md](DictationQARunbook.md) for the paired procedure.
 
 ## Known Limits
 
