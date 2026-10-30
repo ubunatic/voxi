@@ -1,6 +1,6 @@
 # 206 — Doctor misses offline remote transcription and fallback failure
 
-**Status**: Open
+**Status**: Closed — Verified offline fallback, unavailable endpoints, doctor repair and live dictation
 **Priority**: P1 (High)
 **Severity**: Major
 **Category**: Bug
@@ -23,12 +23,10 @@ The actual selected model and runtime failure path at the time of doctor are not
 
 ## Progress
 
-Status remains Open; this ticket is not closed.
-
 - 2026-10-30: Committed 67ca553 (fix(asr): diagnose active transcription and safe failover).
 - `make test-q1` passed in full after the first test run failed or hung; the fault was corrected and the rerun passed.
 - Live doctor probe transcribed through the proxy with the remote server offline (x600). The probe does not show which backend served the request.
-- Not yet verified: live fault injection, and user dictation after the actual repair.
+- Live QA: with x600 offline and proxy stopped, doctor reported WARN and direct local R2T2 transcribed live dictation. With proxy and local ASR stopped, doctor reported FAULT; `doctor --fix --yes` restarted the proxy and its recheck transcribed the probe clip. After both services were restored, the user dictated successfully; chunk 339 was accepted and typed. The proxy's actual backend choice is not independently identified.
 - Local cohere/whisper transcription remains unverified and reports WARN.
 - Lint: `gokay check --all` failed with existing findings. A new Setenv lint finding was fixed but not rechecked. `gokay assess` completed.
 - Sprint process: the haiku developer's initial work needed Opus escalation; sol performed the independent review.

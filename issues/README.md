@@ -54,5 +54,4 @@
 | 203 | [203-try-and-benchmark-bark-3-0-pro-for-asr.md](203-try-and-benchmark-bark-3-0-pro-for-asr.md) | Try and benchmark Bark 3.0 Pro for ASR | Open |
 | 204 | [204-try-ming-3-0-tts-for-text-to-speech.md](204-try-ming-3-0-tts-for-text-to-speech.md) | Try Ming-3.0-tts, Fish Audio Drama 3 Preview, and Breeze TTS 2 | Open |
 | 205 | [205-try-dessa-tts-model.md](205-try-dessa-tts-model.md) | Try dessa TTS model | Open |
-| 206 | [206-doctor-misses-offline-remote-transcription-and-fallback-failure.md](206-doctor-misses-offline-remote-transcription-and-fallback-failure.md) | Doctor misses offline remote transcription and fallback failure | Open |
 <!-- harnez:end issues-active-index -->
