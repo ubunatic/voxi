@@ -20,3 +20,15 @@ The actual selected model and runtime failure path at the time of doctor are not
 
 - Recheck live configuration, current code and recent commits before starting; reproduce the reported mismatch and distinguish microphone, local engine, remote endpoint and fallback health.
 - Cover remote-offline and fallback-unavailable cases with regression tests; verify the repair or honest diagnostic against the live setup where feasible. Do not report success solely because a local binary is present when the actual transcription path is unusable.
+
+## Progress
+
+Status remains Open; this ticket is not closed.
+
+- 2026-10-30: Committed 67ca553 (fix(asr): diagnose active transcription and safe failover).
+- `make test-q1` passed in full after the first test run failed or hung; the fault was corrected and the rerun passed.
+- Live doctor probe transcribed through the proxy with the remote server offline (x600). The probe does not show which backend served the request.
+- Not yet verified: live fault injection, and user dictation after the actual repair.
+- Local cohere/whisper transcription remains unverified and reports WARN.
+- Lint: `gokay check --all` failed with existing findings. A new Setenv lint finding was fixed but not rechecked. `gokay assess` completed.
+- Sprint process: the haiku developer's initial work needed Opus escalation; sol performed the independent review.
