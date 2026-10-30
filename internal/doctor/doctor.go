@@ -75,6 +75,8 @@ func (r Report) ExitCode() int {
 type HostDoctor struct {
 	Host Host
 	Spec *spec.DoctorSpec
+	// ASRProbe makes the asr-engine transcription probe; nil sends no request.
+	ASRProbe ASRProbeFunc
 }
 
 // CheckIDs is the set of check IDs dispatched by the implementation.
@@ -119,7 +121,7 @@ func (d HostDoctor) check(ctx context.Context, check spec.DoctorCheck, opts Opti
 	case "stream-routing":
 		return d.checkRouting(ctx, check, opts.NoProbe, opts.PWDump), nil
 	case "asr-engine":
-		return d.checkAsrEngine(ctx, check), nil
+		return d.checkAsrEngineWith(ctx, check, opts.NoProbe), nil
 	default:
 		return Result{}, fmt.Errorf("doctor: no implementation for check %q", check.ID)
 	}

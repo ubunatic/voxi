@@ -3,16 +3,12 @@ package agent
 import (
 	"context"
 	"fmt"
-	"net"
 	"os"
-	"os/exec"
-	"time"
 
 	"github.com/spf13/cobra"
 	"ubunatic.com/voxi/internal/config"
 	"ubunatic.com/voxi/internal/deps"
 	"ubunatic.com/voxi/internal/tts"
-	"ubunatic.com/voxi/spec"
 )
 
 // NewCommand returns the `voxi agent` command tree.
@@ -63,7 +59,7 @@ func NewCommand(d deps.Dependencies) *cobra.Command {
 			if err := a.Start(cmd.Context()); err != nil {
 				fmt.Fprintf(d.Stderr, "warning: ASR backend failed to start; TTS remains available: %v\n", err)
 			}
-			go watchASRFallbackRevert(cmd.Context(), d)
+			reportASRFallback(d)
 			defer a.Stop(context.Background())
 			return Serve(cmd.Context(), socketPath, a)
 		},
@@ -128,41 +124,19 @@ func recordingMessage(state RecordingState) string {
 	return "Recording stopped"
 }
 
-func watchASRFallbackRevert(ctx context.Context, d deps.Dependencies) {
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			home := d.Getenv("HOME")
-			if home == "" {
-				home, _ = os.UserHomeDir()
-			}
-			settings, err := config.LoadUserSettings(home)
-			if err != nil || settings == nil {
-				continue
-			}
-			if settings.ASRModel == "r2t2-confucius4-voxi" {
-				dial := d.DialTimeout
-				if dial == nil {
-					dial = net.DialTimeout
-				}
-				conn, err := dial("tcp", "127.0.0.1:8735", 500*time.Millisecond)
-				if err == nil {
-					conn.Close()
-					modelSpec, specErr := spec.LoadModels()
-					defaultModel := "r2t2-confucius4"
-					if specErr == nil && modelSpec != nil && modelSpec.DefaultModel != "" {
-						defaultModel = modelSpec.DefaultModel
-					}
-					settings.ASRModel = defaultModel
-					_ = config.SaveUserSettings(home, settings)
-					_ = exec.CommandContext(ctx, "systemctl", "--user", "stop", "voxi-r2t2.service").Run()
-					fmt.Fprintf(d.Stderr, "voxi-agent: primary ASR endpoint (127.0.0.1:8735) recovered; reverted from fallback to %s\n", defaultModel)
-				}
-			}
-		}
+// reportASRFallback prints one diagnostic line at agent start when the saved
+// model is the voxi llama-server fallback. The agent never switches back on
+// its own: the automatic revert this replaced acted on a bare TCP connect to
+// the primary port, which proves the port is open, not that the primary
+// transcribes (issue 206). `voxi doctor` runs the real probe.
+func reportASRFallback(d deps.Dependencies) {
+	home := os.Getenv("HOME")
+	if d.Getenv != nil {
+		home = d.Getenv("HOME")
 	}
+	settings, err := config.LoadUserSettings(home)
+	if err != nil || settings == nil || settings.ASRModel != "r2t2-confucius4-voxi" {
+		return
+	}
+	fmt.Fprintf(d.Stderr, "voxi-agent: ASR model is the fallback %s; voxi does not switch back automatically. Run `voxi doctor` to test the primary, then `voxi settings set model <name>` and `systemctl --user restart voxi-agent.service` to return to it.\n", settings.ASRModel)
 }

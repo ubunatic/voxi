@@ -23,6 +23,9 @@ testdata/speech-context/*.wav
 # Go //go:embed and played back as the modifier-release-buffering notice.
 !internal/eager/notify/typing-paused.wav
 !test/fixtures/*.wav
+# Doctor's ASR probe clip (issue 206): a copy of test/fixtures/short-one-two.wav,
+# embedded via //go:embed.
+!internal/doctor/short-one-two.wav
 
 # local Go workspace (untracked)
 /go.work

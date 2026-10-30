@@ -39,7 +39,7 @@ func NewCommand(out io.Writer, host Host) *cobra.Command {
 			if ctx == nil {
 				ctx = context.Background()
 			}
-			doctor := HostDoctor{Host: host, Spec: s}
+			doctor := HostDoctor{Host: host, Spec: s, ASRProbe: defaultASRProbe}
 			report, err := doctor.Run(ctx, opts)
 			if err != nil {
 				return ExitError{Code: 2}

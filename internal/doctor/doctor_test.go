@@ -518,6 +518,11 @@ func healthyHost(t *testing.T) *fixtureHost {
 			return commandResult{output: "No coredumps found."}
 		case "curl":
 			return commandResult{output: "ok"}
+		case "ps":
+			return commandResult{}
+		case "which":
+			// The isolated HOME selects the default model, a local engine.
+			return commandResult{output: "/usr/bin/" + args[0]}
 		default:
 			return commandResult{err: fmt.Errorf("unexpected command %s", name)}
 		}
@@ -671,13 +676,10 @@ func TestCheckAsrEngine(t *testing.T) {
 	check := checkFor(t, s, "asr-engine")
 
 	t.Run("healthy online openai engine", func(t *testing.T) {
-		h := &fixtureHost{run: func(name string, args ...string) commandResult {
-			if name == "curl" {
-				return commandResult{output: "ok"}
-			}
-			return commandResult{err: fmt.Errorf("unexpected: %s", name)}
-		}}
-		res := HostDoctor{Host: h, Spec: s}.checkAsrEngine(context.Background(), check)
+		isolateASRHome(t)
+		probe := &fakeASRProbe{answers: map[string]string{pinnedR2T2URL: "One, two."}}
+		h := psHost(eagerDaemonPS)
+		res := HostDoctor{Host: h, Spec: s, ASRProbe: probe.probe}.checkAsrEngine(context.Background(), check)
 		if res.Status != OK {
 			t.Fatalf("expected status OK, got %+v", res)
 		}
@@ -687,19 +689,23 @@ func TestCheckAsrEngine(t *testing.T) {
 	})
 
 	t.Run("offline proxy endpoint suggests repairs", func(t *testing.T) {
+		isolateASRHome(t)
+		probe := &fakeASRProbe{errs: map[string]error{pinnedR2T2URL: failoverErr("connection refused")}}
 		h := &fixtureHost{run: func(name string, args ...string) commandResult {
-			if name == "curl" {
-				return commandResult{err: errors.New("exit status 7")}
-			}
 			return commandResult{err: fmt.Errorf("unexpected: %s", name)}
 		}}
-		res := HostDoctor{Host: h, Spec: s}.checkAsrEngine(context.Background(), check)
+		res := HostDoctor{Host: h, Spec: s, ASRProbe: probe.probe}.checkAsrEngine(context.Background(), check)
 		if res.Status != FAULT {
 			t.Fatalf("expected status FAULT, got %+v", res)
 		}
 		joined := strings.Join(res.Repairs, "\n")
-		if !strings.Contains(joined, "restart lmcoder-proxy.service") || !strings.Contains(joined, "r2t2-confucius4-voxi") {
-			t.Fatalf("expected proxy restart and fallback model in repairs, got: %v", res.Repairs)
+		if !strings.Contains(joined, "restart lmcoder-proxy.service") {
+			t.Fatalf("expected proxy restart in repairs, got: %v", res.Repairs)
+		}
+		// Obsolete expectation replaced (issue 206): the fallback was offered with
+		// no check that its model files exist. Offering it is now unsafe.
+		if strings.Contains(joined, "r2t2-confucius4-voxi") || strings.Contains(joined, "voxi-r2t2.service") {
+			t.Fatalf("repairs must not select or start the unverified fallback, got: %v", res.Repairs)
 		}
 	})
 
@@ -709,18 +715,34 @@ func TestCheckAsrEngine(t *testing.T) {
 		if err := config.SaveUserSettings(home, &config.UserSettings{ASRModel: "r2t2-confucius4-voxi"}); err != nil {
 			t.Fatal(err)
 		}
+		probe := &fakeASRProbe{answers: map[string]string{
+			fallbackR2T2URL: "One, two.",
+			pinnedR2T2URL:   "One, two.",
+		}}
 		h := &fixtureHost{run: func(name string, args ...string) commandResult {
-			if name == "curl" {
-				return commandResult{output: "ok"}
-			}
 			return commandResult{err: fmt.Errorf("unexpected: %s", name)}
 		}}
-		res := HostDoctor{Host: h, Spec: s}.checkAsrEngine(context.Background(), check)
+		res := HostDoctor{Host: h, Spec: s, ASRProbe: probe.probe}.checkAsrEngine(context.Background(), check)
 		if res.Status != WARN {
 			t.Fatalf("expected status WARN, got %+v", res)
 		}
 		if len(res.See) == 0 || !strings.Contains(strings.Join(res.See, " "), "voxi-r2t2.service") {
 			t.Fatalf("expected see hints to revert and stop fallback service, got: %v", res.See)
+		}
+		// Guidance only: switching back or stopping the fallback is the user's call,
+		// and the daemon keeps the fallback until it restarts.
+		if len(res.Repairs) != 0 {
+			t.Fatalf("primary-online guidance must not carry repairs, got: %v", res.Repairs)
+		}
+		modelSpec, err := spec.LoadModels()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(strings.Join(res.See, " "), modelSpec.DefaultModel) {
+			t.Fatalf("guidance must not switch to the default model %q, got: %v", modelSpec.DefaultModel, res.See)
+		}
+		if !strings.Contains(strings.Join(res.See, " "), "voxi settings set model r2t2-confucius4") {
+			t.Fatalf("expected guidance to return to the primary, got: %v", res.See)
 		}
 	})
 }

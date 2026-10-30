@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -78,19 +80,118 @@ func transcribeOpenAIWAV(ctx context.Context, wavPath, baseURL, model, responseF
 	if baseURL == "" {
 		baseURL = defaultOpenAIASRBaseURL
 	}
+	endpoints := append([]string{baseURL}, openAIFailoverURLs(baseURL)...)
+	text, _, err := WalkOpenAIEndpoints(endpoints, func(endpoint string) (string, error) {
+		return ProbeOpenAIWAV(ctx, wavPath, endpoint, model, responseFormat, stripBeforeMarker)
+	})
+	return text, err
+}
+
+// WalkOpenAIEndpoints calls try on each endpoint in order and returns the
+// result of the endpoint it stopped at. A failover is only worth taking when
+// the endpoint failed in a way another backend may not share (try's error
+// matches ErrOpenAIFailover); any other outcome, an answer included, ends the
+// walk. Dictation and internal/doctor both use it, so doctor reports the path
+// dictation really takes.
+func WalkOpenAIEndpoints(endpoints []string, try func(endpoint string) (string, error)) (text, endpoint string, err error) {
+	for _, endpoint = range endpoints {
+		text, err = try(endpoint)
+		if err == nil || !errors.Is(err, ErrOpenAIFailover) {
+			return text, endpoint, err
+		}
+	}
+	return "", endpoint, err
+}
+
+const (
+	// LmcoderProxyPort is the lmcoder proxy's port on the loopback interface.
+	LmcoderProxyPort = "8735"
+	// VoxiLlamaServerPort is the port of voxi's own llama-server fallback.
+	VoxiLlamaServerPort = "18131"
+)
+
+// IsLoopbackEndpoint reports whether rawURL is an http(s) URL on a loopback
+// host with exactly this port. Remote hosts, other ports and ports that merely
+// appear in the path or user info do not match.
+func IsLoopbackEndpoint(rawURL, port string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Port() != port {
+		return false
+	}
+	if u.Hostname() == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(u.Hostname())
+	return ip != nil && ip.IsLoopback()
+}
+
+// openAIFailoverURLs lists the endpoints tried, in order, after baseURL fails
+// with a transport error or HTTP 502/503/504 (issue 206). Only the lmcoder
+// proxy on :8735 has fallbacks: 18131 is voxi's own llama-server and 8749
+// answers when the remote x600 is offline. Every other endpoint gets none, so
+// a generic openai-transcribe model never acquires the lmcoder fallbacks. A
+// variable so tests can point it at httptest servers.
+var openAIFailoverURLs = func(baseURL string) []string {
+	if IsLoopbackEndpoint(baseURL, LmcoderProxyPort) {
+		return []string{"http://127.0.0.1:18131/v1", "http://127.0.0.1:8749/v1"}
+	}
+	return nil
+}
+
+// OpenAIFailoverURLs exports openAIFailoverURLs for internal/doctor, which
+// probes each failover endpoint once to report whether failover can serve
+// transcription while the primary is down.
+func OpenAIFailoverURLs(baseURL string) []string {
+	return openAIFailoverURLs(baseURL)
+}
+
+// ProbeOpenAIWAV makes exactly one transcription request to baseURL and never
+// fails over. internal/doctor uses it to test one endpoint at a time, so a
+// probe reports the state of the endpoint it names rather than of whichever
+// backend answered in its place.
+func ProbeOpenAIWAV(ctx context.Context, wavPath, baseURL, model, responseFormat, stripBeforeMarker string) (string, error) {
+	if baseURL == "" {
+		baseURL = defaultOpenAIASRBaseURL
+	}
+	text, failover, err := transcribeOpenAIOnce(ctx, wavPath, baseURL, model, responseFormat, stripBeforeMarker)
+	if failover && err != nil {
+		err = failoverError{err}
+	}
+	return text, err
+}
+
+// ErrOpenAIFailover matches a probe error that another endpoint may not share:
+// a transport error or HTTP 502/503/504, and not a cancelled caller context.
+var ErrOpenAIFailover = errors.New("retry on next endpoint")
+
+// failoverError wraps a failover-eligible error so errors.Is(err,
+// ErrOpenAIFailover) holds while the message stays the original one.
+type failoverError struct{ err error }
+
+func (e failoverError) Error() string        { return e.err.Error() }
+func (e failoverError) Unwrap() error        { return e.err }
+func (e failoverError) Is(target error) bool { return target == ErrOpenAIFailover }
+
+// transcribeOpenAIOnce makes one request to baseURL. failover reports whether
+// the next endpoint should be tried: true for a transport error or HTTP
+// 502/503/504, false for other HTTP statuses (a 400 or 500 would repeat on
+// another backend) and whenever the caller's own context is done (the caller
+// gave up, so trying more endpoints would only waste its time).
+func transcribeOpenAIOnce(ctx context.Context, wavPath, baseURL, model, responseFormat, stripBeforeMarker string) (text string, failover bool, err error) {
 	if responseFormat == "" {
 		responseFormat = "text"
 	}
+	callerCtx := ctx
 
 	body, contentType, err := buildOpenAITranscribeRequestBody(wavPath, model, responseFormat)
 	if err != nil {
-		return "", fmt.Errorf("openai-transcribe: build request: %w", err)
+		return "", false, fmt.Errorf("openai-transcribe: build request: %w", err)
 	}
 
 	reqURL := strings.TrimRight(baseURL, "/") + "/audio/transcriptions"
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, body)
 	if err != nil {
-		return "", fmt.Errorf("openai-transcribe: build request: %w", err)
+		return "", false, fmt.Errorf("openai-transcribe: build request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", contentType)
 
@@ -105,29 +206,23 @@ func transcribeOpenAIWAV(ctx context.Context, wavPath, baseURL, model, responseF
 	client := &http.Client{}
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		if strings.Contains(baseURL, ":8735") {
-			for _, fallbackURL := range []string{"http://127.0.0.1:18131/v1", "http://127.0.0.1:8749/v1"} {
-				hostPort := strings.TrimPrefix(strings.TrimPrefix(fallbackURL, "http://"), "https://")
-				hostPort = strings.TrimSuffix(hostPort, "/v1")
-				conn, dialErr := net.DialTimeout("tcp", hostPort, 150*time.Millisecond)
-				if dialErr == nil {
-					conn.Close()
-					return transcribeOpenAIWAV(ctx, wavPath, fallbackURL, model, responseFormat, stripBeforeMarker)
-				}
-			}
-		}
-		return "", fmt.Errorf("openai-transcribe: POST %s: %w", reqURL, err)
+		return "", callerCtx.Err() == nil, fmt.Errorf("openai-transcribe: POST %s: %w", reqURL, err)
 	}
 	defer resp.Body.Close()
 
 	out, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("openai-transcribe: read response: %w", err)
+		return "", callerCtx.Err() == nil, fmt.Errorf("openai-transcribe: read response: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("openai-transcribe: %s returned %s: %s", reqURL, resp.Status, bytes.TrimSpace(out))
+		gateway := resp.StatusCode == http.StatusBadGateway ||
+			resp.StatusCode == http.StatusServiceUnavailable ||
+			resp.StatusCode == http.StatusGatewayTimeout
+		return "", gateway && callerCtx.Err() == nil,
+			fmt.Errorf("openai-transcribe: %s returned %s: %s", reqURL, resp.Status, bytes.TrimSpace(out))
 	}
-	return parseOpenAITranscribeResponse(out, responseFormat, stripBeforeMarker)
+	text, err = parseOpenAITranscribeResponse(out, responseFormat, stripBeforeMarker)
+	return text, false, err
 }
 
 // openaiJSONTranscript is the subset of llama-server's
