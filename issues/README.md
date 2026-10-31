@@ -54,4 +54,5 @@
 | 203 | [203-try-and-benchmark-bark-3-0-pro-for-asr.md](203-try-and-benchmark-bark-3-0-pro-for-asr.md) | Try and benchmark Bark 3.0 Pro for ASR | Open |
 | 204 | [204-try-ming-3-0-tts-for-text-to-speech.md](204-try-ming-3-0-tts-for-text-to-speech.md) | Try Ming-3.0-tts, Fish Audio Drama 3 Preview, and Breeze TTS 2 | Open |
 | 205 | [205-try-dessa-tts-model.md](205-try-dessa-tts-model.md) | Try dessa TTS model | Open |
+| 208 | [208-continuous-ambient-noise-chunk-triggers-and-r2t2-hallucination-accepted-to-desktop-chunk-2177.md](208-continuous-ambient-noise-chunk-triggers-and-r2t2-hallucination-accepted-to-desktop-chunk-2177.md) | Continuous Ambient Noise Chunk Triggers and R2T2 Hallucination Accepted to Desktop (Chunk 2177) | Open |
 <!-- harnez:end issues-active-index -->
