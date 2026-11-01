@@ -37,3 +37,7 @@ testdata/speech-context/*.wav
 # Generated roff man page (docs/ManPages.md)
 /*.1
 
+
+# harnez issue-index lock files
+/issues/README.md.lock
+/issues/.reserve.lock

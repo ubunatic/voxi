@@ -31,6 +31,12 @@ DO commit `version.yaml` (and add it to `REUSE.toml` if the repo runs `reuse lin
 first automated bump doesn't trip license linting. A project with none of the native files is
 valid — sync is then a no-op.
 
+Projects with a breaking-changes table can set `upgrade_doc: docs/Upgrading.md` in
+`version.yaml` (default: `docs/Upgrading.md`). Release, including `--dry-run` and
+`--continue`, refuses table rows marked `Unreleased`; a missing doc skips the check.
+Relabel shipped rows manually: find the change's commit, inspect `git tag --contains
+<commit>`, and assign the earliest containing release version. Review ambiguous history.
+
 ### 2.2 Cobra root wiring (Go), in `cmd/<binary>/main.go`
 
 ```go
@@ -120,6 +126,10 @@ then re-running clears the warning next release.
 
 ## 4. Releasing & recovery
 
+### When to release, which bump
+
+Release only when the user or active `/goal` asks; otherwise recommend the bump and wait. First ensure a clean tree, committed/indexed docs and tickets, and passing `make lint` plus `make test-q1` (`make release` depends on `check`: gofmt, vet, and Go tests). Patch: compatible fixes/docs/refactors; minor: backward-compatible capabilities; major: breaking public APIs. A release pushes and publishes.
+
 ```bash
 make release                     # or: harnez release   (bumps patch by default)
 harnez release --bump patch      # or minor / major / 1.0.0
@@ -132,11 +142,31 @@ network/forge error — `--continue` resumes safely.
 
 `--continue` skips build and signing when `dist/SHA256SUMS`, its `.minisig`, and all
 listed archives for this version exist and their hashes verify. Missing files rebuild;
-checksum corruption fails. Before upload, fj lists existing assets and downloads
-published `SHA256SUMS`: existing names print `exists, skipped`; differing checksum
-sets fail for manual recovery without deleting remote assets. A nonempty release
-without `SHA256SUMS` also stops. Runtime errors suppress usage; auth failures suggest
-`fj auth login`, followed by `harnez release --continue`.
+checksum corruption fails. First publish and continue use one resolver: only versioned
+archives and packages for the release, `SHA256SUMS`, and its `.minisig` are uploaded.
+Bare binaries and artifacts for another version are excluded, including entries in
+`dist/artifacts.json`. Before upload, fj lists existing assets and downloads published
+`SHA256SUMS`: existing names print `exists, skipped`; differing checksum sets fail for
+manual recovery without deleting remote assets. Uploads reporting that a new release is
+not visible retry according to `upload_retry_attempts` and `upload_retry_delay` in the
+embedded `spec/release.yaml`. If listing fails, Harnez tries every selected upload and
+treats `already exists` as success. A nonempty release without `SHA256SUMS` also stops.
+Runtime errors suppress usage; auth failures suggest `fj auth login`, followed by
+`harnez release --continue`.
+
+### Protected main (`git.protected_main`)
+
+A plain `harnez release` still runs on the default branch, and also pushes any other unpushed
+commits there. Harnez does not check who runs it; the forge's branch protection decides whether the
+push is accepted. After a rejection, `harnez release --continue` finishes once the push is allowed.
+
+If you cannot push the default branch, release from `release/vX.Y.Z`; the bump commit and tag are
+made there and both are pushed. Open the PR and rebase-merge or fast-forward it so the tag stays on
+`main`'s history (a merge or squash commit leaves the tag off `main`). Harnez does not tag after
+the merge.
+
+To finish a rejected release through a PR, keep its local bump commit and tag: run
+`git switch -c release/vX.Y.Z`, `harnez release --continue`, then `git branch -f main origin/main`.
 
 ### 4.1 `go.work` and local co-development
 
@@ -220,9 +250,10 @@ harnez release --build-cmd "make dist"
   `~/.minisign/minisign.key`. Prefer a dedicated per-project key over the shared fallback;
   rotating from shared to per-project leaves already-published releases verifiable only with
   the old public key — commit the new `minisign.pub` and say so in the commit message.
-- **Published assets**: publish attaches everything in `dist/` matching `*.tar.gz`, `*.zip`,
-  `*.minisig`, `SHA256SUMS`, `<project>-*`. A scripted project ends up with the same three
-  assets as a Go one: tarball, `SHA256SUMS`, `SHA256SUMS.minisig`.
+- **Published assets**: first publish and `--continue` attach the same set: versioned archives
+  and packages for the release, `SHA256SUMS`, and `SHA256SUMS.minisig`. Bare binaries and
+  artifacts for another version are excluded. A scripted project with a tarball ends up with
+  three assets: tarball, `SHA256SUMS`, and `SHA256SUMS.minisig`.
 - **Pitfall**: publish still fails when `dist/` is missing or has no matching file, so a
   repo without artifacts cannot be released yet (harnez issue 734).
 

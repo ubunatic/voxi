@@ -1,6 +1,6 @@
 # 045: Editable Pre-Filled Transcript + Keyterm Prompt for Sample Recorder
 
-**Status**: Proposed
+**Status**: Draft
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Enhancement

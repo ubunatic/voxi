@@ -1,6 +1,6 @@
 # 035: SSH-Managed Remote Voxi Transcription Server Research
 
-**Status**: Proposed / Research  
+**Status**: Draft — Research  
 **Priority**: P2 (Medium)  
 **Severity**: Moderate  
 **Category**: Architecture  

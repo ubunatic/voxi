@@ -1,6 +1,6 @@
 # 068: Opt-In Spoken-Punctuation Formatting (`literal comma` → `,`) — Gated on User Demand
 
-**Status**: Proposed — Deferred, no current demand
+**Status**: Backlog — Deferred, no current demand
 **Priority**: P3 (Low) — explicitly not a P2/P1; see Section 2 gate
 **Severity**: Enhancement
 **Category**: Feature

@@ -1,6 +1,6 @@
 # 069: Async Correction-Detection Pipeline for `voxi feedback` (Auto-Suggest Vocabulary From Stored History)
 
-**Status**: Proposed / Feature
+**Status**: Draft — Feature
 **Priority**: P3 (Low)
 **Severity**: Enhancement
 **Category**: Feature

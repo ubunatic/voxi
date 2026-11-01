@@ -166,6 +166,14 @@ Canaries are intentionally distinct from full integration test suites:
 
 ---
 
+## Code Fixtures in Tests
+
+- **Import, don't copy.** Put code a test needs in an `internal/` package and import it; do not copy repository code into a temporary module or directory.
+- **Sunset covered canaries.** Remove a canary when regular tests already cover its behavior; mature projects with broad tests need few canaries.
+- **Isolation means a container test.** When a canary must prove behavior away from the host, make it a container test with a minimal image containing only what it needs.
+
+---
+
 ## Anti-patterns
 
 **Building first, then discovering the mechanism doesn't work.** If the

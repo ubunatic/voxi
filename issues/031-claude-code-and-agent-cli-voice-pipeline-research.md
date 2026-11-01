@@ -1,6 +1,6 @@
 # 031: Claude Code and agent CLI voice pipeline research
 
-**Status**: Proposed / Research  
+**Status**: Draft — Research  
 **Category**: Voice Transcription & Agent CLI Research  
 
 ---

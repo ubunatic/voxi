@@ -1,6 +1,6 @@
 # 048: Injection Fallback Chain for TypeText (wtype / clipboard-paste)
 
-**Status**: Proposed
+**Status**: Draft
 **Priority**: P3 (Low)
 **Severity**: Minor
 **Category**: Enhancement

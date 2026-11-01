@@ -1,6 +1,6 @@
 # 058: Configurable Scope for Hallucination Fixes: All Chunks vs. First-Chunk-Only
 
-**Status**: Proposed
+**Status**: Draft
 **Priority**: P3 (Low)
 **Severity**: Minor
 **Category**: Feature

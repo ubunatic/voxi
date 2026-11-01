@@ -46,7 +46,7 @@ Docs in `./docs/` are managed by harnez. <!-- harnez:bundled -->
 - Git @docs/Git.md,
   conventional commits, work on the default branch, don't push unless asked
 - Go/Golang @docs/Go.md,
-  Modern Go, avoid deps but use Cobra, add tests; use runes and display width for terminal layout
+  Modern Go; substantive features and tests in internal/<feature>, thin cmd/<app> for test caching; avoid deps, use runes and display width
 - Release Pipeline @docs/GoRelease.md,
   harnez release, version.yaml spec, GoReleaser v2, non-interactive minisign (-W), Forgejo has_releases, language-agnostic (Go/Python/Zig/Rust/scripted)
 - Issue Tracking Practices @docs/IssueTracking.md,

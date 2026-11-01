@@ -35,7 +35,8 @@ subagents in a sprint skip it unless their skill requires it at the end; the hos
 Applies when this project has an `issues/` tracker. To search existing issues,
 compute the next ticket number, or allocate one, use `harnez find` / `harnez issues`
 instead of `ls issues/`, `find`, or raw grep:
-- `harnez find -d <repo> issues -a status:open` — list active open issues as text.
+- `harnez find -d <repo> issues -a status:active` — list active tickets (Open, In Progress, Blocked, Draft) as text.
+- `issues/README.md` is the generated active index; follow its links to `issues/BACKLOG.md` and `issues/CLOSED.md` for other lifecycle groups.
 - `harnez find -d <repo> issues "<query>"` — fuzzy search across titles and body text.
 - `harnez issues show -d <repo> <n>` — read a single issue as text.
 - Use text for routine issue discovery and document reads. Render PNG cards with
@@ -51,19 +52,21 @@ instead of `ls issues/`, `find`, or raw grep:
   `issues/README.md`, and commit, in one call
 - Closing an already-Closed ticket is a no-op regardless of reason; use
   `harnez issues close --amend-reason` to explicitly correct its reason.
+- `harnez issues close` refuses unless a commit outside `issues/` references the ticket number; pass `--no-code` when the ticket needed no code.
 - Commit documentation and `issues/*.md` changes immediately; don't batch them behind
   pending code work.
 
 ## Harnez Agent
-- Prefer loaded `mcp__harnez__*` tools for lifecycle actions; otherwise use `harnez agent` via Bash (see the local Subagent Policy).
+- In interactive hosts, run `harnez_command` start/wait in the host background runner; never synchronously call `harnez_wait_agent` or spawn-and-wait MCP (see the local Subagent Policy).
 - A requested model such as `sol:low` or `luna` is a Harnez agent model (see `harnez agent models`); dispatch it with `harnez agent start --model <name>`, regardless of `subagent_mode`.
-- Start: `harnez agent start --name <name> --role <role> --model <model> -p <prompt>`; roles are `orchestrator`, `developer`, `reviewer` and `advisor`. Run it with `HTO=0` in your session background, one call per worker, so it never detaches: Claude Bash `run_in_background: true` (jobs stop after 30 minutes; size worker turns to finish before that); agy `run_command` with a small `WaitMsBeforeAsync`; Codex `exec_command`, then `write_stdin` on the returned `session_id` until an exit code. Never use shell `&`, `nohup` or a status/log polling loop; see `harnez agent start --help`.
+- Release only when the user or `/goal` asks; otherwise recommend the semver bump and wait. See `docs/GoRelease.md`.
+- Start: `harnez agent start --name <name> --role <role> --model <model> -p <prompt>`; roles are `orchestrator`, `developer`, `reviewer` and `advisor`. Run it with `HTO=0` in your session background, one call per worker, so it never detaches: Claude Bash `run_in_background: true` (jobs stop after 30 minutes; size worker turns to finish before that); agy `run_command` with a small `WaitMsBeforeAsync`; Codex `exec_command`, then `write_stdin` on the returned `session_id` until an exit code. Never use shell `&`, `nohup` or a status/log polling loop; see `harnez agent start --help`. `run_in_background`: Claude Code Bash tool parameter only; not a harnez flag.
 - List: `harnez agent list`.
 - Status: `harnez agent status --name <session>`.
 - Wait: `harnez agent wait <session>` (session is positional).
 - Resume: `harnez agent resume --name <session> <prompt>`.
 - Stop: `harnez agent stop --name <session>`.
-- When a `/goal` without an exit clause is set (e.g. typed by the user), say so in the first reply and offer `/goal ... or stop and report when blocked on a user decision or denied permission`; once blocked on the user, suggest `/goal clear` instead of repeating the wait message.
+- When a `/goal` without an exit clause is set (e.g. typed by the user), say so in the first reply and offer `/goal ... or stop and report when blocked on a user decision or denied permission`; once blocked on the user, suggest `/goal clear` instead of repeating the wait message. Circuit breaker: on a loop, a hard architectural or OS blocker, or no progress, run `/goal clear` and write a failure report (what was tried, why it failed, resume point) in the ticket.
 
 ## External Skills
 External skills (installed with `harnez skill install`) are explicit-only: never use one
@@ -76,6 +79,10 @@ unless the user names it (e.g. `/scroll-craft`, "use scroll-craft") or picks it 
 
 ## Code and Documentation Search
 - Before broad shell searches, use `harnez find code|docs` or MCP `harnez_find`; see `@docs/Search.md`.
+- A code-memory MCP (for example codebase-memory) is usable only when this session lists its tools. Check the exposed tool list (or ToolSearch) before saying it is unavailable; do not guess from memory.
+- When it is exposed: call `list_projects` to see whether the current repository is indexed, then `index_status` for that project. If it is unindexed, call `index_repository` only when the user has authorized indexing. Do not assume auto-indexing; verify with `index_status`.
+- Distinguish three states: MCP not exposed (no tools listed), exposed but the repository is unindexed, and indexed. Only the first is "unavailable"; the second is fixed by indexing or fallback.
+- If the MCP is not exposed, or indexing is not authorized or fails, fall back to `harnez find code|docs` and then `rg`, and say which fallback you used.
 
 ## Background Tasks, Jobs & HTO=0
 - For long-running commands, test suites, or subagent waits executed in the
@@ -85,10 +92,26 @@ unless the user names it (e.g. `/scroll-craft`, "use scroll-craft") or picks it 
   on reactive completion notifications. Do NOT poll status or run `sleep` commands.
 - Never `pkill -f`/`pgrep -f` with a pattern that can match your own shell command line (it
   kills the tool call itself). Match exact argv fields via `ps -eo pid,args` or kill recorded PIDs.
+- If background tasks are troublesome, or you do not recognise this host's background tools, run
+  `harnez agent selftest --step hello` once. It prints a session id. Pass that same `--session <id>` to every
+  later step (`--step background`, `--step confirm`, `--step confirm-running <duration>`, `--step verify`). Without
+  it, the id comes from the parent process when no agent session variable is set, so a separate tool call can get
+  a different id and fail with "run hello first". Report any missing background tool by name; do not fake background
+  work with shell `&`, `nohup`, or polling.
+- Pi: when the global Harnez runner is installed, the session exposes `background_task`, `background_task_list`,
+  `background_task_result`, and `background_task_cancel`. If they are not listed, the runner is not loaded in this
+  session: say so and name the missing tools. Their absence means the runner is not loaded, not that the task is done.
 
 ## Agentic Loop Invariants
 Where `@docs/AgenticLoop.md` is present in this project, follow it rather than
 restating it here — in particular Invariant 1 (Parallel Read, Sequential Write:
 one writer per workspace), Invariant 3 (Zero Zombie Guarantee: track and terminate
-every background task and subagent), and Invariant 6 (Context Discipline: no whole-file
-reads of AGENTS.md/CLAUDE.md — grep or range-bounded reads).
+every background task and subagent), Invariant 6 (Context Discipline: no whole-file
+reads of AGENTS.md/CLAUDE.md — grep or range-bounded reads), and Invariant 13
+(Repository Scope & Product Primacy).
+
+## Repository Scope & Product Primacy
+The applications, tools, and code inside this repository are your sole product.
+- Never proactively offer, volunteer, or initiate implementation or coding tasks in external repositories.
+- Cross-repository coding tasks may only be executed when the user explicitly commands and scopes them.
+- Outside this repository, you may only perform read-only lookups for context, inspect dependencies, or file a requested/blocking issue. Never pivot the active implementation focus away from the host repo.

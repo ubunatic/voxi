@@ -1,6 +1,6 @@
 # Continuous Listening, Wake-Word Activation & Verbal Turn-Taking
 
-- **Status:** Proposed / Research & Planning
+- **Status:** Draft — Research & Planning
 - **Related Issues:** 020 (Voice Input), 021 (Fluent Streaming), 026 (Continuous Eager Sentence Streaming)
 
 ## Context & Vision

@@ -1,6 +1,6 @@
 # Local LLM Post-Process Hook for Dictation Cleanup & Voice Commands
 
-- **Status:** Proposed / Research & Design
+- **Status:** Draft — Research & Design
 - **Related Issues:** 020 (Voice Input), 021 (Fluent Streaming), 026 (Continuous Eager Sentence Streaming), 027 (Continuous Listening & Turn-Taking — shares the "human over" stop delimiter)
 
 ## Context & Vision

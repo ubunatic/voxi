@@ -27,6 +27,8 @@ weight: 60
 - **Small**: Root `main.go` with features split by concern (`apply.go`, `config.go`, `status.go`).
 - **Med**: Root `main.go` with `internal/` sub-packages; no `pkg/`.
 - **Large/Multi**: Tools in `cmd/<name>/main.go` with features in split files or `internal/`.
+- Put each substantive feature and its tests in `internal/<feature>` from day one; use a public package only for an intended public API.
+- Keep `cmd/<app>` thin (flags, help, exit routing) to preserve Go's package-level test caching.
 - **Embed static assets & specs**: Use `//go:embed`.
 - **Never commit binaries**: `go build` drops binaries in the repo root.
   Add it to `.gitignore` at project setup time:
@@ -105,5 +107,8 @@ weight: 60
 - Put tests in the same package (e.g. `package main`) to test unexported components easily.
 - Helpers: `t.Helper()`, `t.Fatalf` for setup failures, `t.Errorf` for assertion failures.
 - Standard library `testing` only — no external testing frameworks or mock generators.
+
+## Before Committing
+- Before committing Go changes, run `gokay check` (add `--base <branch>` without `origin/HEAD`) when `gokay` is on PATH; otherwise the repo's `make test` tiers apply.
 
 <!-- harnez:stop -->

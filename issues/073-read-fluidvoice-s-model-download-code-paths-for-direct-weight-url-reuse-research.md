@@ -1,6 +1,6 @@
 # 073: Read FluidVoice's Model-Download Code Paths for Direct Weight-URL Reuse (Research)
 
-**Status**: Proposed / Research
+**Status**: Draft — Research
 **Priority**: P3 (Low)
 **Severity**: Informational
 **Category**: Research

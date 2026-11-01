@@ -1,6 +1,6 @@
 # 067: Read FluidAudio Source for Its End-of-Utterance Model and Assess Linux Portability
 
-**Status**: Proposed / Research
+**Status**: Draft — Research
 **Priority**: P3 (Low)
 **Severity**: Informational
 **Category**: Research

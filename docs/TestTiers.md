@@ -32,7 +32,14 @@ Non-Go repos keep the same target names and map them to their toolchain.
   them in the full tier.
 - **Containers** — tests must pass offline as a non-root user in a fresh git
   checkout; never depend on `$HOME` state, installed binaries, or the network.
-  Isolate state with `t.Setenv("HOME", t.TempDir())`.
+  Isolate state with `t.Setenv("HOME", t.TempDir())`, and also the XDG dirs and
+  `PATH`: a test that resolves a host tool (a classifier, a provider CLI) is
+  flaky and slow. A guard test that fails when host tools resolve keeps it so.
+- **Subprocess binaries** — build the binary under test once per package and
+  share it and the Go build cache; a per-test build into a fresh `HOME` loses
+  the cache and cost one harnez test 25s. Wait on a ready signal from the
+  child, never a fixed budget, and give it a watchdog so a hung child fails in
+  seconds. Child processes that get killed must not leak temp dirs.
 
 ## Timing Rules
 
@@ -45,6 +52,10 @@ Non-Go repos keep the same target names and map them to their toolchain.
 
 - Tests must pass with `-count=1` repeated and in any order; no shared global
   state between tests without reset.
+- To speed up a suite, profile first (`go test -json`, the 20 slowest tests)
+  before moving code into packages: package moves improve caching and context,
+  but rarely cut the time of the slow tests. Record load average with each
+  timing; on a busy host, compare versions back-to-back.
 
 ## Quality Gates
 
