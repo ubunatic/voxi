@@ -67,4 +67,5 @@
 | 208 | [208-continuous-ambient-noise-chunk-triggers-and-r2t2-hallucination-accepted-to-desktop-chunk-2177.md](208-continuous-ambient-noise-chunk-triggers-and-r2t2-hallucination-accepted-to-desktop-chunk-2177.md) | Continuous Ambient Noise Chunk Triggers and R2T2 Hallucination Accepted to Desktop (Chunk 2177) | Open |
 | 209 | [209-do-not-save-high-confidence-low-volume-and-noise-chunks-to-ring-buffer.md](209-do-not-save-high-confidence-low-volume-and-noise-chunks-to-ring-buffer.md) | Do Not Save High-Confidence Low-Volume and Noise Chunks to Ring Buffer | Open |
 | 213 | [213-mic-bluetooth-node-prefix-and-hfp-profile-name-still-go-literals.md](213-mic-bluetooth-node-prefix-and-hfp-profile-name-still-go-literals.md) | mic: Bluetooth node prefix and HFP profile name still Go literals | Open |
+| 215 | [215-audio-energy-gate-thresholds-are-go-literals-move-to-spec.md](215-audio-energy-gate-thresholds-are-go-literals-move-to-spec.md) | audio: energy gate thresholds are Go literals, move to spec | Draft |
 <!-- harnez:end issues-active-index -->
