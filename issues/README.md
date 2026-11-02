@@ -68,4 +68,5 @@
 | 209 | [209-do-not-save-high-confidence-low-volume-and-noise-chunks-to-ring-buffer.md](209-do-not-save-high-confidence-low-volume-and-noise-chunks-to-ring-buffer.md) | Do Not Save High-Confidence Low-Volume and Noise Chunks to Ring Buffer | Open |
 | 210 | [210-bluetooth-headset-dictation-mic-gain-boost-and-mic-keep-awake.md](210-bluetooth-headset-dictation-mic-gain-boost-and-mic-keep-awake.md) | Bluetooth headset dictation: mic gain boost and mic keep-awake | Open |
 | 211 | [211-doctor-fix-start-lmcoder-asr-service-and-warn-about-gpu-and-memory-cost.md](211-doctor-fix-start-lmcoder-asr-service-and-warn-about-gpu-and-memory-cost.md) | doctor --fix: start lmcoder ASR service and warn about GPU and memory cost | Open |
+| 212 | [212-bench-test-testruncrispasrgpusuccesswithdetectedbackend-hangs-until-10m-timeout.md](212-bench-test-testruncrispasrgpusuccesswithdetectedbackend-hangs-until-10m-timeout.md) | bench test TestRunCrispasrGPUSuccessWithDetectedBackend hangs until 10m timeout | Draft |
 <!-- harnez:end issues-active-index -->
