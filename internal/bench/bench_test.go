@@ -10,9 +10,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"ubunatic.com/voxi/internal/audio"
+	"ubunatic.com/voxi/internal/crispasr"
 	"ubunatic.com/voxi/internal/deps"
 )
 
@@ -41,8 +43,64 @@ func TestWavDurationSecsRejectsNonWAV(t *testing.T) {
 	}
 }
 
-func testDeps() deps.Dependencies {
-	return deps.Dependencies{Stdout: &bytes.Buffer{}}
+// TestMain makes the bench package refuse real network access (issue 212):
+// any download path that bypasses the injected HTTP client fails immediately.
+func TestMain(m *testing.M) {
+	http.DefaultClient.Transport = refuseNetwork{}
+	os.Exit(m.Run())
+}
+
+type refuseNetwork struct{}
+
+func (refuseNetwork) RoundTrip(r *http.Request) (*http.Response, error) {
+	return nil, errors.New("network disabled in bench tests: " + r.URL.String())
+}
+
+// netGuard is the injected download client for bench tests. It never reaches
+// the network. In strict mode any request also fails the test; otherwise it
+// only counts attempts, so canary tests can assert that a download was tried.
+type netGuard struct {
+	t      *testing.T
+	strict bool
+	hits   atomic.Int32
+}
+
+func (g *netGuard) RoundTrip(r *http.Request) (*http.Response, error) {
+	g.hits.Add(1)
+	if g.strict {
+		g.t.Errorf("unexpected network request in test: %s", r.URL)
+	}
+	return nil, errors.New("network disabled in tests: " + r.URL.String())
+}
+
+func newNetGuard(t *testing.T, strict bool) (*netGuard, *http.Client) {
+	g := &netGuard{t: t, strict: strict}
+	return g, &http.Client{Transport: g}
+}
+
+// serverDeps returns deps whose download client talks only to srv.
+func serverDeps(srv *httptest.Server) deps.Dependencies {
+	return deps.Dependencies{Stdout: &bytes.Buffer{}, HTTPClient: srv.Client()}
+}
+
+// writeSparseWeights creates a cached-weights fixture at the GGUF size floor.
+// The file is sparse, so no 1 GiB is allocated, and EnsureWeights treats it as complete.
+func writeSparseWeights(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Truncate(crispasr.GGUFMinBytes); err != nil {
+		_ = f.Close()
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestFetchAndCacheClipDownloadsAndVerifies(t *testing.T) {
@@ -53,7 +111,7 @@ func TestFetchAndCacheClipDownloadsAndVerifies(t *testing.T) {
 	defer srv.Close()
 
 	path := filepath.Join(t.TempDir(), "cache", "clip.wav")
-	got, err := fetchAndCacheClip(context.Background(), testDeps(), srv.URL, sha256Hex(content), path)
+	got, err := fetchAndCacheClip(context.Background(), serverDeps(srv), srv.URL, sha256Hex(content), path)
 	if err != nil {
 		t.Fatalf("fetchAndCacheClip() error = %v", err)
 	}
@@ -82,7 +140,7 @@ func TestFetchAndCacheClipReusesValidCache(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	got, err := fetchAndCacheClip(context.Background(), testDeps(), srv.URL, sha256Hex(content), path)
+	got, err := fetchAndCacheClip(context.Background(), serverDeps(srv), srv.URL, sha256Hex(content), path)
 	if err != nil {
 		t.Fatalf("fetchAndCacheClip() error = %v", err)
 	}
@@ -101,7 +159,7 @@ func TestFetchAndCacheClipRejectsChecksumMismatch(t *testing.T) {
 	defer srv.Close()
 
 	path := filepath.Join(t.TempDir(), "clip.wav")
-	if _, err := fetchAndCacheClip(context.Background(), testDeps(), srv.URL, sha256Hex([]byte("wanted content")), path); err == nil {
+	if _, err := fetchAndCacheClip(context.Background(), serverDeps(srv), srv.URL, sha256Hex([]byte("wanted content")), path); err == nil {
 		t.Fatal("fetchAndCacheClip() error = nil, want checksum mismatch error")
 	}
 	if _, err := os.Stat(path); err == nil {
@@ -264,7 +322,7 @@ func TestFetchAndCacheClipDownloadErrors(t *testing.T) {
 		defer srv.Close()
 
 		path := filepath.Join(t.TempDir(), "clip.wav")
-		if _, err := fetchAndCacheClip(context.Background(), testDeps(), srv.URL, "dummy", path); err == nil {
+		if _, err := fetchAndCacheClip(context.Background(), serverDeps(srv), srv.URL, "dummy", path); err == nil {
 			t.Fatal("expected error on HTTP 500 response")
 		}
 	})
@@ -280,7 +338,7 @@ func TestFetchAndCacheClipDownloadErrors(t *testing.T) {
 		defer srv.Close()
 
 		path := filepath.Join(t.TempDir(), "toolarge.wav")
-		if _, err := fetchAndCacheClip(context.Background(), testDeps(), srv.URL, "dummy", path); err == nil {
+		if _, err := fetchAndCacheClip(context.Background(), serverDeps(srv), srv.URL, "dummy", path); err == nil {
 			t.Fatal("expected error on download exceeding max size")
 		}
 	})
@@ -550,16 +608,10 @@ exit 0
 		t.Fatal(err)
 	}
 
-	// Fake GGUF weights so EnsureWeights doesn't try downloading from HF
+	// Sparse weights at the size floor so EnsureWeights never downloads (issue 212).
 	cacheRoot := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", cacheRoot)
-	weightsDir := filepath.Join(cacheRoot, "voxi", "models")
-	if err := os.MkdirAll(weightsDir, 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(weightsDir, "cohere-transcribe-q5_0.gguf"), make([]byte, 1024), 0644); err != nil {
-		t.Fatal(err)
-	}
+	writeSparseWeights(t, filepath.Join(cacheRoot, "voxi", "models", crispasr.GGUFFile))
 
 	wavPath := filepath.Join(t.TempDir(), "test.wav")
 	pcm := make([]byte, 16000*2) // 1s
@@ -567,8 +619,10 @@ exit 0
 		t.Fatal(err)
 	}
 
+	_, client := newNetGuard(t, true)
 	d := deps.Dependencies{
-		Stdout: &bytes.Buffer{},
+		Stdout:     &bytes.Buffer{},
+		HTTPClient: client,
 		LookPath: func(file string) (string, error) {
 			if file == "crispasr" {
 				return crispasrScript, nil
@@ -676,13 +730,7 @@ exit 0
 
 	cacheRoot := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", cacheRoot)
-	weightsDir := filepath.Join(cacheRoot, "voxi", "models")
-	if err := os.MkdirAll(weightsDir, 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(weightsDir, "cohere-transcribe-q5_0.gguf"), make([]byte, 1024), 0644); err != nil {
-		t.Fatal(err)
-	}
+	writeSparseWeights(t, filepath.Join(cacheRoot, "voxi", "models", crispasr.GGUFFile))
 
 	wavPath := filepath.Join(t.TempDir(), "test.wav")
 	pcm := make([]byte, 16000*2) // 1s
@@ -690,8 +738,10 @@ exit 0
 		t.Fatal(err)
 	}
 
+	_, client := newNetGuard(t, true)
 	d := deps.Dependencies{
-		Stdout: &bytes.Buffer{},
+		Stdout:     &bytes.Buffer{},
+		HTTPClient: client,
 		LookPath: func(file string) (string, error) {
 			if file == "crispasr" {
 				return crispasrScript, nil
@@ -722,5 +772,76 @@ exit 0
 	}
 	if !strings.Contains(res.Text, "Transcribed text on vulkan") {
 		t.Errorf("expected text, got: %q", res.Text)
+	}
+}
+
+// TestRunCohereFailsFastWithoutCachedWeights is the canary for the download
+// guard (issue 212): with no cached weights the one download attempt must go
+// through the injected client and fail the row, never reach the network.
+func TestRunCohereFailsFastWithoutCachedWeights(t *testing.T) {
+	binDir := t.TempDir()
+	crispasrScript := filepath.Join(binDir, "crispasr")
+	if err := os.WriteFile(crispasrScript, []byte("#!/bin/sh\necho \"  ggml backends : cpu\"\nexit 0\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
+	wavPath := filepath.Join(t.TempDir(), "test.wav")
+	if err := audio.WriteWAVAudio(wavPath, make([]byte, 16000*2), 16000); err != nil {
+		t.Fatal(err)
+	}
+
+	g, client := newNetGuard(t, false)
+	d := deps.Dependencies{
+		Stdout:     &bytes.Buffer{},
+		HTTPClient: client,
+		LookPath: func(file string) (string, error) {
+			if file == "crispasr" {
+				return crispasrScript, nil
+			}
+			return "", errors.New("not found")
+		},
+	}
+	report, err := Run(context.Background(), d, Options{
+		WavFile:  wavPath,
+		Models:   []string{"cohere-transcribe-03-2026"},
+		Backends: []string{"cpu"},
+	})
+	if err != nil {
+		t.Fatalf("Run() error: %v", err)
+	}
+	if len(report.Results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(report.Results))
+	}
+	if !strings.Contains(report.Results[0].Error, "ensure weights") {
+		t.Errorf("expected ensure weights error, got: %q", report.Results[0].Error)
+	}
+	if n := g.hits.Load(); n != 1 {
+		t.Fatalf("download attempts through injected client = %d, want exactly 1", n)
+	}
+}
+
+// TestRunDefaultClipDownloadUsesInjectedClient is the reference-clip canary:
+// without a WAV file, Run must fetch the JFK clip through the injected client.
+func TestRunDefaultClipDownloadUsesInjectedClient(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
+	g, client := newNetGuard(t, false)
+	d := deps.Dependencies{
+		Stdout:     &bytes.Buffer{},
+		HTTPClient: client,
+		LookPath: func(file string) (string, error) {
+			return "", errors.New("not found")
+		},
+	}
+	_, err := Run(context.Background(), d, Options{
+		Models:   []string{"base.en"},
+		Backends: []string{"cpu"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "fetch reference clip") {
+		t.Fatalf("Run() error = %v, want fetch reference clip error", err)
+	}
+	if n := g.hits.Load(); n != 1 {
+		t.Fatalf("clip download attempts through injected client = %d, want exactly 1", n)
 	}
 }

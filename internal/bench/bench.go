@@ -368,7 +368,7 @@ func fetchAndCacheClip(ctx context.Context, d deps.Dependencies, url, wantSHA256
 	if err != nil {
 		return "", fmt.Errorf("build request: %w", err)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := d.HTTPClientOrDefault().Do(req)
 	if err != nil {
 		return "", fmt.Errorf("download %s: %w", url, err)
 	}

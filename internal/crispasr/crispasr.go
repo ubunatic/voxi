@@ -86,7 +86,7 @@ func EnsureWeights(ctx context.Context, d deps.Dependencies) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := EnsureWeightsFile(ctx, GGUFURL, path, GGUFMinBytes, d.Stdout); err != nil {
+	if err := EnsureWeightsFileWith(ctx, d.HTTPClientOrDefault(), GGUFURL, path, GGUFMinBytes, d.Stdout); err != nil {
 		return "", fmt.Errorf("cohere-transcribe weights unavailable: %w", err)
 	}
 	return path, nil
@@ -110,12 +110,18 @@ func WeightsPath() (string, error) {
 // this against a small httptest fixture instead of a real multi-gigabyte
 // download.
 func EnsureWeightsFile(ctx context.Context, url, path string, minBytes int64, progress io.Writer) error {
+	return EnsureWeightsFileWith(ctx, http.DefaultClient, url, path, minBytes, progress)
+}
+
+// EnsureWeightsFileWith is EnsureWeightsFile with the download performed by
+// client, so callers and tests can control or forbid network access.
+func EnsureWeightsFileWith(ctx context.Context, client *http.Client, url, path string, minBytes int64, progress io.Writer) error {
 	if fi, statErr := os.Stat(path); statErr == nil && fi.Size() >= minBytes {
 		return nil
 	}
 
 	fmt.Fprintf(progress, "Downloading model weights (one-time, from %s)...\n", url)
-	if err := DownloadFile(ctx, url, path, minBytes); err != nil {
+	if err := DownloadFileWith(ctx, client, url, path, minBytes); err != nil {
 		return fmt.Errorf("no cached copy at %s and download failed: %w", path, err)
 	}
 	return nil
@@ -126,11 +132,16 @@ func EnsureWeightsFile(ctx context.Context, url, path string, minBytes int64, pr
 // for a later run to mistake as complete. A downloaded body shorter than
 // minBytes is treated as a truncated/partial transfer and rejected.
 func DownloadFile(ctx context.Context, url, path string, minBytes int64) error {
+	return DownloadFileWith(ctx, http.DefaultClient, url, path, minBytes)
+}
+
+// DownloadFileWith is DownloadFile performed by client.
+func DownloadFileWith(ctx context.Context, client *http.Client, url, path string, minBytes int64) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("download %s: %w", url, err)
 	}

@@ -2,6 +2,7 @@ package crispasr
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,8 @@ import (
 	"slices"
 	"sync/atomic"
 	"testing"
+
+	"ubunatic.com/voxi/internal/deps"
 )
 
 func TestTranscribeArgsShape(t *testing.T) {
@@ -102,6 +105,62 @@ func TestEnsureWeightsFileRejectsTruncatedDownload(t *testing.T) {
 	}
 	if _, statErr := os.Stat(path + ".tmp"); !os.IsNotExist(statErr) {
 		t.Fatal("DownloadFile left a .tmp file behind after a truncated download")
+	}
+}
+
+// countingTransport refuses every request and counts attempts, so tests can
+// prove whether a download was attempted without touching the network (issue 212).
+type countingTransport struct{ hits atomic.Int32 }
+
+func (c *countingTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	c.hits.Add(1)
+	return nil, errors.New("network disabled in tests: " + r.URL.String())
+}
+
+func TestEnsureWeightsCachedFileNeverRequests(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	path, err := WeightsPath()
+	if err != nil {
+		t.Fatalf("WeightsPath() error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Sparse file at the size floor: satisfies the cache check without allocating 1 GiB.
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Truncate(GGUFMinBytes); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	tr := &countingTransport{}
+	d := deps.Dependencies{Stdout: io.Discard, HTTPClient: &http.Client{Transport: tr}}
+	got, err := EnsureWeights(context.Background(), d)
+	if err != nil {
+		t.Fatalf("EnsureWeights() error = %v, want nil for a cached file at the size floor", err)
+	}
+	if got != path {
+		t.Errorf("EnsureWeights() = %q, want %q", got, path)
+	}
+	if n := tr.hits.Load(); n != 0 {
+		t.Fatalf("EnsureWeights() made %d network request(s) despite cached weights", n)
+	}
+}
+
+func TestEnsureWeightsUncachedUsesInjectedClient(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	tr := &countingTransport{}
+	d := deps.Dependencies{Stdout: io.Discard, HTTPClient: &http.Client{Transport: tr}}
+	if _, err := EnsureWeights(context.Background(), d); err == nil {
+		t.Fatal("EnsureWeights() error = nil, want download failure from the refusing client")
+	}
+	if n := tr.hits.Load(); n != 1 {
+		t.Fatalf("EnsureWeights() used the injected client %d time(s), want exactly 1", n)
 	}
 }
 

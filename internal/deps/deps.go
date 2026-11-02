@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -46,6 +47,18 @@ type Dependencies struct {
 	// reachable (issue 136) without depending on a real network dial in
 	// tests, which inject a fake here instead.
 	DialTimeout func(network, addr string, timeout time.Duration) (net.Conn, error)
+	// HTTPClient performs model-weight and reference-clip downloads. Nil means
+	// http.DefaultClient. Tests inject a client that refuses requests so they
+	// never touch the network (issue 212).
+	HTTPClient *http.Client
+}
+
+// HTTPClientOrDefault returns HTTPClient, or http.DefaultClient when it is unset.
+func (d Dependencies) HTTPClientOrDefault() *http.Client {
+	if d.HTTPClient != nil {
+		return d.HTTPClient
+	}
+	return http.DefaultClient
 }
 
 // lookPathWithFallbacks resolves binaries via standard exec.LookPath, falling back to
