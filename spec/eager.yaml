@@ -80,7 +80,7 @@ mic_check:
 bluetooth_mic:
   # Linear sample gain for Bluetooth default sources. Derived from the
   # 2026-11-02 host measurement (see the issue 210 Decision and docs/AudioDoctor.md).
-  gain_factor: 6
+  gain_factor: 2.75
   # WirePlumber node-name matches the keep-awake drop-in applies to.
   node_matches: ["~bluez_input.*", "~bluez_capture_internal.*"]
   # Idle suspend timeout for those nodes; 0 keeps the mic link awake.
@@ -90,4 +90,11 @@ bluetooth_mic:
   # Drop-in file name under the WirePlumber config directory.
   dropin_name: 51-voxi-bt-mic-no-suspend.conf
   # First line of the drop-in; a file carrying it is voxi's to rewrite or remove.
-  dropin_marker: "# voxi: keep the Bluetooth headset mic link awake"
+  dropin_marker: "# managed-by: voxi mic headset"
+  # Card profiles: voxi pins a Bluetooth card on a2dp_profile to headset_profile
+  # when it enables keep-awake, because autoswitch is off and nothing else would.
+  a2dp_profile: a2dp-sink
+  headset_profile: headset-head-unit
+  # Line voxi writes into its drop-in when it turned autoswitch off (prefix + "true");
+  # `--off` restores autoswitch only when this line is present.
+  restore_record_prefix: "# voxi-restore-autoswitch: "

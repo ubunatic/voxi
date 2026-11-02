@@ -33,9 +33,11 @@ Plain output (no color) is the default for pipes and for `NO_COLOR`; the text is
   WirePlumber/BlueZ config fragments are forgotten and have side effects. Repairs are
   `pw-metadata`, `pactl set-card-profile`, `wpctl set-default` and `systemctl --user restart`.
   The exception is the Bluetooth keep-awake drop-in and autoswitch-off, written only by
-  `voxi mic headset` and undone by `voxi mic headset --off`. Doctor never writes either; it reports
-  their status on the mic line when the default mic is Bluetooth. Its values are in `spec/eager.yaml`
-  (`bluetooth_mic`).
+  `voxi mic headset` and undone by `voxi mic headset --off`. voxi only touches a drop-in whose first
+  line is the spec's `dropin_marker`; a foreign one needs `--adopt`. Doctor never writes either; it
+  reports their status on the mic line when the default mic is Bluetooth. Its values are in
+  `spec/eager.yaml` (`bluetooth_mic`). See [MicSelfCheck.md](MicSelfCheck.md) for the restore record
+  and the card-profile note.
 - **Faults vs evidence.** `journal-signals` and `coredumps` report `WARN` with a `see:` hint. Their
   lines stay in the log after a repair, so they can never clear and must not drive repairs.
 - **Repair order:** services → Bluetooth card profile → defaults → mic → routing → ASR engine. A repair whose

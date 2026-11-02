@@ -702,9 +702,6 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 
 	buf := make([]byte, frameBytes)
 	frameIndex := 0
-	// Bluetooth default sources get digital gain before the gate and ASR
-	// (issue 210); the system volume is never changed.
-	gain := captureGain(ctx, d, eagerSpec)
 
 	if !isDaemon {
 		fmt.Fprintln(d.Stdout, "🟢 Listening for voice activity...")
@@ -740,9 +737,13 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 		if n < frameBytes {
 			continue
 		}
+		// Bluetooth default sources get digital gain before the gate and ASR
+		// (issue 210); the system volume is never changed. The gain is resolved
+		// asynchronously by the mic watch, so frames read before the probe
+		// finishes are passed at gain 1.
 		frame := buf
-		if gain != 1 {
-			frame = audio.ApplyGain(buf, gain)
+		if g := watch.Gain(); g != 1 {
+			frame = audio.ApplyGain(buf, g)
 		}
 		watch.feed(frame)
 

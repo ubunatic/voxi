@@ -1,14 +1,20 @@
 package spec
 
 import (
-	"strings"
+	"bytes"
+	"encoding/json"
+	"os"
 	"testing"
+
+	"github.com/santhosh-tekuri/jsonschema/v5"
+	"gopkg.in/yaml.v3"
 )
 
 // validBluetoothMic is a complete, valid bluetooth_mic section (issue 210).
-const validBluetoothMic = "\nbluetooth_mic: {gain_factor: 6, node_matches: [\"~bluez_input.*\"], " +
+const validBluetoothMic = "\nbluetooth_mic: {gain_factor: 2.75, node_matches: [\"~bluez_input.*\"], " +
 	"suspend_timeout_seconds: 0, autoswitch_setting: bluetooth.autoswitch-to-headset-profile, " +
-	"dropin_name: 51-voxi-bt-mic-no-suspend.conf, dropin_marker: \"# voxi: keep the Bluetooth headset mic link awake\"}\n"
+	"dropin_name: 51-voxi-bt-mic-no-suspend.conf, dropin_marker: \"# managed-by: voxi mic headset\", " +
+	"a2dp_profile: a2dp-sink, headset_profile: headset-head-unit, restore_record_prefix: \"# voxi-restore-autoswitch: \"}\n"
 
 // validEagerBase is a document with every other required section valid, so a
 // rejection is attributable to the bluetooth_mic field under test. It omits
@@ -22,8 +28,8 @@ func TestLoadEagerBluetoothMic(t *testing.T) {
 		t.Fatalf("LoadEager() error = %v", err)
 	}
 	bm := s.BluetoothMic
-	if bm.GainFactor <= 1 || bm.GainFactor > 16 {
-		t.Errorf("GainFactor = %v, want a boost in (1, 16]", bm.GainFactor)
+	if bm.GainFactor != 2.75 {
+		t.Errorf("GainFactor = %v, want 2.75 (1.4 wpctl volume on the cubic scale, issue 210 M4)", bm.GainFactor)
 	}
 	if !contains(bm.NodeMatches, "~bluez_input.*") {
 		t.Errorf("NodeMatches = %v, want ~bluez_input.*", bm.NodeMatches)
@@ -37,8 +43,14 @@ func TestLoadEagerBluetoothMic(t *testing.T) {
 	if bm.DropinName != "51-voxi-bt-mic-no-suspend.conf" {
 		t.Errorf("DropinName = %q", bm.DropinName)
 	}
-	if !strings.HasPrefix(bm.DropinMarker, "# voxi:") {
-		t.Errorf("DropinMarker = %q, want a '# voxi:' comment", bm.DropinMarker)
+	if bm.DropinMarker != "# managed-by: voxi mic headset" {
+		t.Errorf("DropinMarker = %q, want the exact ownership token", bm.DropinMarker)
+	}
+	if bm.A2DPProfile != "a2dp-sink" || bm.HeadsetProfile != "headset-head-unit" {
+		t.Errorf("profiles = %q / %q", bm.A2DPProfile, bm.HeadsetProfile)
+	}
+	if bm.RestoreRecordPrefix != "# voxi-restore-autoswitch: " {
+		t.Errorf("RestoreRecordPrefix = %q", bm.RestoreRecordPrefix)
 	}
 }
 
@@ -48,16 +60,21 @@ func TestParseBluetoothMicAcceptsValid(t *testing.T) {
 	}
 }
 
+// Negatives. The gain ceiling is enforced by the schema, not Go (issue 210 M4);
+// TestEagerSchemaBoundsBluetoothMic covers it.
 func TestParseBluetoothMicRejectsBadValues(t *testing.T) {
+	const tail = `, suspend_timeout_seconds: 0, autoswitch_setting: a.b, dropin_name: x.conf, dropin_marker: "# managed-by: voxi mic headset", a2dp_profile: a2dp-sink, headset_profile: headset-head-unit, restore_record_prefix: "# r: "}`
 	cases := map[string]string{
-		"zero gain":        `bluetooth_mic: {gain_factor: 0, node_matches: ["~bluez_input.*"], suspend_timeout_seconds: 0, autoswitch_setting: a.b, dropin_name: x.conf, dropin_marker: "# voxi: m"}`,
-		"negative gain":    `bluetooth_mic: {gain_factor: -2, node_matches: ["~bluez_input.*"], suspend_timeout_seconds: 0, autoswitch_setting: a.b, dropin_name: x.conf, dropin_marker: "# voxi: m"}`,
-		"absurd gain":      `bluetooth_mic: {gain_factor: 100, node_matches: ["~bluez_input.*"], suspend_timeout_seconds: 0, autoswitch_setting: a.b, dropin_name: x.conf, dropin_marker: "# voxi: m"}`,
-		"no node matches":  `bluetooth_mic: {gain_factor: 6, node_matches: [], suspend_timeout_seconds: 0, autoswitch_setting: a.b, dropin_name: x.conf, dropin_marker: "# voxi: m"}`,
-		"negative suspend": `bluetooth_mic: {gain_factor: 6, node_matches: ["~bluez_input.*"], suspend_timeout_seconds: -1, autoswitch_setting: a.b, dropin_name: x.conf, dropin_marker: "# voxi: m"}`,
-		"empty autoswitch": `bluetooth_mic: {gain_factor: 6, node_matches: ["~bluez_input.*"], suspend_timeout_seconds: 0, autoswitch_setting: "", dropin_name: x.conf, dropin_marker: "# voxi: m"}`,
-		"dropin path":      `bluetooth_mic: {gain_factor: 6, node_matches: ["~bluez_input.*"], suspend_timeout_seconds: 0, autoswitch_setting: a.b, dropin_name: ../x.conf, dropin_marker: "# voxi: m"}`,
-		"empty marker":     `bluetooth_mic: {gain_factor: 6, node_matches: ["~bluez_input.*"], suspend_timeout_seconds: 0, autoswitch_setting: a.b, dropin_name: x.conf, dropin_marker: ""}`,
+		"zero gain":        `bluetooth_mic: {gain_factor: 0, node_matches: ["~bluez_input.*"]` + tail,
+		"negative gain":    `bluetooth_mic: {gain_factor: -2, node_matches: ["~bluez_input.*"]` + tail,
+		"no node matches":  `bluetooth_mic: {gain_factor: 2.75, node_matches: []` + tail,
+		"negative suspend": `bluetooth_mic: {gain_factor: 2.75, node_matches: ["~bluez_input.*"], suspend_timeout_seconds: -1, autoswitch_setting: a.b, dropin_name: x.conf, dropin_marker: "# m", a2dp_profile: a, headset_profile: h, restore_record_prefix: "# r: "}`,
+		"empty autoswitch": `bluetooth_mic: {gain_factor: 2.75, node_matches: ["~bluez_input.*"], suspend_timeout_seconds: 0, autoswitch_setting: "", dropin_name: x.conf, dropin_marker: "# m", a2dp_profile: a, headset_profile: h, restore_record_prefix: "# r: "}`,
+		"dropin path":      `bluetooth_mic: {gain_factor: 2.75, node_matches: ["~bluez_input.*"], suspend_timeout_seconds: 0, autoswitch_setting: a.b, dropin_name: ../x.conf, dropin_marker: "# m", a2dp_profile: a, headset_profile: h, restore_record_prefix: "# r: "}`,
+		"empty marker":     `bluetooth_mic: {gain_factor: 2.75, node_matches: ["~bluez_input.*"], suspend_timeout_seconds: 0, autoswitch_setting: a.b, dropin_name: x.conf, dropin_marker: "", a2dp_profile: a, headset_profile: h, restore_record_prefix: "# r: "}`,
+		"empty a2dp":       `bluetooth_mic: {gain_factor: 2.75, node_matches: ["~bluez_input.*"], suspend_timeout_seconds: 0, autoswitch_setting: a.b, dropin_name: x.conf, dropin_marker: "# m", a2dp_profile: "", headset_profile: h, restore_record_prefix: "# r: "}`,
+		"empty headset":    `bluetooth_mic: {gain_factor: 2.75, node_matches: ["~bluez_input.*"], suspend_timeout_seconds: 0, autoswitch_setting: a.b, dropin_name: x.conf, dropin_marker: "# m", a2dp_profile: a, headset_profile: "", restore_record_prefix: "# r: "}`,
+		"empty record":     `bluetooth_mic: {gain_factor: 2.75, node_matches: ["~bluez_input.*"], suspend_timeout_seconds: 0, autoswitch_setting: a.b, dropin_name: x.conf, dropin_marker: "# m", a2dp_profile: a, headset_profile: h, restore_record_prefix: ""}`,
 		"section missing":  "",
 	}
 	for name, section := range cases {
@@ -76,4 +93,57 @@ func contains(xs []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// TestEagerSchemaBoundsBluetoothMic checks the gain ceiling and other bounds in
+// spec/schemas/eager.schema.json against mutated copies of the real spec.
+func TestEagerSchemaBoundsBluetoothMic(t *testing.T) {
+	schemaPath := "schemas/eager.schema.json"
+	schemaBytes, err := os.ReadFile(schemaPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	compiler := jsonschema.NewCompiler()
+	compiler.Draft = jsonschema.Draft7
+	compiler.AssertFormat = true
+	if err := compiler.AddResource(schemaPath, bytes.NewReader(schemaBytes)); err != nil {
+		t.Fatal(err)
+	}
+	sch, err := compiler.Compile(schemaPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	yamlBytes, err := os.ReadFile("eager.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	validate := func(mutate func(bm map[string]any)) error {
+		var doc map[string]any
+		if err := yaml.Unmarshal(yamlBytes, &doc); err != nil {
+			t.Fatal(err)
+		}
+		mutate(doc["bluetooth_mic"].(map[string]any))
+		data, err := json.Marshal(doc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var obj any
+		if err := json.Unmarshal(data, &obj); err != nil {
+			t.Fatal(err)
+		}
+		return sch.Validate(obj)
+	}
+	if err := validate(func(bm map[string]any) {}); err != nil {
+		t.Fatalf("real spec fails its schema: %v", err)
+	}
+	cases := map[string]func(bm map[string]any){
+		"gain above maximum": func(bm map[string]any) { bm["gain_factor"] = 100.0 },
+		"gain zero":          func(bm map[string]any) { bm["gain_factor"] = 0.0 },
+		"negative suspend":   func(bm map[string]any) { bm["suspend_timeout_seconds"] = -1 },
+	}
+	for name, mutate := range cases {
+		if err := validate(mutate); err == nil {
+			t.Errorf("schema accepted %s", name)
+		}
+	}
 }

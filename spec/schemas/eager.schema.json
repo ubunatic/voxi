@@ -19,7 +19,10 @@
         "suspend_timeout_seconds",
         "autoswitch_setting",
         "dropin_name",
-        "dropin_marker"
+        "dropin_marker",
+        "a2dp_profile",
+        "headset_profile",
+        "restore_record_prefix"
       ],
       "properties": {
         "gain_factor": {
@@ -53,7 +56,22 @@
         "dropin_marker": {
           "type": "string",
           "minLength": 1,
-          "description": "Comment line that marks a drop-in as voxi-owned."
+          "description": "The exact first line of a drop-in that marks it as voxi-owned."
+        },
+        "a2dp_profile": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Card profile of a Bluetooth headset without a mic (A2DP); pinned away from when keep-awake is enabled."
+        },
+        "headset_profile": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Card profile that provides the headset mic (HFP) to pin the card to."
+        },
+        "restore_record_prefix": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Prefix of the drop-in line that records autoswitch was turned off by voxi (value true)."
         }
       },
       "additionalProperties": false

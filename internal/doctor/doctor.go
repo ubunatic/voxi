@@ -90,9 +90,10 @@ type HostDoctor struct {
 	// Color paints status words and repair cost notices with ANSI codes.
 	// The command sets it from --color, NO_COLOR and whether stdout is a terminal.
 	Color bool
-	// KeepAwake, when set, reports the Bluetooth headset keep-awake status
-	// (read-only). It is shown only when the default mic is Bluetooth (issue 210).
-	KeepAwake func() string
+	// KeepAwake, when set, returns the Bluetooth headset keep-awake status line
+	// for the probed state (read-only), or "" when it does not apply, i.e. the
+	// default mic is not a Bluetooth input (issue 210).
+	KeepAwake func(st mic.State) string
 }
 
 // CheckIDs is the set of check IDs dispatched by the implementation.
@@ -429,8 +430,10 @@ func (d HostDoctor) checkMic(ctx context.Context, c spec.DoctorCheck, path strin
 	problems := mic.Diagnose(state)
 	if len(problems) == 0 {
 		detail := "no microphone source problem"
-		if d.KeepAwake != nil && state.DefaultIsBluetooth() {
-			detail += "; " + d.KeepAwake()
+		if d.KeepAwake != nil {
+			if line := d.KeepAwake(state); line != "" {
+				detail += "; " + line
+			}
 		}
 		return Result{ID: c.ID, Status: OK, Detail: detail}
 	}

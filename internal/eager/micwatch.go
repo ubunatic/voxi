@@ -3,7 +3,9 @@ package eager
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"ubunatic.com/voxi/internal/deps"
@@ -22,6 +24,37 @@ type micWatch struct {
 	signal mic.SignalMonitor
 	done   chan struct{}
 	once   sync.Once
+
+	// gain is the digital gain for captured frames, stored as float64 bits. It
+	// starts at 1 and is set once by the async probe (issue 210 M4): the read
+	// loop never waits on pw-dump, so frames read before resolved closes are
+	// not boosted.
+	gain        atomic.Uint64
+	resolved    chan struct{}
+	resolveOnce sync.Once
+}
+
+// Gain is the digital gain the read loop applies to each frame.
+func (w *micWatch) Gain() float64 {
+	return math.Float64frombits(w.gain.Load())
+}
+
+// resolve publishes the gain and marks the probe finished. It is safe to call
+// more than once; only the first call sets the gain.
+func (w *micWatch) resolve(g float64) {
+	w.resolveOnce.Do(func() {
+		w.gain.Store(math.Float64bits(g))
+		close(w.resolved)
+	})
+}
+
+// captureGainFor is the gain for a probed state: the spec's Bluetooth gain when
+// the default source is a Bluetooth input matched by node_matches, else 1.
+func captureGainFor(st mic.State, es *spec.EagerSpec) float64 {
+	if !st.DefaultIsBluetooth(es.BluetoothMic.NodeMatches) {
+		return 1
+	}
+	return es.BluetoothMic.GainFactor
 }
 
 // micWatchTick is how often the audio is judged; stalls deliver no frames, so
@@ -30,14 +63,18 @@ const micWatchTick = 250 * time.Millisecond
 
 func startMicWatch(ctx context.Context, d deps.Dependencies, es *spec.EagerSpec, bytesPerSec int, abort func()) *micWatch {
 	w := &micWatch{
-		signal: mic.SignalMonitor{Window: es.MicDeadSignal(), BytesPerSec: bytesPerSec},
-		done:   make(chan struct{}),
+		signal:   mic.SignalMonitor{Window: es.MicDeadSignal(), BytesPerSec: bytesPerSec},
+		done:     make(chan struct{}),
+		resolved: make(chan struct{}),
 	}
+	w.gain.Store(math.Float64bits(1))
 	if d.RunOutput == nil || d.Run == nil || d.LookPath == nil {
+		w.resolve(1)
 		return w
 	}
 	if _, err := d.LookPath("pw-dump"); err != nil {
-		return w // not PipeWire (e.g. arecord on ALSA): nothing to repair
+		w.resolve(1) // not PipeWire (e.g. arecord on ALSA): nothing to repair
+		return w
 	}
 	doc := mic.NewDoctor(d, es.MicSettle())
 	logf := func(format string, args ...any) {
@@ -67,9 +104,11 @@ func startMicWatch(ctx context.Context, d deps.Dependencies, es *spec.EagerSpec,
 		st, probs, err := doc.Find(cctx)
 		cancel()
 		if err != nil {
+			w.resolve(1)
 			logf("mic check: %v", err)
 			return
 		}
+		w.resolve(captureGainFor(st, es))
 		if len(probs) > 0 {
 			repair()
 			return

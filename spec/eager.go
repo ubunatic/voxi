@@ -55,6 +55,9 @@ type BluetoothMicSpec struct {
 	AutoswitchSetting     string   `yaml:"autoswitch_setting"`
 	DropinName            string   `yaml:"dropin_name"`
 	DropinMarker          string   `yaml:"dropin_marker"`
+	A2DPProfile           string   `yaml:"a2dp_profile"`
+	HeadsetProfile        string   `yaml:"headset_profile"`
+	RestoreRecordPrefix   string   `yaml:"restore_record_prefix"`
 }
 
 // EagerSpec is the parsed contents of spec/eager.yaml.
@@ -69,10 +72,6 @@ type EagerSpec struct {
 // typing.TypeTextObserved; an injection budget at or below it could expire
 // before a single keystroke is ever sent.
 const minInjectionTimeoutMs = 5000
-
-// maxBluetoothGain bounds bluetooth_mic.gain_factor; a larger value is almost
-// certainly a typo and would clip nearly every sample.
-const maxBluetoothGain = 16
 
 // LoadEager parses the embedded eager pipeline tuning spec.
 func LoadEager() (*EagerSpec, error) {
@@ -106,8 +105,8 @@ func parseEagerSpec(data []byte) (*EagerSpec, error) {
 		return nil, fmt.Errorf("spec: mic_check.timeout_ms and dead_signal_ms must be positive, settle_ms not negative")
 	}
 	bm := s.BluetoothMic
-	if bm.GainFactor <= 0 || bm.GainFactor > maxBluetoothGain {
-		return nil, fmt.Errorf("spec: bluetooth_mic.gain_factor must be in (0, %v]", maxBluetoothGain)
+	if bm.GainFactor <= 0 {
+		return nil, fmt.Errorf("spec: bluetooth_mic.gain_factor must be positive")
 	}
 	if len(bm.NodeMatches) == 0 {
 		return nil, fmt.Errorf("spec: bluetooth_mic.node_matches must not be empty")
@@ -123,6 +122,12 @@ func parseEagerSpec(data []byte) (*EagerSpec, error) {
 	}
 	if bm.DropinMarker == "" {
 		return nil, fmt.Errorf("spec: bluetooth_mic.dropin_marker must not be empty")
+	}
+	if bm.A2DPProfile == "" || bm.HeadsetProfile == "" {
+		return nil, fmt.Errorf("spec: bluetooth_mic.a2dp_profile and headset_profile must not be empty")
+	}
+	if bm.RestoreRecordPrefix == "" {
+		return nil, fmt.Errorf("spec: bluetooth_mic.restore_record_prefix must not be empty")
 	}
 	return &s, nil
 }

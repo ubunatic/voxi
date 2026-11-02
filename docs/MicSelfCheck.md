@@ -80,31 +80,59 @@ A stale saved default alone is not urgent while another mic works.
 ## Bluetooth Headset Dictation (issue 210)
 
 Soft speech from a Bluetooth headset was dropped by the acoustic gate (mean RMS 83-109 against
-`MinMeanRMS` 120). Two opt-in or automatic measures address it:
+`MinMeanRMS` 120). Two measures address it:
 
-- **Digital gain, automatic.** When the default source is a Bluetooth input, each captured frame is
-  multiplied by `bluetooth_mic.gain_factor` (`spec/eager.yaml`) before the gate and ASR, with an int16
-  clamp. System volume is never changed, and built-in mics get no gain.
-- **Keep-awake and autoswitch-off, opt-in.** `voxi mic headset` writes the WirePlumber drop-in that
-  stops the idle headset source from suspending, and turns off the switch to the headset (HFP)
-  profile. `voxi mic headset --off` undoes both. `voxi mic headset --status` only reports.
+- **Digital gain, automatic.** When the default source is a Bluetooth input matched by
+  `bluetooth_mic.node_matches` (`spec/eager.yaml`), each captured frame is multiplied by
+  `bluetooth_mic.gain_factor` (2.75) before the gate and ASR, with an int16 clamp. System volume is
+  never changed, and built-in mics get no gain. The gain is resolved by an asynchronous PipeWire
+  probe; frames read before it finishes pass at gain 1 (a short window at session start).
+- **Keep-awake and autoswitch-off, opt-in.** `voxi mic headset` writes the WirePlumber drop-in
+  (`bluetooth_mic.dropin_name`) that stops the idle headset source from suspending, turns off the
+  switch to the headset (HFP) profile, and moves Bluetooth cards that are on `a2dp-sink` to
+  `headset-head-unit`, because with autoswitch off the mic exists only in the HFP profile.
+  `voxi mic headset --off` undoes what voxi did. `voxi mic headset --status` only reports.
 
-**Gain factor derivation.** The 2026-11-02 host measurement is the reference: source volume 1.4 raised
-soft-speech chunk RMS from 83-109 to 517-1139. The low-end ratio is 517/83 = 6.2, and the factor is 6
-(rounded down, so the low end lands at 498 and the high end at 654). Soft speech therefore clears the
-120 gate with margin. The ratio is not linear in the source volume (a 1.4x volume should give about 1.4x
-RMS), so the spread is unexplained; the owner verifies it by dictating. Loud speech saturates at int16.
+**Gain factor derivation.** The reference is the 2026-11-02 host measurement: at source volume 1.4,
+soft-speech chunk RMS was 517-1139 for the utterances measured. The factor 2.75 is 1.4³ = 2.744,
+rounded to two decimals. This assumes wpctl's volume scale is cubic, which is supported only by a
+WirePlumber bug report and merge request that cite the cubic mapping; it is not verified against the
+WirePlumber source. Soft speech at RMS 83 and 109 becomes about 228 and 300, clearing the 120 gate.
+The measured 517-1139 came from different utterances than the 83-109, so the owner verifies the
+spread by dictating. Loud speech saturates at int16.
 
-**Commands.** `voxi mic headset` enables (prints the autoswitch change, the cost, and the undo).
-`voxi mic headset --off` disables. `voxi mic headset --status` reports the keep-awake state. Doctor's mic
-line shows the same status when the default mic is Bluetooth.
+**Noise trigger caveat.** The gate's `ThresholdRMS` (150) is per frame and applies after gain. A raw
+frame at RMS of about 55 or more now reaches it, so breaths and bumps that were ignored before can
+start an utterance. Quiet room noise (raw RMS 13-20) stays below it. A candidate is still rejected
+when it is too short or too quiet; this is the first thing to check if false starts appear.
+
+**Commands.** `voxi mic headset` enables and prints the drop-in state, the autoswitch change, the
+card pin, the cost, and the undo. `voxi mic headset --off` disables. `voxi mic headset --status`
+reports the keep-awake state. Doctor's mic line shows the same status when the default mic is
+Bluetooth. `--adopt` and `--off` cannot be combined with `--status`, and `--adopt` cannot be combined
+with `--off`.
+
+**Ownership.** The drop-in is voxi's only when its first line is exactly `dropin_marker`
+(`# managed-by: voxi mic headset`). A drop-in with the marker elsewhere, or without it, is not voxi's:
+enable refuses and names `--adopt`, and disable leaves it alone. `--adopt` replaces a foreign drop-in
+with voxi's; use it only when you know the file is an old manual fix for the same problem.
+
+**Restore record.** Enable records in the drop-in whether it turned autoswitch off (a restore line,
+`voxi-restore-autoswitch: true`). `--off` restores autoswitch to on only when that record is present.
+If autoswitch was already off before voxi ran, no record is written and `--off` leaves it off.
+Re-running enable keeps the existing record. If autoswitch cannot be read, enable refuses and changes
+nothing.
+
+**Card profile.** `--off` does not revert a Bluetooth card that enable pinned to `headset-head-unit`.
+Restoring autoswitch lets WirePlumber switch back to the profile the card needs when capture stops,
+which is expected but not verified live. Check `pactl list cards` after `--off` if playback stays at
+call quality.
 
 **Refusals.** Enable and disable refuse without `wpctl`, and enable refuses while WirePlumber is not
-running. A drop-in without the `dropin_marker` line is not voxi's: it is never written or removed. A
-drop-in with the marker is voxi's, so it is rewritten to the rendered text.
+running. Disable works while WirePlumber is stopped, unless it has to restore autoswitch.
 
 **Costs.** Keep-awake keeps the headset mic link open while idle, which costs headset battery. Autoswitch
-off leaves playback at call quality (HFP) while it is set.
+off and the HFP pin leave playback at call quality (HFP) while voxi's setting is on.
 
 ## Known Limits
 

@@ -13,6 +13,7 @@ package mic
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -94,12 +95,34 @@ type Profile struct {
 	Sources int
 }
 
-// DefaultIsBluetooth reports whether the default source is a Bluetooth input
-// (including WirePlumber's loopback). It gates digital gain and keep-awake
-// (issue 210); a built-in or absent default never qualifies.
-func (s State) DefaultIsBluetooth() bool {
+// DefaultIsBluetooth reports whether the default source's node name matches
+// nodeMatches, the spec's bluetooth_mic.node_matches (issue 210). That one list
+// also drives the keep-awake drop-in, so digital gain, keep-awake and the
+// doctor line agree on which inputs they cover. A built-in or absent default
+// never qualifies, and WirePlumber's loopback counts when its name matches.
+// Diagnose keeps ParseDump's Bluetooth flag for its own checks.
+func (s State) DefaultIsBluetooth(nodeMatches []string) bool {
 	src, ok := s.Source(s.DefaultSource)
-	return ok && src.Bluetooth
+	return ok && NodeMatches(src.Name, nodeMatches)
+}
+
+// NodeMatches applies WirePlumber node-name rules: a pattern starting with "~"
+// is a regular expression matched against the whole name, anything else must
+// equal the name exactly. An invalid pattern matches nothing.
+func NodeMatches(name string, patterns []string) bool {
+	for _, p := range patterns {
+		if rest, isRegex := strings.CutPrefix(p, "~"); isRegex {
+			re, err := regexp.Compile("^(?:" + rest + ")$")
+			if err == nil && re.MatchString(name) {
+				return true
+			}
+			continue
+		}
+		if p == name {
+			return true
+		}
+	}
+	return false
 }
 
 // Source looks up a source by node name.
