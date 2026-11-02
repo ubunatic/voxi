@@ -6,9 +6,58 @@
   "required": [
     "modifier_gate",
     "drain",
-    "mic_check"
+    "mic_check",
+    "bluetooth_mic"
   ],
   "properties": {
+    "bluetooth_mic": {
+      "type": "object",
+      "description": "Bluetooth headset dictation (issue 210): digital gain for Bluetooth default sources and the keep-awake drop-in managed by `voxi mic headset`.",
+      "required": [
+        "gain_factor",
+        "node_matches",
+        "suspend_timeout_seconds",
+        "autoswitch_setting",
+        "dropin_name",
+        "dropin_marker"
+      ],
+      "properties": {
+        "gain_factor": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 16,
+          "description": "Linear sample gain applied to PCM when the default source is Bluetooth. The system volume is never changed."
+        },
+        "node_matches": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string"},
+          "description": "WirePlumber node.name matches the keep-awake drop-in applies to."
+        },
+        "suspend_timeout_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 86400,
+          "description": "Idle suspend timeout for the matched nodes; 0 keeps the headset mic link awake."
+        },
+        "autoswitch_setting": {
+          "type": "string",
+          "minLength": 1,
+          "description": "WirePlumber setting name that controls automatic switching to headset (HFP) profile."
+        },
+        "dropin_name": {
+          "type": "string",
+          "pattern": "^[^/\\\\]+$",
+          "description": "Drop-in file name under the WirePlumber config directory."
+        },
+        "dropin_marker": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Comment line that marks a drop-in as voxi-owned."
+        }
+      },
+      "additionalProperties": false
+    },
     "drain": {
       "type": "object",
       "description": "Post-stop delivery drain bounds. The delivery policy itself is 'type unless a newer session has started'; these are only bounds around it.",

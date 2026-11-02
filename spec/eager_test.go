@@ -8,7 +8,7 @@ import (
 // validDrain is appended to the ad hoc modifier_gate documents below so a
 // rejection is attributable to the field under test rather than to the
 // unrelated, now also-required drain section.
-const validDrain = "\ndrain: {delivery_deadline_ms: 60000, injection_timeout_ms: 15000}\n" + validMicCheck
+const validDrain = "\ndrain: {delivery_deadline_ms: 60000, injection_timeout_ms: 15000}\n" + validMicCheck + validBluetoothMic
 
 // validMicCheck keeps the also-required mic_check section (issue 177) out of
 // the way of tests aimed at other fields.
@@ -101,7 +101,7 @@ func TestParseEagerSpecRejectsUnsafeDrain(t *testing.T) {
 
 func TestParseEagerSpecMicCheck(t *testing.T) {
 	const base = "modifier_gate: {timeout_ms: 10000, start_grace_ms: 750, notify_delay_ms: 500}\ndrain: {delivery_deadline_ms: 60000, injection_timeout_ms: 15000}\n"
-	if _, err := parseEagerSpec([]byte(base + validMicCheck)); err != nil {
+	if _, err := parseEagerSpec([]byte(base + validMicCheck + validBluetoothMic)); err != nil {
 		t.Fatalf("valid mic_check rejected: %v", err)
 	}
 	cases := map[string]string{

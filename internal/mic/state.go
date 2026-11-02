@@ -94,6 +94,14 @@ type Profile struct {
 	Sources int
 }
 
+// DefaultIsBluetooth reports whether the default source is a Bluetooth input
+// (including WirePlumber's loopback). It gates digital gain and keep-awake
+// (issue 210); a built-in or absent default never qualifies.
+func (s State) DefaultIsBluetooth() bool {
+	src, ok := s.Source(s.DefaultSource)
+	return ok && src.Bluetooth
+}
+
 // Source looks up a source by node name.
 func (s State) Source(name string) (Source, bool) {
 	for _, src := range s.Sources {

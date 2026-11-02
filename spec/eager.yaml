@@ -71,3 +71,23 @@ mic_check:
   dead_signal_ms: 3000
   # How long to wait for WirePlumber to apply a profile or default change.
   settle_ms: 1500
+
+# Bluetooth headset dictation (issue 210). When the default source is a
+# Bluetooth input, voxi scales its captured PCM by gain_factor before the gate
+# and ASR; the system volume is never touched. The keep-awake drop-in and the
+# autoswitch setting are written only by the explicit `voxi mic headset`
+# command, which uses these names and the marker to find and undo its own file.
+bluetooth_mic:
+  # Linear sample gain for Bluetooth default sources. Derived from the
+  # 2026-11-02 host measurement (see the issue 210 Decision and docs/AudioDoctor.md).
+  gain_factor: 6
+  # WirePlumber node-name matches the keep-awake drop-in applies to.
+  node_matches: ["~bluez_input.*", "~bluez_capture_internal.*"]
+  # Idle suspend timeout for those nodes; 0 keeps the mic link awake.
+  suspend_timeout_seconds: 0
+  # WirePlumber setting that switches a headset to HFP when a stream opens.
+  autoswitch_setting: bluetooth.autoswitch-to-headset-profile
+  # Drop-in file name under the WirePlumber config directory.
+  dropin_name: 51-voxi-bt-mic-no-suspend.conf
+  # First line of the drop-in; a file carrying it is voxi's to rewrite or remove.
+  dropin_marker: "# voxi: keep the Bluetooth headset mic link awake"

@@ -8,6 +8,7 @@ package spec
 import (
 	_ "embed"
 	"fmt"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -44,17 +45,34 @@ type MicCheckSpec struct {
 	SettleMs     int `yaml:"settle_ms"`
 }
 
+// BluetoothMicSpec tunes Bluetooth headset dictation (issue 210): the digital
+// gain for Bluetooth default sources and the keep-awake drop-in that
+// `voxi mic headset` writes and removes.
+type BluetoothMicSpec struct {
+	GainFactor            float64  `yaml:"gain_factor"`
+	NodeMatches           []string `yaml:"node_matches"`
+	SuspendTimeoutSeconds int      `yaml:"suspend_timeout_seconds"`
+	AutoswitchSetting     string   `yaml:"autoswitch_setting"`
+	DropinName            string   `yaml:"dropin_name"`
+	DropinMarker          string   `yaml:"dropin_marker"`
+}
+
 // EagerSpec is the parsed contents of spec/eager.yaml.
 type EagerSpec struct {
 	ModifierGate ModifierGateSpec `yaml:"modifier_gate"`
 	Drain        DrainSpec        `yaml:"drain"`
 	MicCheck     MicCheckSpec     `yaml:"mic_check"`
+	BluetoothMic BluetoothMicSpec `yaml:"bluetooth_mic"`
 }
 
 // minInjectionTimeoutMs is the physical-modifier-release wait inside
 // typing.TypeTextObserved; an injection budget at or below it could expire
 // before a single keystroke is ever sent.
 const minInjectionTimeoutMs = 5000
+
+// maxBluetoothGain bounds bluetooth_mic.gain_factor; a larger value is almost
+// certainly a typo and would clip nearly every sample.
+const maxBluetoothGain = 16
 
 // LoadEager parses the embedded eager pipeline tuning spec.
 func LoadEager() (*EagerSpec, error) {
@@ -86,6 +104,25 @@ func parseEagerSpec(data []byte) (*EagerSpec, error) {
 	}
 	if s.MicCheck.TimeoutMs <= 0 || s.MicCheck.DeadSignalMs <= 0 || s.MicCheck.SettleMs < 0 {
 		return nil, fmt.Errorf("spec: mic_check.timeout_ms and dead_signal_ms must be positive, settle_ms not negative")
+	}
+	bm := s.BluetoothMic
+	if bm.GainFactor <= 0 || bm.GainFactor > maxBluetoothGain {
+		return nil, fmt.Errorf("spec: bluetooth_mic.gain_factor must be in (0, %v]", maxBluetoothGain)
+	}
+	if len(bm.NodeMatches) == 0 {
+		return nil, fmt.Errorf("spec: bluetooth_mic.node_matches must not be empty")
+	}
+	if bm.SuspendTimeoutSeconds < 0 {
+		return nil, fmt.Errorf("spec: bluetooth_mic.suspend_timeout_seconds must not be negative")
+	}
+	if bm.AutoswitchSetting == "" {
+		return nil, fmt.Errorf("spec: bluetooth_mic.autoswitch_setting must not be empty")
+	}
+	if bm.DropinName == "" || strings.ContainsAny(bm.DropinName, `/\`) || bm.DropinName == "." || bm.DropinName == ".." {
+		return nil, fmt.Errorf("spec: bluetooth_mic.dropin_name must be a plain file name")
+	}
+	if bm.DropinMarker == "" {
+		return nil, fmt.Errorf("spec: bluetooth_mic.dropin_marker must not be empty")
 	}
 	return &s, nil
 }
