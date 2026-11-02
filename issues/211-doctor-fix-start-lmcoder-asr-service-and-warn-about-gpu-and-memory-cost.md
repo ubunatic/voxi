@@ -46,3 +46,7 @@ Lean sprint 2026-11-02, host decisions on the developer's plan (d211, haiku:med)
 - M2 (start-ASR repair): spec template, asr.go branch, fix.go warning + wait, tests incl. negatives.
 - M3 (colored warning): listing color helper, NO_COLOR/TTY tests.
 - M4 (docs): docs/AudioDoctor.md.
+
+## Progress
+- M1 (real probe clip) delivered in 57a650d. Host live check: `voxi doctor` → `OK asr-engine: r2t2-confucius4 online @ :8735, probe transcript ok` (7 OK, 0 FAULT).
+- M2 pre-work: none.
