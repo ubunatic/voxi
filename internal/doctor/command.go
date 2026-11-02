@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
+	"ubunatic.com/voxi/internal/listing"
 	"ubunatic.com/voxi/spec"
 )
 
@@ -24,6 +26,7 @@ func NewCommand(out io.Writer, host Host) *cobra.Command {
 		host = systemHost{}
 	}
 	var opts Options
+	var colorMode string
 	cmd := &cobra.Command{
 		Use:           "doctor",
 		Short:         "Diagnose and optionally repair audio stack faults",
@@ -31,6 +34,13 @@ func NewCommand(out io.Writer, host Host) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if !listing.IsValidColorMode(colorMode) {
+				fmt.Fprintf(out, "invalid --color value %q: must be one of %s\n", colorMode, strings.Join(listing.ValidColorModes, ", "))
+				return ExitError{Code: 2}
+			}
+			// NO_COLOR wins over --color=always, and "auto" needs a terminal stdout.
+			useColor := listing.ShouldUseColor(colorMode, os.Getenv("NO_COLOR"), listing.StdoutIsTerminal(out))
+			st := style{on: useColor}
 			s, err := spec.LoadDoctor()
 			if err != nil {
 				return ExitError{Code: 2}
@@ -39,7 +49,7 @@ func NewCommand(out io.Writer, host Host) *cobra.Command {
 			if ctx == nil {
 				ctx = context.Background()
 			}
-			doctor := HostDoctor{Host: host, Spec: s, ASRProbe: defaultASRProbe}
+			doctor := HostDoctor{Host: host, Spec: s, ASRProbe: defaultASRProbe, Color: useColor}
 			report, err := doctor.Run(ctx, opts)
 			if err != nil {
 				return ExitError{Code: 2}
@@ -54,7 +64,7 @@ func NewCommand(out io.Writer, host Host) *cobra.Command {
 				}
 				opts.Fix = true
 				if !opts.Yes && !interactive && report.Fault > 0 {
-					report.PrintFix(out)
+					report.printStyled(out, true, st)
 					fmt.Fprintln(out, "stdin is not a terminal; rerun with --yes to apply")
 					return ExitError{Code: report.ExitCode()}
 				}
@@ -63,13 +73,13 @@ func NewCommand(out io.Writer, host Host) *cobra.Command {
 					return ExitError{Code: 2}
 				}
 				fmt.Fprintln(out, "After repair:")
-				report.PrintFix(out)
+				report.printStyled(out, true, st)
 				if code := report.ExitCode(); code != 0 {
 					return ExitError{Code: code}
 				}
 				return nil
 			}
-			report.Print(out)
+			report.printStyled(out, false, st)
 			if code := report.ExitCode(); code != 0 {
 				return ExitError{Code: code}
 			}
@@ -81,5 +91,6 @@ func NewCommand(out io.Writer, host Host) *cobra.Command {
 	cmd.Flags().BoolVar(&opts.NoProbe, "no-probe", false, "skip the silent playback routing probe")
 	cmd.Flags().BoolVar(&opts.Fix, "fix", false, "ask before applying repairs and recheck each fault")
 	cmd.Flags().BoolVar(&opts.Yes, "yes", false, "apply every available repair without prompting (implies --fix)")
+	cmd.Flags().StringVar(&colorMode, "color", listing.ColorAuto, "colorize status words and the cost warning: auto, always, or never (NO_COLOR disables it)")
 	return cmd
 }

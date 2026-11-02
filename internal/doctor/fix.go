@@ -48,10 +48,10 @@ func (d HostDoctor) Repair(ctx context.Context, report Report, opts Options, in 
 		}
 		current := report.Checks[idx]
 		for _, command := range current.Repairs {
-			fmt.Fprintf(out, "%s %s: %s\n", current.Status, current.ID, current.Detail)
+			fmt.Fprintf(out, "%s %s: %s\n", d.style().status(current.Status), current.ID, current.Detail)
 			fmt.Fprintf(out, "  repair: %s\n", command)
 			for _, line := range current.Notice {
-				fmt.Fprintf(out, "  %s\n", line)
+				fmt.Fprintf(out, "  %s\n", d.style().notice(line))
 			}
 			apply := yes
 			if !yes {

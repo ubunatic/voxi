@@ -84,6 +84,9 @@ type HostDoctor struct {
 	Spec *spec.DoctorSpec
 	// ASRProbe makes the asr-engine transcription probe; nil sends no request.
 	ASRProbe ASRProbeFunc
+	// Color paints status words and repair cost notices with ANSI codes.
+	// The command sets it from --color, NO_COLOR and whether stdout is a terminal.
+	Color bool
 }
 
 // CheckIDs is the set of check IDs dispatched by the implementation.
@@ -136,17 +139,22 @@ func (d HostDoctor) check(ctx context.Context, check spec.DoctorCheck, opts Opti
 
 // Print writes script-compatible check lines and a summary.
 func (r Report) Print(w io.Writer) {
-	r.print(w, false)
+	r.print(w, false, style{})
+}
+
+// printStyled is Print or PrintFix with ANSI color decided by the caller.
+func (r Report) printStyled(w io.Writer, fixMode bool, st style) {
+	r.print(w, fixMode, st)
 }
 
 // PrintFix writes a post-repair report with commands shown as repair suggestions.
 func (r Report) PrintFix(w io.Writer) {
-	r.print(w, true)
+	r.print(w, true, style{})
 }
 
-func (r Report) print(w io.Writer, fixMode bool) {
+func (r Report) print(w io.Writer, fixMode bool, st style) {
 	for _, check := range r.Checks {
-		fmt.Fprintf(w, "%s %s: %s\n", check.Status, check.ID, check.Detail)
+		fmt.Fprintf(w, "%s %s: %s\n", st.status(check.Status), check.ID, check.Detail)
 		if check.Status == WARN {
 			for _, hint := range check.See {
 				fmt.Fprintf(w, "  see: %s\n", hint)
