@@ -19,11 +19,6 @@ import (
 	"ubunatic.com/voxi/spec"
 )
 
-// asrProbeTimeout bounds one transcription probe. The lmcoder proxy may hold a
-// cold start for up to 60 s; a probe that runs longer is reported as a timeout
-// rather than as a broken endpoint.
-const asrProbeTimeout = 30 * time.Second
-
 // asrProbeWAV is the "One, two." clip from test/fixtures/corpus.tsv, copied
 // here so the binary can embed it. go:embed cannot reach test/fixtures.
 //
@@ -458,10 +453,13 @@ func minutes(seconds int) string {
 	return strconv.FormatFloat(float64(seconds)/60, 'f', -1, 64)
 }
 
-// probeASR runs one transcription probe against baseURL, bounded by asrProbeTimeout.
+// probeASR runs one transcription probe against baseURL, bounded by the model's
+// transcribe_timeout_ms from spec/models.yaml, the bound dictation uses. A
+// stopped lmcoder unit starts on this request and the proxy holds it through
+// the cold start, so a shorter probe would report a healthy start as a failure.
 // Callers check that d.ASRProbe is set.
 func (d HostDoctor) probeASR(ctx context.Context, baseURL string, model spec.Model) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, asrProbeTimeout)
+	ctx, cancel := context.WithTimeout(ctx, eager.TranscribeTimeoutFor(model))
 	defer cancel()
 	return d.ASRProbe(ctx, baseURL, model)
 }

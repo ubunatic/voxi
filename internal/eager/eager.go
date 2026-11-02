@@ -383,9 +383,7 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 	if err != nil {
 		return err
 	}
-	if m := modelSpec.Models[modelName]; m.WakeURL != "" {
-		go wakeASRServer(m.WakeURL, m.APIModel)
-	}
+	go wakeOnRecordStart(modelSpec.Models[modelName])
 	modelTranscribeTimeout := transcribeTimeoutFor(modelSpec.Models[modelName])
 	buildTranscribeArgs := func(wavPath string) []string {
 		return voxtypeTranscribeArgs(modelName, wavPath, initialPrompt)

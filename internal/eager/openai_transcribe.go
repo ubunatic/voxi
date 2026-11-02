@@ -302,30 +302,50 @@ func transcribeTimeoutFor(m spec.Model) time.Duration {
 	return transcribeTimeout
 }
 
+// TranscribeTimeoutFor exports transcribeTimeoutFor for internal/doctor, so a
+// probe of a model waits as long as dictation does for that same model.
+func TranscribeTimeoutFor(m spec.Model) time.Duration {
+	return transcribeTimeoutFor(m)
+}
+
 // wakeTimeout bounds the fire-and-forget wake call; the server answers it
 // at once (202) and loads in the background.
 const wakeTimeout = 2 * time.Second
 
+// wakeOnRecordStart sends the model's wake call when the spec names one. The
+// caller runs it in a goroutine: recording never waits for it or fails on it.
+func wakeOnRecordStart(m spec.Model) {
+	if m.WakeURL == "" {
+		return
+	}
+	_ = wakeASRServer(m.WakeURL, m.APIModel)
+}
+
 // wakeASRServer tells the ASR server that a recording started, so a stopped
 // server can load while the user speaks (lmcoder's /lmcoder/wake, issue
-// 181). Errors are ignored: an older server answers 404, and the
+// 181). It returns an error for a transport failure or any answer other than
+// 2xx (an older server answers 404). wakeOnRecordStart discards it: the
 // transcription request itself still starts the server when needed.
-func wakeASRServer(wakeURL, model string) {
+func wakeASRServer(wakeURL, model string) error {
 	payload, err := json.Marshal(map[string]string{"model": model})
 	if err != nil {
-		return
+		return err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), wakeTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, wakeURL, bytes.NewReader(payload))
 	if err != nil {
-		return
+		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return
+		return err
 	}
+	defer resp.Body.Close()
 	_, _ = io.Copy(io.Discard, resp.Body)
-	resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("wake %s returned %s", wakeURL, resp.Status)
+	}
+	return nil
 }
