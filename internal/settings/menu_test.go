@@ -10,8 +10,8 @@ func TestMenuModelNavigation(t *testing.T) {
 	s := config.DefaultUserSettings()
 	m := NewMenuModel(s, nil)
 
-	if len(m.Items) != 10 {
-		t.Fatalf("expected 10 items, got %d", len(m.Items))
+	if len(m.Items) != 11 {
+		t.Fatalf("expected 11 items (incl. Bluetooth Mic Gain), got %d", len(m.Items))
 	}
 	if m.Cursor != 0 {
 		t.Fatalf("expected initial cursor 0, got %d", m.Cursor)
@@ -107,8 +107,8 @@ func TestMenuModelTogglesAndCycles(t *testing.T) {
 		t.Errorf("next delay = %s, want 1ms", m.CurrentItem().Choices[m.CurrentItem().ChoiceIndex])
 	}
 
-	// 6. Save action (Cursor 8)
-	m.Cursor = 8
+	// 6. Save action (Cursor 9; row 8 is Bluetooth Mic Gain)
+	m.Cursor = 9
 	m.ToggleOrNext()
 	if !m.Saved || !m.Closed {
 		t.Errorf("expected Saved=true, Closed=true on Save row action")

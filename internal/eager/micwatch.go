@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"ubunatic.com/voxi/internal/config"
 	"ubunatic.com/voxi/internal/deps"
 	"ubunatic.com/voxi/internal/mic"
 	"ubunatic.com/voxi/spec"
@@ -48,20 +49,42 @@ func (w *micWatch) resolve(g float64) {
 	})
 }
 
-// captureGainFor is the gain for a probed state: the spec's Bluetooth gain when
-// the default source is a Bluetooth input matched by node_matches, else 1.
-func captureGainFor(st mic.State, es *spec.EagerSpec) float64 {
+// captureGainFor is the gain for a probed state: gain when the default source
+// is a Bluetooth input matched by node_matches, else 1.
+func captureGainFor(st mic.State, es *spec.EagerSpec, gain float64) float64 {
 	if !st.DefaultIsBluetooth(es.BluetoothMic.NodeMatches) {
 		return 1
 	}
-	return es.BluetoothMic.GainFactor
+	return gain
+}
+
+// bluetoothGainFor is the Bluetooth default-source gain for one capture
+// session (issue 210 M5): the bluetooth_mic_gain config override when it is in
+// the spec's range, else the spec's gain_factor. It is read per session, so a
+// change applies to the next session without a daemon restart. With no HOME it
+// never reads config and uses the spec default.
+func bluetoothGainFor(d deps.Dependencies, es *spec.EagerSpec) float64 {
+	def := es.BluetoothMic.GainFactor
+	home := d.Getenv("HOME")
+	if home == "" {
+		return def
+	}
+	s, err := config.LoadUserSettings(home)
+	if err != nil {
+		return def
+	}
+	g := s.EffectiveBluetoothMicGain(def)
+	if config.ValidateBluetoothMicGain(g, es.BluetoothMic) != nil {
+		return def
+	}
+	return g
 }
 
 // micWatchTick is how often the audio is judged; stalls deliver no frames, so
 // judging cannot ride on Feed alone.
 const micWatchTick = 250 * time.Millisecond
 
-func startMicWatch(ctx context.Context, d deps.Dependencies, es *spec.EagerSpec, bytesPerSec int, abort func()) *micWatch {
+func startMicWatch(ctx context.Context, d deps.Dependencies, es *spec.EagerSpec, gain float64, bytesPerSec int, abort func()) *micWatch {
 	w := &micWatch{
 		signal:   mic.SignalMonitor{Window: es.MicDeadSignal(), BytesPerSec: bytesPerSec},
 		done:     make(chan struct{}),
@@ -108,7 +131,7 @@ func startMicWatch(ctx context.Context, d deps.Dependencies, es *spec.EagerSpec,
 			logf("mic check: %v", err)
 			return
 		}
-		w.resolve(captureGainFor(st, es))
+		w.resolve(captureGainFor(st, es, gain))
 		if len(probs) > 0 {
 			repair()
 			return

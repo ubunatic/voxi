@@ -50,6 +50,7 @@ type MicCheckSpec struct {
 // `voxi mic headset` writes and removes.
 type BluetoothMicSpec struct {
 	GainFactor            float64  `yaml:"gain_factor"`
+	GainMax               float64  `yaml:"gain_max"`
 	NodeMatches           []string `yaml:"node_matches"`
 	SuspendTimeoutSeconds int      `yaml:"suspend_timeout_seconds"`
 	AutoswitchSetting     string   `yaml:"autoswitch_setting"`
@@ -58,6 +59,12 @@ type BluetoothMicSpec struct {
 	A2DPProfile           string   `yaml:"a2dp_profile"`
 	HeadsetProfile        string   `yaml:"headset_profile"`
 	RestoreRecordPrefix   string   `yaml:"restore_record_prefix"`
+}
+
+// GainAllowed reports whether g is a usable Bluetooth digital gain: above zero
+// and at most GainMax. NaN and infinities are rejected.
+func (bm BluetoothMicSpec) GainAllowed(g float64) bool {
+	return g > 0 && g <= bm.GainMax
 }
 
 // EagerSpec is the parsed contents of spec/eager.yaml.
@@ -105,8 +112,11 @@ func parseEagerSpec(data []byte) (*EagerSpec, error) {
 		return nil, fmt.Errorf("spec: mic_check.timeout_ms and dead_signal_ms must be positive, settle_ms not negative")
 	}
 	bm := s.BluetoothMic
-	if bm.GainFactor <= 0 {
-		return nil, fmt.Errorf("spec: bluetooth_mic.gain_factor must be positive")
+	if bm.GainMax <= 0 {
+		return nil, fmt.Errorf("spec: bluetooth_mic.gain_max must be positive")
+	}
+	if !bm.GainAllowed(bm.GainFactor) {
+		return nil, fmt.Errorf("spec: bluetooth_mic.gain_factor must be in (0, gain_max]")
 	}
 	if len(bm.NodeMatches) == 0 {
 		return nil, fmt.Errorf("spec: bluetooth_mic.node_matches must not be empty")

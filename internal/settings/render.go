@@ -142,6 +142,7 @@ func RenderSummary(s *config.UserSettings, home string) string {
 	}
 	b.WriteString(fmt.Sprintf("  %-22s %s\n", "TTS Backend:", ttsBackend))
 	b.WriteString(fmt.Sprintf("  %-22s %dms\n", "Typing Delay:", s.TypeDelayMs))
+	b.WriteString(fmt.Sprintf("  %-22s %s\n", "Bluetooth Mic Gain:", bluetoothMicGainLabel(s)))
 
 	histStatus := "[ ] Disabled"
 	if s.DictationHistory {
@@ -168,7 +169,12 @@ func RenderJSON(s *config.UserSettings) (string, error) {
 	if s == nil {
 		s = config.DefaultUserSettings()
 	}
-	data, err := json.MarshalIndent(s, "", "  ")
+	// The JSON shows the effective gain, so an unset override reads as the spec default.
+	out := *s
+	if def, ok := bluetoothGainDefault(); ok {
+		out.BluetoothMicGain = s.EffectiveBluetoothMicGain(def)
+	}
+	data, err := json.MarshalIndent(&out, "", "  ")
 	if err != nil {
 		return "", err
 	}

@@ -3,6 +3,7 @@ package spec
 import (
 	"bytes"
 	"encoding/json"
+	"math"
 	"os"
 	"testing"
 
@@ -11,7 +12,7 @@ import (
 )
 
 // validBluetoothMic is a complete, valid bluetooth_mic section (issue 210).
-const validBluetoothMic = "\nbluetooth_mic: {gain_factor: 2.75, node_matches: [\"~bluez_input.*\"], " +
+const validBluetoothMic = "\nbluetooth_mic: {gain_factor: 2.75, gain_max: 16, node_matches: [\"~bluez_input.*\"], " +
 	"suspend_timeout_seconds: 0, autoswitch_setting: bluetooth.autoswitch-to-headset-profile, " +
 	"dropin_name: 51-voxi-bt-mic-no-suspend.conf, dropin_marker: \"# managed-by: voxi mic headset\", " +
 	"a2dp_profile: a2dp-sink, headset_profile: headset-head-unit, restore_record_prefix: \"# voxi-restore-autoswitch: \"}\n"
@@ -28,6 +29,9 @@ func TestLoadEagerBluetoothMic(t *testing.T) {
 		t.Fatalf("LoadEager() error = %v", err)
 	}
 	bm := s.BluetoothMic
+	if bm.GainMax != 16 {
+		t.Errorf("GainMax = %v, want 16 (the user override ceiling, equal to the schema maximum)", bm.GainMax)
+	}
 	if bm.GainFactor != 2.75 {
 		t.Errorf("GainFactor = %v, want 2.75 (1.4 wpctl volume on the cubic scale, issue 210 M4)", bm.GainFactor)
 	}
@@ -65,9 +69,11 @@ func TestParseBluetoothMicAcceptsValid(t *testing.T) {
 func TestParseBluetoothMicRejectsBadValues(t *testing.T) {
 	const tail = `, suspend_timeout_seconds: 0, autoswitch_setting: a.b, dropin_name: x.conf, dropin_marker: "# managed-by: voxi mic headset", a2dp_profile: a2dp-sink, headset_profile: headset-head-unit, restore_record_prefix: "# r: "}`
 	cases := map[string]string{
-		"zero gain":        `bluetooth_mic: {gain_factor: 0, node_matches: ["~bluez_input.*"]` + tail,
-		"negative gain":    `bluetooth_mic: {gain_factor: -2, node_matches: ["~bluez_input.*"]` + tail,
-		"no node matches":  `bluetooth_mic: {gain_factor: 2.75, node_matches: []` + tail,
+		"zero gain":        `bluetooth_mic: {gain_factor: 0, gain_max: 16, node_matches: ["~bluez_input.*"]` + tail,
+		"zero gain max":    `bluetooth_mic: {gain_factor: 2.75, gain_max: 0, node_matches: ["~bluez_input.*"]` + tail,
+		"gain above max":   `bluetooth_mic: {gain_factor: 20, gain_max: 16, node_matches: ["~bluez_input.*"]` + tail,
+		"negative gain":    `bluetooth_mic: {gain_factor: -2, gain_max: 16, node_matches: ["~bluez_input.*"]` + tail,
+		"no node matches":  `bluetooth_mic: {gain_factor: 2.75, gain_max: 16, node_matches: []` + tail,
 		"negative suspend": `bluetooth_mic: {gain_factor: 2.75, node_matches: ["~bluez_input.*"], suspend_timeout_seconds: -1, autoswitch_setting: a.b, dropin_name: x.conf, dropin_marker: "# m", a2dp_profile: a, headset_profile: h, restore_record_prefix: "# r: "}`,
 		"empty autoswitch": `bluetooth_mic: {gain_factor: 2.75, node_matches: ["~bluez_input.*"], suspend_timeout_seconds: 0, autoswitch_setting: "", dropin_name: x.conf, dropin_marker: "# m", a2dp_profile: a, headset_profile: h, restore_record_prefix: "# r: "}`,
 		"dropin path":      `bluetooth_mic: {gain_factor: 2.75, node_matches: ["~bluez_input.*"], suspend_timeout_seconds: 0, autoswitch_setting: a.b, dropin_name: ../x.conf, dropin_marker: "# m", a2dp_profile: a, headset_profile: h, restore_record_prefix: "# r: "}`,
@@ -145,5 +151,54 @@ func TestEagerSchemaBoundsBluetoothMic(t *testing.T) {
 		if err := validate(mutate); err == nil {
 			t.Errorf("schema accepted %s", name)
 		}
+	}
+}
+
+// TestBluetoothMicGainAllowed checks the user override range against the
+// spec's gain_max (issue 210 M5): (0, gain_max], NaN never allowed.
+func TestBluetoothMicGainAllowed(t *testing.T) {
+	bm := BluetoothMicSpec{GainFactor: 2.75, GainMax: 16}
+	cases := map[float64]bool{
+		0:           false,
+		-1:          false,
+		math.NaN():  false,
+		math.Inf(1): false,
+		0.5:         true,
+		1:           true,
+		2.75:        true,
+		16:          true,
+		16.0001:     false,
+	}
+	for g, want := range cases {
+		if got := bm.GainAllowed(g); got != want {
+			t.Errorf("GainAllowed(%v) = %v, want %v", g, got, want)
+		}
+	}
+}
+
+// TestSchemaGainMaximumIsSpecGainMax keeps the schema's gain_factor maximum and
+// the spec's gain_max (the user override ceiling) from drifting apart.
+func TestSchemaGainMaximumIsSpecGainMax(t *testing.T) {
+	s, err := LoadEager()
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile("schemas/eager.schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schema struct {
+		Properties map[string]struct {
+			Properties map[string]struct {
+				Maximum float64 `json:"maximum"`
+			} `json:"properties"`
+		} `json:"properties"`
+	}
+	if err := json.Unmarshal(data, &schema); err != nil {
+		t.Fatal(err)
+	}
+	max := schema.Properties["bluetooth_mic"].Properties["gain_factor"].Maximum
+	if max != s.BluetoothMic.GainMax {
+		t.Fatalf("schema gain_factor maximum = %v, spec gain_max = %v; keep them equal", max, s.BluetoothMic.GainMax)
 	}
 }

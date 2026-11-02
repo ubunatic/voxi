@@ -87,6 +87,11 @@ Soft speech from a Bluetooth headset was dropped by the acoustic gate (mean RMS 
   `bluetooth_mic.gain_factor` (2.75) before the gate and ASR, with an int16 clamp. System volume is
   never changed, and built-in mics get no gain. The gain is resolved by an asynchronous PipeWire
   probe; frames read before it finishes pass at gain 1 (a short window at session start).
+  The value is the spec's `gain_factor` unless `bluetooth_mic_gain` is set in
+  `~/.config/voxi/config.yaml`: `voxi settings set bluetooth_mic_gain 1.5` (or `default` to clear,
+  `1` to turn the gain off). It must be above 0 and at most the spec's `gain_max` (16). The daemon
+  reads it at the start of each dictation session, so no restart is needed. `voxi settings --dump`
+  and `--json` show it, and the interactive menu has a Bluetooth Mic Gain row.
 - **Keep-awake and autoswitch-off, opt-in.** `voxi mic headset` writes the WirePlumber drop-in
   (`bluetooth_mic.dropin_name`) that stops the idle headset source from suspending, turns off the
   switch to the headset (HFP) profile, and moves Bluetooth cards that are on `a2dp-sink` to

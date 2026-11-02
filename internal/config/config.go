@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+	"ubunatic.com/voxi/spec"
 )
 
 var (
@@ -40,6 +41,28 @@ type UserSettings struct {
 	TTSVoiceReferenceWav string `json:"tts_voice_reference_wav,omitempty" yaml:"tts_voice_reference_wav,omitempty"`
 	TTSVoiceSample       string `json:"tts_voice_sample,omitempty" yaml:"tts_voice_sample,omitempty"`
 	TTSVoxCPMPreset      string `json:"tts_voxcpm_preset,omitempty" yaml:"tts_voxcpm_preset,omitempty"`
+	// BluetoothMicGain overrides the spec's Bluetooth default-source gain
+	// (issue 210 M5). 0 means unset: the spec default applies. Read per session.
+	BluetoothMicGain float64 `json:"bluetooth_mic_gain" yaml:"bluetooth_mic_gain,omitempty"`
+}
+
+// EffectiveBluetoothMicGain is the Bluetooth default-source gain: the
+// bluetooth_mic_gain override when set, else specDefault. A nil receiver
+// returns specDefault.
+func (s *UserSettings) EffectiveBluetoothMicGain(specDefault float64) float64 {
+	if s == nil || s.BluetoothMicGain == 0 {
+		return specDefault
+	}
+	return s.BluetoothMicGain
+}
+
+// ValidateBluetoothMicGain accepts a gain in (0, bm.GainMax]; the bounds come
+// from spec/eager.yaml, never from Go constants. NaN and infinities fail.
+func ValidateBluetoothMicGain(gain float64, bm spec.BluetoothMicSpec) error {
+	if !bm.GainAllowed(gain) {
+		return fmt.Errorf("bluetooth_mic_gain %v must be above 0 and at most %v (1 turns the gain off)", gain, bm.GainMax)
+	}
+	return nil
 }
 
 // DefaultUserSettings returns standard user settings.

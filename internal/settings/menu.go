@@ -130,6 +130,8 @@ func NewMenuModel(s *config.UserSettings, availableASRModels []string) *MenuMode
 		delayIdx = 0
 	}
 
+	gainChoices, gainIdx := bluetoothGainChoices(s.BluetoothMicGain)
+
 	items := []*MenuItem{
 		{
 			ID:          "cleanup_backend",
@@ -191,6 +193,14 @@ func NewMenuModel(s *config.UserSettings, availableASRModels []string) *MenuMode
 			Kind:        ItemChoice,
 			Choices:     ttsChoices,
 			ChoiceIndex: ttsIdx,
+		},
+		{
+			ID:          "bluetooth_mic_gain",
+			Title:       "Bluetooth Mic Gain",
+			Description: "Digital gain for Bluetooth default sources (1 = off, default = spec value); applies to the next dictation session",
+			Kind:        ItemChoice,
+			Choices:     gainChoices,
+			ChoiceIndex: gainIdx,
 		},
 		{
 			ID:          "save",
@@ -367,6 +377,15 @@ func (m *MenuModel) ToUserSettings(base *config.UserSettings) *config.UserSettin
 				valStr := strings.TrimSuffix(item.Choices[item.ChoiceIndex], "ms")
 				if ms, err := strconv.Atoi(valStr); err == nil {
 					res.TypeDelayMs = ms
+				}
+			}
+		case "bluetooth_mic_gain":
+			if item.ChoiceIndex >= 0 && item.ChoiceIndex < len(item.Choices) {
+				label := item.Choices[item.ChoiceIndex]
+				if strings.HasPrefix(label, "default") {
+					res.BluetoothMicGain = 0
+				} else if g, err := strconv.ParseFloat(label, 64); err == nil {
+					res.BluetoothMicGain = g
 				}
 			}
 		case "dictation_history":

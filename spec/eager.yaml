@@ -81,6 +81,9 @@ bluetooth_mic:
   # Linear sample gain for Bluetooth default sources. Derived from the
   # 2026-11-02 host measurement (see the issue 210 Decision and docs/AudioDoctor.md).
   gain_factor: 2.75
+  # Ceiling for the user override bluetooth_mic_gain in config.yaml. The schema's
+  # gain_factor maximum must equal it (spec/bluetooth_mic_test.go checks this).
+  gain_max: 16
   # WirePlumber node-name matches the keep-awake drop-in applies to.
   node_matches: ["~bluez_input.*", "~bluez_capture_internal.*"]
   # Idle suspend timeout for those nodes; 0 keeps the mic link awake.

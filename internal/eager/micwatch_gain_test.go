@@ -62,7 +62,7 @@ func newGainWatch(t *testing.T, d deps.Dependencies) (*micWatch, *spec.EagerSpec
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	w := startMicWatch(ctx, d, es, 32000, func() {})
+	w := startMicWatch(ctx, d, es, es.BluetoothMic.GainFactor, 32000, func() {})
 	t.Cleanup(w.stop)
 	return w, es
 }
@@ -122,5 +122,22 @@ func TestMicWatchGainRespectsSpecNodeMatches(t *testing.T) {
 	waitResolved(t, w)
 	if got := w.Gain(); got != 1 {
 		t.Fatalf("Gain() for bluez_output.AA = %v, want 1", got)
+	}
+}
+
+// The session gain (config override or spec default) is what the probe applies
+// to a Bluetooth default source (issue 210 M5).
+func TestMicWatchAppliesSessionGain(t *testing.T) {
+	es, err := spec.LoadEager()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	w := startMicWatch(ctx, gainWatchDeps(pwDumpDefault("bluez_input.AA"), nil, true, nil), es, 1.5, 32000, func() {})
+	t.Cleanup(w.stop)
+	waitResolved(t, w)
+	if got := w.Gain(); got != 1.5 {
+		t.Fatalf("Gain() = %v, want the session gain 1.5", got)
 	}
 }

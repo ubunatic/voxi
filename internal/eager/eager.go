@@ -692,7 +692,7 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 		capture.Kill()
 	}()
 
-	watch := startMicWatch(ctx, d, eagerSpec, bytesPerSec, func() {
+	watch := startMicWatch(ctx, d, eagerSpec, bluetoothGainFor(d, eagerSpec), bytesPerSec, func() {
 		drain.abandon(dropMicRepaired)
 		close(micAbort)
 		if sessions != nil {
