@@ -1,6 +1,6 @@
 # 212 — bench test TestRunCrispasrGPUSuccessWithDetectedBackend hangs until 10m timeout
 
-**Status**: Open
+**Status**: Closed — bench cohere tests hermetic: sparse fixtures at the 1 GiB GGUF floor + injected HTTP client + TestMain network guard (64a17f2); internal/bench 0.126s instead of 10m timeout; make test-q1 green (38 ok, 0 FAIL); mutation check with old 1 KiB fixture fails fast on 'unexpected network request'. Opus review: optional hardening to DefaultTransport not done.
 **Priority**: P1 (High)
 **Severity**: Major
 **Category**: Bug
