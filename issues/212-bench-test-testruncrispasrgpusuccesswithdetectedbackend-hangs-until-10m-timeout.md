@@ -19,3 +19,9 @@ The goroutine dump shows an HTTP/2 response body being copied (`io.Copy` ← `ht
 ## 3. Plan
 - Find what the runner downloads and why the fake cache isn't accepted; make the test hermetic (inject the downloader, or fake a valid cache entry) and fail fast instead of downloading in tests.
 - Check other bench tests for the same pattern.
+
+## Decision
+Lean sprint 2026-11-02 (dev d212 haiku:med, reviewer opus:med); host decisions on the plan:
+1. Cause: cohere weights under the 1 GiB `GGUFMinBytes` floor are treated as missing, so the runner downloads real weights. Fix with sparse fixtures at the floor (same pattern as eager), not a lowered production floor.
+2. Inject the HTTP client via `deps` (`HTTPClient`); bench tests use a guard client that counts and fails requests.
+3. A bench-package `TestMain` backstop transport that fails any real network request is accepted.
