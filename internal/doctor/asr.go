@@ -255,6 +255,8 @@ func (d HostDoctor) checkOpenAIASREngine(ctx context.Context, a asrCheck) Result
 		return Result{ID: c.ID, Status: WARN, Detail: fmt.Sprintf("%s transcribed the probe clip as %q, expected \"one two\" @ %s", a.name, text, baseURL)}
 	case err == nil:
 		return d.probeOK(ctx, a, baseURL)
+	case errors.Is(err, errProbeClipNotWAV):
+		return Result{ID: c.ID, Status: ERROR, Detail: fmt.Sprintf("%s not probed: %v", a.name, err)}
 	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
 		return Result{ID: c.ID, Status: WARN, Detail: fmt.Sprintf("%s probe did not finish (%v) @ %s; cannot establish whether transcription works", a.name, err, baseURL)}
 	}
@@ -360,6 +362,9 @@ func (d HostDoctor) probeASR(ctx context.Context, baseURL string, model spec.Mod
 // defaultASRProbe sends the embedded probe clip to baseURL in one attempt.
 // The clip is written to a temporary directory, never to HOME.
 func defaultASRProbe(ctx context.Context, baseURL string, model spec.Model) (string, error) {
+	if !probeClipIsWAV(asrProbeWAV) {
+		return "", errProbeClipNotWAV
+	}
 	dir, err := os.MkdirTemp("", "voxi-asr-probe-")
 	if err != nil {
 		return "", fmt.Errorf("create probe directory: %w", err)
@@ -370,6 +375,16 @@ func defaultASRProbe(ctx context.Context, baseURL string, model spec.Model) (str
 		return "", fmt.Errorf("write probe clip: %w", err)
 	}
 	return eager.ProbeOpenAIWAV(ctx, wavPath, baseURL, model.APIModel, model.ResponseFormat, model.StripBeforeMarker)
+}
+
+// errProbeClipNotWAV reports a build whose embedded probe clip is not audio.
+var errProbeClipNotWAV = errors.New("voxi was built with a Git LFS pointer instead of the probe clip; install git-lfs, run `git lfs pull`, and rebuild")
+
+// probeClipIsWAV reports whether clip is a RIFF/WAVE file. A checkout
+// without git-lfs embeds the LFS pointer text instead, which every ASR
+// backend rejects as undecodable.
+func probeClipIsWAV(clip []byte) bool {
+	return len(clip) >= 12 && string(clip[:4]) == "RIFF" && string(clip[8:12]) == "WAVE"
 }
 
 // transcriptMatchesProbe reports whether text contains both words of the probe

@@ -661,3 +661,14 @@ func TestASRProbeScenarios(t *testing.T) {
 		}
 	})
 }
+
+func TestProbeClipIsWAV(t *testing.T) {
+	pointer := []byte("version https://git-lfs.github.com/spec/v1\noid sha256:ff\nsize 78764\n")
+	if probeClipIsWAV(pointer) {
+		t.Fatal("LFS pointer accepted as WAV")
+	}
+	wav := append([]byte("RIFF\x00\x00\x00\x00WAVEfmt "), make([]byte, 16)...)
+	if !probeClipIsWAV(wav) {
+		t.Fatal("RIFF/WAVE header rejected")
+	}
+}
