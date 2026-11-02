@@ -75,6 +75,18 @@ type Model struct {
 	// Zero means the engine default. Raised for backends that hold a request
 	// while a server cold-starts (lmcoder proxy: up to 60 s, issue 181).
 	TranscribeTimeoutMs int `yaml:"transcribe_timeout_ms"`
+	// LocalService names the systemd --user unit that serves this model and
+	// what starting it costs. Nil when no such unit is managed by voxi tools.
+	LocalService *LocalService `yaml:"local_service"`
+}
+
+// LocalService is the unit that serves a model and its start costs (issue 211).
+type LocalService struct {
+	Unit              string  `yaml:"unit"`
+	VRAMGiB           float64 `yaml:"vram_gib"`
+	RAMGiB            float64 `yaml:"ram_gib"`
+	DownloadGB        float64 `yaml:"download_gb"`
+	FirstStartSeconds int     `yaml:"first_start_seconds"`
 }
 
 // StopWord is a shipped hallucination filter. ID is stable so a user can

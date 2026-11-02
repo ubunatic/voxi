@@ -154,6 +154,16 @@ models:
     # to 60 s during a cold start, so allow 90 s (issue 181 §7).
     wake_url: "http://127.0.0.1:8735/lmcoder/wake"
     transcribe_timeout_ms: 90000
+    # The lmcoder unit that serves this model. `voxi doctor --fix` starts it
+    # with `lmcoder service start --asr` only after showing the costs below
+    # (issue 211). The GiB figures are measurements: VRAM from M1 above, RAM
+    # from MemoryCurrent of the serving unit (1.98 GiB, 2026-11-02).
+    local_service:
+      unit: lmcoder-asr.service
+      vram_gib: 2.78
+      ram_gib: 2.0
+      download_gb: 1.4
+      first_start_seconds: 300
     # M1 measured this GPU-bound (2.78 GiB VRAM, ~2s for a short clip);
     # no CPU timing was measured and none is expected to be practical.
     requires_gpu: true

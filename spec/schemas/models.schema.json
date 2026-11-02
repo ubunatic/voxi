@@ -112,6 +112,19 @@
             "type": "integer",
             "minimum": 1,
             "description": "Bounds one transcription request for this model; omitted means the engine default (30 s). Raised for backends that hold a request while a server cold-starts (lmcoder proxy, issue 181)."
+          },
+          "local_service": {
+            "type": "object",
+            "description": "The local service that serves this model and what starting it costs. `voxi doctor --fix` shows the costs before it starts the unit (issue 211).",
+            "required": ["unit", "vram_gib", "ram_gib", "download_gb", "first_start_seconds"],
+            "properties": {
+              "unit": { "type": "string", "minLength": 1, "description": "systemd --user unit that serves the model." },
+              "vram_gib": { "type": "number", "minimum": 0, "description": "GPU memory the serving unit needs, in GiB." },
+              "ram_gib": { "type": "number", "minimum": 0, "description": "Resident memory of the serving unit, in GiB." },
+              "download_gb": { "type": "number", "minimum": 0, "description": "Model files fetched on the first start, in GB." },
+              "first_start_seconds": { "type": "integer", "minimum": 1, "description": "How long a first start may take, including the download; doctor waits this long for the probe." }
+            },
+            "additionalProperties": false
           }
         },
         "additionalProperties": false

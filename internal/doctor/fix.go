@@ -50,6 +50,9 @@ func (d HostDoctor) Repair(ctx context.Context, report Report, opts Options, in 
 		for _, command := range current.Repairs {
 			fmt.Fprintf(out, "%s %s: %s\n", current.Status, current.ID, current.Detail)
 			fmt.Fprintf(out, "  repair: %s\n", command)
+			for _, line := range current.Notice {
+				fmt.Fprintf(out, "  %s\n", line)
+			}
 			apply := yes
 			if !yes {
 				fmt.Fprintf(out, "Apply repair for %s? [y/N] ", check.ID)
@@ -117,6 +120,15 @@ func (d HostDoctor) Repair(ctx context.Context, report Report, opts Options, in 
 			updated, err := d.check(ctx, checks[check.ID], opts)
 			if err != nil {
 				return report, err
+			}
+			if current.StartBudget > 0 && !covered {
+				updated, err = d.awaitStart(ctx, checks[check.ID], opts, current.StartBudget, updated)
+				if err != nil {
+					return report, err
+				}
+				if updated.Status != OK {
+					fmt.Fprintf(out, "  started service did not transcribe within %s\n", current.StartBudget)
+				}
 			}
 			report.Checks[idx] = updated
 			if updated.Status != FAULT {
@@ -393,4 +405,25 @@ func (r Report) index(id string) int {
 		}
 	}
 	return -1
+}
+
+// startPollInterval is how often --fix re-probes a service it just started.
+const startPollInterval = 10 * time.Second
+
+// awaitStart re-checks a check whose repair started a service, until the check
+// is OK or budget runs out. A first start downloads its model files, so the
+// first probe after the start usually fails; only a probe that transcribes
+// proves the service serves.
+func (d HostDoctor) awaitStart(ctx context.Context, c spec.DoctorCheck, opts Options, budget time.Duration, res Result) (Result, error) {
+	for waited := time.Duration(0); res.Status != OK && waited < budget; waited += startPollInterval {
+		if err := d.Host.Wait(ctx, startPollInterval); err != nil {
+			return res, err
+		}
+		next, err := d.check(ctx, c, opts)
+		if err != nil {
+			return res, err
+		}
+		res = next
+	}
+	return res, nil
 }

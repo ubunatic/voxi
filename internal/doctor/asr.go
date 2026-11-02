@@ -292,9 +292,9 @@ func (d HostDoctor) checkOpenAIASREngine(ctx context.Context, a asrCheck) Result
 
 	switch {
 	case eager.IsLoopbackEndpoint(baseURL, eager.LmcoderProxyPort) || a.model.Manager == "lmcoder":
-		// Only the proxy restart. Starting or selecting the voxi llama-server
+		// Only lmcoder repairs. Starting or selecting the voxi llama-server
 		// fallback here would switch to model files that may be missing.
-		res.Repairs = primaryRepairs(c, baseURL)
+		res = d.lmcoderRepairs(ctx, a, baseURL, res)
 	case eager.IsLoopbackEndpoint(baseURL, eager.VoxiLlamaServerPort) || a.name == "r2t2-confucius4-voxi":
 		// No repair: restarting the fallback service would start it without
 		// checking that its model files exist. Guidance only.
@@ -349,6 +349,89 @@ func primaryRepairs(c spec.DoctorCheck, baseURL string) []string {
 		return nil
 	}
 	return []string{c.Repair.Templates["restart_proxy"]}
+}
+
+// unitState is how systemd --user sees one unit: its load state and active state.
+type unitState struct{ load, active string }
+
+// unitState asks systemd for the load and active state of unit.
+func (d HostDoctor) unitState(ctx context.Context, unit string) (unitState, error) {
+	out, err := d.Host.Run(ctx, "systemctl", "--user", "show", "-p", "LoadState", "-p", "ActiveState", unit)
+	if err != nil {
+		return unitState{}, err
+	}
+	var st unitState
+	for line := range strings.SplitSeq(string(out), "\n") {
+		key, value, _ := strings.Cut(strings.TrimSpace(line), "=")
+		switch key {
+		case "LoadState":
+			st.load = value
+		case "ActiveState":
+			st.active = value
+		}
+	}
+	if st.load == "" || st.active == "" {
+		return unitState{}, fmt.Errorf("systemd gave no state for %s", unit)
+	}
+	return st, nil
+}
+
+// lmcoderRepairs chooses the repair for a failing lmcoder endpoint from the
+// state of the unit that serves it. A stopped unit is started with lmcoder
+// after its costs are shown (issue 211). A unit that runs keeps the proxy
+// restart, and a unit systemd cannot describe gets the proxy restart too.
+func (d HostDoctor) lmcoderRepairs(ctx context.Context, a asrCheck, baseURL string, res Result) Result {
+	svc := a.model.LocalService
+	if svc == nil {
+		res.Repairs = primaryRepairs(a.c, baseURL)
+		return res
+	}
+	st, err := d.unitState(ctx, svc.Unit)
+	switch {
+	case err != nil:
+		res.Repairs = primaryRepairs(a.c, baseURL)
+	case st.load != "loaded":
+		res.See = append(res.See, fmt.Sprintf("%s is not loaded (LoadState=%s), so doctor cannot start it; install or enable lmcoder's ASR service", svc.Unit, st.load))
+	case st.active == "inactive" || st.active == "failed":
+		return d.startRepair(ctx, a, res, st)
+	default:
+		res.Repairs = primaryRepairs(a.c, baseURL)
+	}
+	return res
+}
+
+// startRepair offers `lmcoder service start --asr` for a stopped unit. The
+// repair needs the lmcoder command, so it is withheld when that is missing.
+func (d HostDoctor) startRepair(ctx context.Context, a asrCheck, res Result, st unitState) Result {
+	svc := a.model.LocalService
+	start := a.c.Repair.Templates["start_asr"]
+	args, err := commandArgs(start)
+	if err != nil || len(args) == 0 {
+		res.See = append(res.See, "lmcoder start command is not configured in spec/doctor.yaml")
+		return res
+	}
+	if _, err := d.Host.Run(ctx, "which", args[0]); err != nil {
+		res.See = append(res.See, fmt.Sprintf("%s is %s, but %s is not on PATH; install lmcoder to start it", svc.Unit, st.active, args[0]))
+		return res
+	}
+	res.Detail += fmt.Sprintf("; %s is %s", svc.Unit, st.active)
+	res.Repairs = []string{start}
+	res.Notice = startNotice(svc, render(a.c.Repair.Templates["enable_asr"], "unit", svc.Unit))
+	res.StartBudget = time.Duration(svc.FirstStartSeconds) * time.Second
+	return res
+}
+
+// startNotice lists what starting svc costs, for the warning shown before --fix
+// applies the start. enable is the command that makes it start at boot; doctor
+// only shows it and never runs it.
+func startNotice(svc *spec.LocalService, enable string) []string {
+	return []string{
+		fmt.Sprintf("starting %s costs:", svc.Unit),
+		fmt.Sprintf("GPU: about %.2f GiB of VRAM while it serves", svc.VRAMGiB),
+		fmt.Sprintf("RAM: about %.1f GiB resident", svc.RAMGiB),
+		fmt.Sprintf("first start downloads about %.1f GB of model files and can take up to %d min", svc.DownloadGB, svc.FirstStartSeconds/60),
+		fmt.Sprintf("boot: it stays off after a reboot; to enable it later run: %s (--fix does not)", enable),
+	}
 }
 
 // probeASR runs one transcription probe against baseURL, bounded by asrProbeTimeout.

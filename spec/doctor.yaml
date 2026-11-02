@@ -100,8 +100,10 @@ checks:
     order: 8
     repair_order: 6
     repair:
-      prompt: Restart the lmcoder proxy. The local fallback is never offered here; it is not checked for model files.
+      prompt: Start the stopped lmcoder ASR service, or restart the lmcoder proxy while the service runs. The local fallback is never offered here; it is not checked for model files.
       templates:
+        start_asr: "lmcoder service start --asr"
+        enable_asr: "systemctl --user enable {{unit}}"
         restart_proxy: "systemctl --user restart lmcoder-proxy.service"
 scripts:
   routing-probe.sh: scripts/routing-probe.sh

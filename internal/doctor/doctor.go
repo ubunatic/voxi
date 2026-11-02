@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"ubunatic.com/voxi/internal/mic"
 	"ubunatic.com/voxi/spec"
@@ -46,6 +47,12 @@ type Result struct {
 	Detail  string
 	Repairs []string
 	See     []string
+	// Notice is printed before the repair prompt: what applying the repair
+	// costs, such as the GPU and memory a service start takes (issue 211).
+	Notice []string
+	// StartBudget, when set, is how long --fix waits for a repaired service to
+	// answer the check after the repair runs. Zero means no wait.
+	StartBudget time.Duration
 }
 
 // Report contains all check verdicts and aggregate status.
