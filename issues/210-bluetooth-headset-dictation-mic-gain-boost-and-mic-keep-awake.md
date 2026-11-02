@@ -36,3 +36,10 @@ Open questions:
 - Re-check live state and recent commits first; the host already carries the manual fixes.
 - Implement as voxi features with unit tests; document in `docs/AudioDoctor.md` / `docs/MicSelfCheck.md` with undo steps.
 - Verify per `docs/AudioDoctor.md`: on a clean host (fixes reverted), enable the feature, then dictate after a ≥30 s pause starting immediately; first words kept, no OSD, soft speech accepted (chunk RMS via `voxi chunks list`).
+
+## Decision
+Lean sprint 2026-11-02 (dev d210 haiku:med, reviewer opus:med); host decisions on d210's plan:
+1. Gain: digital gain in voxi's capture path, only for Bluetooth sources (`bluez_input.*`), factor from spec. No change to system volume.
+2. Keep-awake drop-in and autoswitch-off: an explicit opt-in `voxi mic headset` subcommand with an undo (`--off`). Doctor shows read-only status. The "no config files" rule in docs/AudioDoctor.md is amended for this one opt-in drop-in.
+3. No M0 capture window: start from the 2026-11-02 host measurement (source volume 1.4 raised soft-speech chunk RMS from 83–109 to 517–1139). Pick the digital factor as the sample-domain equivalent of that boost, clipped to int16. The owner verifies at the end by dictating.
+4. Lean milestones: M1 BT predicate + spec block (gate literals stay put unless needed); M2 digital gain + tests; M3 `voxi mic headset` (drop-in, autoswitch, undo) + doctor status line + docs. The live check is the owner's dictation after the host's manual wpctl volume is reset to 1.0 (host asks first).
