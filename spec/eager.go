@@ -49,6 +49,8 @@ type MicCheckSpec struct {
 // gain for Bluetooth default sources and the keep-awake drop-in that
 // `voxi mic headset` writes and removes.
 type BluetoothMicSpec struct {
+	DeviceAPI             string   `yaml:"device_api"`
+	NodePrefix            string   `yaml:"node_prefix"`
 	GainFactor            float64  `yaml:"gain_factor"`
 	GainMax               float64  `yaml:"gain_max"`
 	NodeMatches           []string `yaml:"node_matches"`
@@ -65,6 +67,17 @@ type BluetoothMicSpec struct {
 // and at most GainMax. NaN and infinities are rejected.
 func (bm BluetoothMicSpec) GainAllowed(g float64) bool {
 	return g > 0 && g <= bm.GainMax
+}
+
+// IsBluetoothDevice reports whether a card's device.api names a Bluetooth device.
+func (bm BluetoothMicSpec) IsBluetoothDevice(deviceAPI string) bool {
+	return deviceAPI == bm.DeviceAPI
+}
+
+// IsBluetoothNode reports whether a node is a Bluetooth input by its device.api
+// or by its node-name prefix (issue 213: the one definition of Bluetooth).
+func (bm BluetoothMicSpec) IsBluetoothNode(deviceAPI, nodeName string) bool {
+	return bm.IsBluetoothDevice(deviceAPI) || strings.HasPrefix(nodeName, bm.NodePrefix)
 }
 
 // EagerSpec is the parsed contents of spec/eager.yaml.
@@ -114,6 +127,9 @@ func parseEagerSpec(data []byte) (*EagerSpec, error) {
 	bm := s.BluetoothMic
 	if bm.GainMax <= 0 {
 		return nil, fmt.Errorf("spec: bluetooth_mic.gain_max must be positive")
+	}
+	if bm.DeviceAPI == "" || bm.NodePrefix == "" {
+		return nil, fmt.Errorf("spec: bluetooth_mic.device_api and node_prefix must not be empty")
 	}
 	if !bm.GainAllowed(bm.GainFactor) {
 		return nil, fmt.Errorf("spec: bluetooth_mic.gain_factor must be in (0, gain_max]")

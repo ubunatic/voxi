@@ -12,7 +12,7 @@ import (
 )
 
 // validBluetoothMic is a complete, valid bluetooth_mic section (issue 210).
-const validBluetoothMic = "\nbluetooth_mic: {gain_factor: 2.75, gain_max: 16, node_matches: [\"~bluez_input.*\"], " +
+const validBluetoothMic = "\nbluetooth_mic: {device_api: bluez5, node_prefix: bluez_, gain_factor: 2.75, gain_max: 16, node_matches: [\"~bluez_input.*\"], " +
 	"suspend_timeout_seconds: 0, autoswitch_setting: bluetooth.autoswitch-to-headset-profile, " +
 	"dropin_name: 51-voxi-bt-mic-no-suspend.conf, dropin_marker: \"# managed-by: voxi mic headset\", " +
 	"a2dp_profile: a2dp-sink, headset_profile: headset-head-unit, restore_record_prefix: \"# voxi-restore-autoswitch: \"}\n"
@@ -69,18 +69,18 @@ func TestParseBluetoothMicAcceptsValid(t *testing.T) {
 func TestParseBluetoothMicRejectsBadValues(t *testing.T) {
 	const tail = `, suspend_timeout_seconds: 0, autoswitch_setting: a.b, dropin_name: x.conf, dropin_marker: "# managed-by: voxi mic headset", a2dp_profile: a2dp-sink, headset_profile: headset-head-unit, restore_record_prefix: "# r: "}`
 	cases := map[string]string{
-		"zero gain":        `bluetooth_mic: {gain_factor: 0, gain_max: 16, node_matches: ["~bluez_input.*"]` + tail,
-		"zero gain max":    `bluetooth_mic: {gain_factor: 2.75, gain_max: 0, node_matches: ["~bluez_input.*"]` + tail,
-		"gain above max":   `bluetooth_mic: {gain_factor: 20, gain_max: 16, node_matches: ["~bluez_input.*"]` + tail,
-		"negative gain":    `bluetooth_mic: {gain_factor: -2, gain_max: 16, node_matches: ["~bluez_input.*"]` + tail,
-		"no node matches":  `bluetooth_mic: {gain_factor: 2.75, gain_max: 16, node_matches: []` + tail,
-		"negative suspend": `bluetooth_mic: {gain_factor: 2.75, node_matches: ["~bluez_input.*"], suspend_timeout_seconds: -1, autoswitch_setting: a.b, dropin_name: x.conf, dropin_marker: "# m", a2dp_profile: a, headset_profile: h, restore_record_prefix: "# r: "}`,
-		"empty autoswitch": `bluetooth_mic: {gain_factor: 2.75, node_matches: ["~bluez_input.*"], suspend_timeout_seconds: 0, autoswitch_setting: "", dropin_name: x.conf, dropin_marker: "# m", a2dp_profile: a, headset_profile: h, restore_record_prefix: "# r: "}`,
-		"dropin path":      `bluetooth_mic: {gain_factor: 2.75, node_matches: ["~bluez_input.*"], suspend_timeout_seconds: 0, autoswitch_setting: a.b, dropin_name: ../x.conf, dropin_marker: "# m", a2dp_profile: a, headset_profile: h, restore_record_prefix: "# r: "}`,
-		"empty marker":     `bluetooth_mic: {gain_factor: 2.75, node_matches: ["~bluez_input.*"], suspend_timeout_seconds: 0, autoswitch_setting: a.b, dropin_name: x.conf, dropin_marker: "", a2dp_profile: a, headset_profile: h, restore_record_prefix: "# r: "}`,
-		"empty a2dp":       `bluetooth_mic: {gain_factor: 2.75, node_matches: ["~bluez_input.*"], suspend_timeout_seconds: 0, autoswitch_setting: a.b, dropin_name: x.conf, dropin_marker: "# m", a2dp_profile: "", headset_profile: h, restore_record_prefix: "# r: "}`,
-		"empty headset":    `bluetooth_mic: {gain_factor: 2.75, node_matches: ["~bluez_input.*"], suspend_timeout_seconds: 0, autoswitch_setting: a.b, dropin_name: x.conf, dropin_marker: "# m", a2dp_profile: a, headset_profile: "", restore_record_prefix: "# r: "}`,
-		"empty record":     `bluetooth_mic: {gain_factor: 2.75, node_matches: ["~bluez_input.*"], suspend_timeout_seconds: 0, autoswitch_setting: a.b, dropin_name: x.conf, dropin_marker: "# m", a2dp_profile: a, headset_profile: h, restore_record_prefix: ""}`,
+		"zero gain":        `bluetooth_mic: {device_api: bluez5, node_prefix: bluez_, gain_factor: 0, gain_max: 16, node_matches: ["~bluez_input.*"]` + tail,
+		"zero gain max":    `bluetooth_mic: {device_api: bluez5, node_prefix: bluez_, gain_factor: 2.75, gain_max: 0, node_matches: ["~bluez_input.*"]` + tail,
+		"gain above max":   `bluetooth_mic: {device_api: bluez5, node_prefix: bluez_, gain_factor: 20, gain_max: 16, node_matches: ["~bluez_input.*"]` + tail,
+		"negative gain":    `bluetooth_mic: {device_api: bluez5, node_prefix: bluez_, gain_factor: -2, gain_max: 16, node_matches: ["~bluez_input.*"]` + tail,
+		"no node matches":  `bluetooth_mic: {device_api: bluez5, node_prefix: bluez_, gain_factor: 2.75, gain_max: 16, node_matches: []` + tail,
+		"negative suspend": `bluetooth_mic: {device_api: bluez5, node_prefix: bluez_, gain_factor: 2.75, node_matches: ["~bluez_input.*"], suspend_timeout_seconds: -1, autoswitch_setting: a.b, dropin_name: x.conf, dropin_marker: "# m", a2dp_profile: a, headset_profile: h, restore_record_prefix: "# r: "}`,
+		"empty autoswitch": `bluetooth_mic: {device_api: bluez5, node_prefix: bluez_, gain_factor: 2.75, node_matches: ["~bluez_input.*"], suspend_timeout_seconds: 0, autoswitch_setting: "", dropin_name: x.conf, dropin_marker: "# m", a2dp_profile: a, headset_profile: h, restore_record_prefix: "# r: "}`,
+		"dropin path":      `bluetooth_mic: {device_api: bluez5, node_prefix: bluez_, gain_factor: 2.75, node_matches: ["~bluez_input.*"], suspend_timeout_seconds: 0, autoswitch_setting: a.b, dropin_name: ../x.conf, dropin_marker: "# m", a2dp_profile: a, headset_profile: h, restore_record_prefix: "# r: "}`,
+		"empty marker":     `bluetooth_mic: {device_api: bluez5, node_prefix: bluez_, gain_factor: 2.75, node_matches: ["~bluez_input.*"], suspend_timeout_seconds: 0, autoswitch_setting: a.b, dropin_name: x.conf, dropin_marker: "", a2dp_profile: a, headset_profile: h, restore_record_prefix: "# r: "}`,
+		"empty a2dp":       `bluetooth_mic: {device_api: bluez5, node_prefix: bluez_, gain_factor: 2.75, node_matches: ["~bluez_input.*"], suspend_timeout_seconds: 0, autoswitch_setting: a.b, dropin_name: x.conf, dropin_marker: "# m", a2dp_profile: "", headset_profile: h, restore_record_prefix: "# r: "}`,
+		"empty headset":    `bluetooth_mic: {device_api: bluez5, node_prefix: bluez_, gain_factor: 2.75, node_matches: ["~bluez_input.*"], suspend_timeout_seconds: 0, autoswitch_setting: a.b, dropin_name: x.conf, dropin_marker: "# m", a2dp_profile: a, headset_profile: "", restore_record_prefix: "# r: "}`,
+		"empty record":     `bluetooth_mic: {device_api: bluez5, node_prefix: bluez_, gain_factor: 2.75, node_matches: ["~bluez_input.*"], suspend_timeout_seconds: 0, autoswitch_setting: a.b, dropin_name: x.conf, dropin_marker: "# m", a2dp_profile: a, headset_profile: h, restore_record_prefix: ""}`,
 		"section missing":  "",
 	}
 	for name, section := range cases {

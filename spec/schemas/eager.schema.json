@@ -14,6 +14,8 @@
       "type": "object",
       "description": "Bluetooth headset dictation (issue 210): digital gain for Bluetooth default sources and the keep-awake drop-in managed by `voxi mic headset`.",
       "required": [
+        "device_api",
+        "node_prefix",
         "gain_factor",
         "gain_max",
         "node_matches",
@@ -26,6 +28,16 @@
         "restore_record_prefix"
       ],
       "properties": {
+        "device_api": {
+          "type": "string",
+          "minLength": 1,
+          "description": "PipeWire device.api of a Bluetooth card (BlueZ)."
+        },
+        "node_prefix": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Node-name prefix of a Bluetooth input node."
+        },
         "gain_max": {
           "type": "number",
           "exclusiveMinimum": 0,

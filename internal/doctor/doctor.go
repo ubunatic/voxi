@@ -576,7 +576,7 @@ func parseGraph(data []byte) (graph, error) {
 			if _, exists := g.firstNode[class]; !exists {
 				g.firstNode[class] = name
 			}
-		case strings.HasSuffix(o.Type, ":Device") && o.Info != nil && stringValue(o.Info.Props["device.api"]) == "bluez5":
+		case strings.HasSuffix(o.Type, ":Device") && o.Info != nil && mic.IsBluetoothDevice(stringValue(o.Info.Props["device.api"])):
 			g.cards++
 			card := bluetoothCard{name: stringValue(o.Info.Props["device.name"])}
 			var active, profiles []graphProfile

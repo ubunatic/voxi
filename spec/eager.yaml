@@ -78,6 +78,10 @@ mic_check:
 # autoswitch setting are written only by the explicit `voxi mic headset`
 # command, which uses these names and the marker to find and undo its own file.
 bluetooth_mic:
+  # PipeWire identity of a Bluetooth node: the card's device.api, or a node name
+  # starting with node_prefix. Detection (internal/mic) reads both.
+  device_api: bluez5
+  node_prefix: bluez_
   # Linear sample gain for Bluetooth default sources. Derived from the
   # 2026-11-02 host measurement (see the issue 210 Decision and docs/AudioDoctor.md).
   gain_factor: 2.75

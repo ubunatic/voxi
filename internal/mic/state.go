@@ -156,15 +156,16 @@ func (d Device) IsHeadphone() bool {
 }
 
 // HeadsetProfile returns the best available profile that provides a mic.
-// The plain "headset-head-unit" (mSBC/LC3 when supported) beats the CVSD variant.
+// The spec's headset_profile (plain, mSBC/LC3 when supported) beats the CVSD variant.
 func (d Device) HeadsetProfile() (Profile, bool) {
 	var best Profile
 	found := false
+	headset := bluetoothSpec().HeadsetProfile
 	for _, p := range d.Profiles {
 		if !p.Available || p.Sources == 0 {
 			continue
 		}
-		if !found || (p.Name == "headset-head-unit" && best.Name != "headset-head-unit") {
+		if !found || (p.Name == headset && best.Name != headset) {
 			best, found = p, true
 		}
 	}
@@ -238,7 +239,7 @@ func ParseDump(data []byte) (State, error) {
 				Description:   str(p, "node.description"),
 				DeviceID:      num(p, "device.id"),
 				ProfileDevice: num(p, "card.profile.device"),
-				Bluetooth:     str(p, "device.api") == "bluez5" || strings.HasPrefix(str(p, "node.name"), "bluez_"),
+				Bluetooth:     bluetoothSpec().IsBluetoothNode(str(p, "device.api"), str(p, "node.name")),
 				Loopback:      p["bluez5.loopback"] == true,
 			})
 		case strings.HasSuffix(o.Type, ":Device") && o.Info != nil:
@@ -250,7 +251,7 @@ func ParseDump(data []byte) (State, error) {
 				ID:          o.ID,
 				Name:        str(p, "device.name"),
 				Description: str(p, "device.description"),
-				Bluetooth:   str(p, "device.api") == "bluez5",
+				Bluetooth:   IsBluetoothDevice(str(p, "device.api")),
 				FormFactor:  str(p, "device.form-factor"),
 				Profiles:    parseProfiles(o.Info.Params["EnumProfile"]),
 				Routes:      parseRoutes(o.Info.Params["Route"]),
