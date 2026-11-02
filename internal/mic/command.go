@@ -60,6 +60,7 @@ func NewCommand(d deps.Dependencies, settle time.Duration) *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&fix, "fix", false, "repair the problems found")
+	cmd.AddCommand(newHeadsetCommand(d))
 	return cmd
 }
 

@@ -77,6 +77,35 @@ A stale saved default alone is not urgent while another mic works.
   `eagerSessionManager.StopSession` clears the daemon state only if that session is still active.
   The agent's cached recording state is re-checked against the daemon on status.
 
+## Bluetooth Headset Dictation (issue 210)
+
+Soft speech from a Bluetooth headset was dropped by the acoustic gate (mean RMS 83-109 against
+`MinMeanRMS` 120). Two opt-in or automatic measures address it:
+
+- **Digital gain, automatic.** When the default source is a Bluetooth input, each captured frame is
+  multiplied by `bluetooth_mic.gain_factor` (`spec/eager.yaml`) before the gate and ASR, with an int16
+  clamp. System volume is never changed, and built-in mics get no gain.
+- **Keep-awake and autoswitch-off, opt-in.** `voxi mic headset` writes the WirePlumber drop-in that
+  stops the idle headset source from suspending, and turns off the switch to the headset (HFP)
+  profile. `voxi mic headset --off` undoes both. `voxi mic headset --status` only reports.
+
+**Gain factor derivation.** The 2026-11-02 host measurement is the reference: source volume 1.4 raised
+soft-speech chunk RMS from 83-109 to 517-1139. The low-end ratio is 517/83 = 6.2, and the factor is 6
+(rounded down, so the low end lands at 498 and the high end at 654). Soft speech therefore clears the
+120 gate with margin. The ratio is not linear in the source volume (a 1.4x volume should give about 1.4x
+RMS), so the spread is unexplained; the owner verifies it by dictating. Loud speech saturates at int16.
+
+**Commands.** `voxi mic headset` enables (prints the autoswitch change, the cost, and the undo).
+`voxi mic headset --off` disables. `voxi mic headset --status` reports the keep-awake state. Doctor's mic
+line shows the same status when the default mic is Bluetooth.
+
+**Refusals.** Enable and disable refuse without `wpctl`, and enable refuses while WirePlumber is not
+running. A drop-in without the `dropin_marker` line is not voxi's: it is never written or removed. A
+drop-in with the marker is voxi's, so it is rewritten to the rendered text.
+
+**Costs.** Keep-awake keeps the headset mic link open while idle, which costs headset battery. Autoswitch
+off leaves playback at call quality (HFP) while it is set.
+
 ## Known Limits
 
 - If 10 utterances queue behind transcription, capture reads block and could look like a stall.

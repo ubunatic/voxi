@@ -29,9 +29,13 @@ Plain output (no color) is the default for pipes and for `NO_COLOR`; the text is
   ids and order, units, journal signatures, process names, dummy sink names, settle timing and
   repair templates. Multi-step shell lives in `spec/scripts/` (only `routing-probe.sh`). Go holds
   parsing, verdicts and orchestration, never the values (see [Spec.md](Spec.md)).
-- **Runtime commands only, no config files.** User decision: WirePlumber/BlueZ config fragments are
-  forgotten and have side effects. Repairs are `pw-metadata`, `pactl set-card-profile`,
-  `wpctl set-default` and `systemctl --user restart`.
+- **Runtime commands only, no config files (one opt-in exception, issue 210).** User decision:
+  WirePlumber/BlueZ config fragments are forgotten and have side effects. Repairs are
+  `pw-metadata`, `pactl set-card-profile`, `wpctl set-default` and `systemctl --user restart`.
+  The exception is the Bluetooth keep-awake drop-in and autoswitch-off, written only by
+  `voxi mic headset` and undone by `voxi mic headset --off`. Doctor never writes either; it reports
+  their status on the mic line when the default mic is Bluetooth. Its values are in `spec/eager.yaml`
+  (`bluetooth_mic`).
 - **Faults vs evidence.** `journal-signals` and `coredumps` report `WARN` with a `see:` hint. Their
   lines stay in the log after a repair, so they can never clear and must not drive repairs.
 - **Repair order:** services → Bluetooth card profile → defaults → mic → routing → ASR engine. A repair whose
