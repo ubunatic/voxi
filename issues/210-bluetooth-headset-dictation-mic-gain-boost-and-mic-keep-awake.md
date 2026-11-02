@@ -56,3 +56,10 @@ Lean sprint 2026-11-02 (dev d210 haiku:med, reviewer opus:med); host decisions o
 6. When enabling, also pin the BT card to the headset (HFP) profile if it is on A2DP (spec profile name), or document why not. Fix the contradictory `Long` help text about playback quality.
 7. Spec duplication: use `AutoswitchSetting` from spec (headset_cmd.go:63,82). Make one "Bluetooth node" definition (state.go:218 `bluez_` vs spec node_matches). Drop the Go max that duplicates the schema maximum.
 8. `captureGain`: don't block the read loop on `pw-dump`. Resolve the BT state asynchronously, or reuse micwatch's dump, with a short timeout; start reading immediately. Make `TestHeadsetStatusLine` match the exact status word.
+
+## M5 — gain in `voxi settings` (reopened 2026-11-02, owner request)
+- Add the Bluetooth mic gain as a user setting: config.yaml key (e.g. `bluetooth_mic_gain`) that overrides the spec `gain_factor` default; 1.0 disables. Validate the range from the spec/schema bounds (no Go copy).
+- Show it in the `voxi settings` summary, `--dump`/`--json`, the interactive menu (editable value), and `voxi settings set`; include it in `voxi settings test` only if cheap.
+- The daemon reads it at session start (no restart needed if config is read per session; otherwise document `make restart-service`/restart).
+- Leftovers from M4: Bluetooth node prefix (state.go:218) and the HFP profile literal (`HeadsetProfile()`) come from spec.
+- Tests: default = spec value, override, out-of-range rejected, 1.0 disables, settings dump/json contain it.
