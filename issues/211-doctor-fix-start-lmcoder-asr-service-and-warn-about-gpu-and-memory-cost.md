@@ -24,6 +24,9 @@ Open questions:
 - Whether `--fix` also enables the unit at boot, or offers that as a separate, confirmed step.
 - Warning wording/colors: follow existing doctor output style; must stay readable with `NO_COLOR`.
 
+## Addendum: real audio probe
+The owner asked that doctor run a real audio file against the ASR. It already tries: it embeds `internal/doctor/short-one-two.wav` and expects "one two". But `*.wav` is in Git LFS, and a checkout without git-lfs embeds the pointer text, so the probe never sent audio (now reported as ERROR since 424a2b2). Make the probe always send real audio: e.g. exempt this clip from LFS in `.gitattributes` (78 KB), or ship it in a non-LFS format, and add a build-time test that the embedded clip is RIFF/WAVE. Verify with `voxi doctor` on a checkout without git-lfs: the probe transcribes "one two".
+
 ## 3. Implementation & Verification Plan
 - Re-check live code and lmcoder behavior first (wake route may be fixed by then).
 - Add a spec-driven repair for "ASR backend stopped" in `spec/doctor.yaml` / `internal/doctor`, shown before applying with the cost warning; unit tests with fakes.
