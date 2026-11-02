@@ -1,6 +1,6 @@
 # 211 — doctor --fix: start lmcoder ASR service and warn about GPU and memory cost
 
-**Status**: Open
+**Status**: Closed — doctor/dictation work with lmcoder on-demand ASR (lmcoder#274): live, stopped lmcoder-asr -> voxi doctor probe ok in 1.7s and owner dictation transcribed; wake on record start, 503 failover, spec probe timeout (b8888c5); start repair kept as fallback with cost notice (8cefaf4..9facd22); real probe clip without LFS (57a650d). make test-q1 red only on unrelated bench hang, ticket 212.
 **Priority**: P2 (Medium)
 **Severity**: Major
 **Category**: Feature
