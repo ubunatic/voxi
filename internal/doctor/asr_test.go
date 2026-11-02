@@ -672,3 +672,18 @@ func TestProbeClipIsWAV(t *testing.T) {
 		t.Fatal("RIFF/WAVE header rejected")
 	}
 }
+
+// TestEmbeddedProbeClipIsRealAudio guards the build: a checkout without
+// git-lfs embeds the LFS pointer text, and every ASR backend rejects it.
+func TestEmbeddedProbeClipIsRealAudio(t *testing.T) {
+	if !probeClipIsWAV(asrProbeWAV) {
+		t.Fatalf("embedded probe clip is %d bytes and not RIFF/WAVE (LFS pointer?)", len(asrProbeWAV))
+	}
+	fixture, err := os.ReadFile(filepath.Join("..", "..", "test", "fixtures", "short-one-two.wav"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(fixture) != string(asrProbeWAV) {
+		t.Fatal("test/fixtures/short-one-two.wav differs from the embedded probe clip")
+	}
+}
