@@ -31,3 +31,18 @@ The owner asked that doctor run a real audio file against the ASR. It already tr
 - Re-check live code and lmcoder behavior first (wake route may be fixed by then).
 - Add a spec-driven repair for "ASR backend stopped" in `spec/doctor.yaml` / `internal/doctor`, shown before applying with the cost warning; unit tests with fakes.
 - Live verify per `docs/AudioDoctor.md`: stop `lmcoder-asr.service`, run `voxi doctor --fix`, see the warning, confirm the probe turns OK and a real dictation transcribes.
+
+## Decision
+Lean sprint 2026-11-02, host decisions on the developer's plan (d211, haiku:med):
+1. Start via `lmcoder service start --asr` (lmcoder CLI, matches internal/frontend), not raw systemctl.
+2. Regenerate the probe clip with Piper; new bytes are fine if the live ASR transcribes "one two".
+3. Boot-time enable: `see:` hint only, no second prompt.
+4. Warning figures come from spec/models.yaml; use the measured 2.78 GiB VRAM, not the 1.9 GiB lmcoder estimate.
+5. Live verification may stop `lmcoder-asr` briefly.
+6. `test/fixtures/short-abc.wav` is out of scope.
+
+## Milestones
+- M1 (real probe clip): .gitattributes exception, real WAV in internal/doctor and test/fixtures, RIFF/WAVE test, live "one two".
+- M2 (start-ASR repair): spec template, asr.go branch, fix.go warning + wait, tests incl. negatives.
+- M3 (colored warning): listing color helper, NO_COLOR/TTY tests.
+- M4 (docs): docs/AudioDoctor.md.
