@@ -61,3 +61,16 @@ Lean sprint 2026-11-02, host decisions on the developer's plan (d211, haiku:med)
   7. Treat `activating` as "start in progress: wait", not the proxy restart.
   8. Tests read the unit name, start command and budget from the loaded spec (docs/Spec.md).
   Then M4 (docs): docs/AudioDoctor.md documents the repair, warning, --color, and clip regeneration.
+- M4 pre-work in d2d8ed6, M4 (docs) in 9facd22. `make test-q1`: doctor/spec ok; only internal/bench hung (untouched test downloads real weights) → filed 212.
+
+## M5 — host-agnostic contract with lmcoder (issue lmcoder#274, commit 2cfab9a)
+Owner goal: voxi always works on um760, t14, x600, and lmcoder stays host-agnostic. lmcoder now:
+- starts lmcoder-asr on demand: an audio request to :8735 with a stopped ASR waits and succeeds; no per-host config;
+- `POST /lmcoder/wake {"model":"r2t2"}` → 202;
+- unknown or non-ASR model on /v1/audio/* → 400; ASR excluded or unit missing (e.g. x600) → 503 `model_unavailable`.
+M5 scope (voxi, lean, no host-specific values):
+1. On record start, fire-and-forget `POST /lmcoder/wake {"model":<spec api_model>}` to the primary endpoint (short timeout, never blocks or fails recording; ignore 404 from old lmcoder).
+2. A 503 from the primary transcription triggers the existing failover URL (check that it already does; test it).
+3. Doctor: a stopped unit is no longer a fault by itself, since the probe starts it. Keep the M2 start repair only as a fallback when the probe fails; don't revert it.
+4. Raise the doctor probe timeout or make it fit an on-demand cold start, so the first probe after a stop doesn't fail while the model loads (spec value).
+Tests: fake server for wake 202/404/timeout, and 503 → failover. Live: stop lmcoder-asr, dictate, transcript arrives.
