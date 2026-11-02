@@ -702,6 +702,9 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 
 	buf := make([]byte, frameBytes)
 	frameIndex := 0
+	// Bluetooth default sources get digital gain before the gate and ASR
+	// (issue 210); the system volume is never changed.
+	gain := captureGain(ctx, d, eagerSpec)
 
 	if !isDaemon {
 		fmt.Fprintln(d.Stdout, "🟢 Listening for voice activity...")
@@ -737,16 +740,20 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 		if n < frameBytes {
 			continue
 		}
-		watch.feed(buf)
+		frame := buf
+		if gain != 1 {
+			frame = audio.ApplyGain(buf, gain)
+		}
+		watch.feed(frame)
 
-		candidate, speechStarted, isSpeaking := segmenter.ProcessFrame(buf)
+		candidate, speechStarted, isSpeaking := segmenter.ProcessFrame(frame)
 
 		frameIndex++
 		if !isDaemon {
 			if speechStarted {
 				fmt.Fprintf(d.Stdout, "\r🎙️  [Speaking... buffering]                                  \n")
 			} else if frameIndex%10 == 0 && !isSpeaking {
-				rms := audio.ComputeAudioRMS(buf)
+				rms := audio.ComputeAudioRMS(frame)
 				meter := audio.RenderAudioLevelMeter(rms, opts.ThresholdRMS)
 				fmt.Fprintf(d.Stdout, "\r  Level: %s RMS: %4d   ", meter, rms)
 			}
