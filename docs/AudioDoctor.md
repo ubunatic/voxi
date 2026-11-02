@@ -17,8 +17,11 @@ and fixing it took a dozen manual commands across PipeWire, WirePlumber, BlueZ a
 | `voxi doctor --fix` | Ask y/N per fault on a terminal; refuses to apply from a pipe |
 | `voxi doctor --fix --yes` | Apply all repairs |
 | `--pw-dump FILE`, `--since T`, `--no-probe` | Diagnose a saved dump, set the journal window, skip the playback probe |
+| `--color auto\|always\|never` | Color status words and the cost warning. `auto` colors only when stdout is a terminal. `NO_COLOR` (any non-empty value) turns color off even for `always` |
 
 Exit status: 0 all OK/WARN/SKIP, 1 any FAULT, 2 a check errored.
+
+Plain output (no color) is the default for pipes and for `NO_COLOR`; the text is otherwise identical.
 
 ## Design
 
@@ -40,6 +43,37 @@ Exit status: 0 all OK/WARN/SKIP, 1 any FAULT, 2 a check errored.
   selected. For `crispasr`/`voxtype`, binary presence alone produces WARN (transcription unverified).
   Doctor does not automatically switch to an unverified fallback; review proposed repairs before applying.
   The agent does not automatically revert a fallback based on an open TCP port.
+- **Starting a stopped ASR service (issue 211).** When the lmcoder endpoint fails and its unit
+  (`local_service.unit` in `spec/models.yaml`, `lmcoder-asr.service`) is `inactive` or `failed`, the
+  repair is `lmcoder service start --asr` (`start_asr` in `spec/doctor.yaml`). A proxy restart cannot
+  start a stopped unit, so it is not offered there. Other states:
+  - **running:** the proxy restart, as before.
+  - **not loaded** (`LoadState` other than `loaded`): guidance only; doctor has no unit to start.
+  - **`activating`:** a start is in progress. Doctor does not restart the proxy, because that would
+    interrupt the model load; it says to wait and run doctor again.
+  - **`lmcoder` not on PATH:** guidance only.
+- **Cost warning before the prompt.** A start prints its cost before the y/N prompt, and under
+  `--yes`: GPU VRAM while it serves, resident RAM, the first-start download (worded "if the model
+  files are not cached") and the first-start time limit. All figures come from `local_service` in
+  `spec/models.yaml`. The boot hint (`systemctl --user enable`) is printed only when the unit is not
+  already enabled, and doctor never runs it.
+- **Waiting for the start.** After the start, doctor re-probes every 10 s until the probe transcribes,
+  the unit reaches `failed` (the wait then ends at once and names the unit), or the budget
+  (`first_start_seconds`) passes. The budget is wall-clock, so probe time counts against it. Each
+  poll prints a progress line, and the start command is bounded by the same budget.
+- **The probe clip is real audio.** `internal/doctor/short-one-two.wav` is a Piper rendering of
+  "One, two." (voice `en_US-lessac-medium`, 22050 Hz mono 16-bit WAV). The copy in `test/fixtures/`
+  must stay byte-identical. `.gitattributes` keeps both out of Git LFS, so a checkout without
+  git-lfs embeds audio, not a pointer file. `TestEmbeddedProbeClipIsRealAudio` checks the RIFF/WAVE
+  header and the byte equality. To regenerate the clip:
+
+  ```sh
+  echo "One, two." | piper -m ~/.local/share/voxi/voices/en_US-lessac-medium.onnx -f internal/doctor/short-one-two.wav
+  cp internal/doctor/short-one-two.wav test/fixtures/short-one-two.wav
+  ```
+
+  Then check it live: `voxi doctor` must report `asr-engine` OK with the probe transcript (the live
+  proxy transcribes "one two"). A new clip is fine as long as it transcribes that way.
 - **Snapshot first.** A `pw-dump` is saved to `~/.local/state/voxi/doctor/` before the first
   repair, so a broken state survives as evidence (and as test data). Snapshots are pruned
   according to `spec/doctor.yaml` retention limits (`keep_count`, `max_age_days`).
@@ -83,6 +117,7 @@ Restore the prior state even if a check fails; do not blindly apply `--yes`:
 | Dangling default | `pw-metadata 0 default.audio.sink '{"name":"bluez_output.DE_AD_00_00_00_00.1"}' Spa:String:JSON` |
 | WirePlumber down | `systemctl --user stop wireplumber` (repeat 3 times) |
 | ASR endpoint down | `systemctl --user stop lmcoder-proxy.service` |
+| ASR service stopped | `systemctl --user stop lmcoder-asr.service`, then `voxi doctor --fix`: expect the cost warning, `lmcoder service start --asr`, and `asr-engine` OK |
 
 After repair, verify the relevant fault cleared; historical journal warnings may remain. Play a sound
 for audio routing, and for ASR repeat real dictation through capture, transcription and typing. See
@@ -93,3 +128,6 @@ for audio routing, and for ASR repeat real dictation through capture, transcript
 - The real "active but not routing" wedge has not been reproduced on demand; stopping WirePlumber
   is the stand-in.
 - Only one Bluetooth headset (Mifa A10) and the T14 AMD audio were tested.
+- The RAM figure (2.0 GiB) is the unit's `MemoryCurrent` after one start. It is cgroup memory and can
+  include page cache. VRAM (2.78 GiB) was measured once. The download line cannot tell whether model
+  files are cached, so it is worded as conditional.
