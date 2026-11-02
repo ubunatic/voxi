@@ -51,8 +51,11 @@ type Result struct {
 	// costs, such as the GPU and memory a service start takes (issue 211).
 	Notice []string
 	// StartBudget, when set, is how long --fix waits for a repaired service to
-	// answer the check after the repair runs. Zero means no wait.
+	// answer the check after the repair runs. Zero means no wait. The wait is a
+	// wall-clock deadline, and the start command is bounded by it too.
 	StartBudget time.Duration
+	// StartUnit names the systemd unit that StartBudget waits on.
+	StartUnit string
 }
 
 // Report contains all check verdicts and aggregate status.
@@ -155,19 +158,12 @@ func (r Report) PrintFix(w io.Writer) {
 func (r Report) print(w io.Writer, fixMode bool, st style) {
 	for _, check := range r.Checks {
 		fmt.Fprintf(w, "%s %s: %s\n", st.status(check.Status), check.ID, check.Detail)
-		if check.Status == WARN {
+		// A FAULT can carry guidance only (a unit that is not loaded, a start
+		// already in progress), so its see lines print like a WARN's.
+		if check.Status == WARN || check.Status == FAULT {
 			for _, hint := range check.See {
 				fmt.Fprintf(w, "  see: %s\n", hint)
 			}
-			for _, repair := range check.Repairs {
-				if fixMode {
-					fmt.Fprintf(w, "  repair: %s\n", repair)
-				} else {
-					fmt.Fprintf(w, "  repair (printed, not run): %s\n", repair)
-				}
-			}
-		}
-		if check.Status == FAULT {
 			for _, repair := range check.Repairs {
 				if fixMode {
 					fmt.Fprintf(w, "  repair: %s\n", repair)

@@ -19,9 +19,13 @@ type Host interface {
 	Apply(context.Context, string) error
 	ProbeRouting(context.Context, spec.DoctorRouting) (string, error)
 	Wait(context.Context, time.Duration) error
+	// Now is the wall clock that bounds how long --fix waits for a started service.
+	Now() time.Time
 }
 
 type systemHost struct{}
+
+func (systemHost) Now() time.Time { return time.Now() }
 
 func (systemHost) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
 	return exec.CommandContext(ctx, name, args...).CombinedOutput()

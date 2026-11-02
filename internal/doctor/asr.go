@@ -351,12 +351,13 @@ func primaryRepairs(c spec.DoctorCheck, baseURL string) []string {
 	return []string{c.Repair.Templates["restart_proxy"]}
 }
 
-// unitState is how systemd --user sees one unit: its load state and active state.
-type unitState struct{ load, active string }
+// unitState is how systemd --user sees one unit: whether it is loaded, whether
+// it runs, and whether it starts at boot (UnitFileState, "enabled" or not).
+type unitState struct{ load, active, file string }
 
-// unitState asks systemd for the load and active state of unit.
+// unitState asks systemd for the load, active and unit file state of unit.
 func (d HostDoctor) unitState(ctx context.Context, unit string) (unitState, error) {
-	out, err := d.Host.Run(ctx, "systemctl", "--user", "show", "-p", "LoadState", "-p", "ActiveState", unit)
+	out, err := d.Host.Run(ctx, "systemctl", "--user", "show", "-p", "LoadState", "-p", "ActiveState", "-p", "UnitFileState", unit)
 	if err != nil {
 		return unitState{}, err
 	}
@@ -368,6 +369,8 @@ func (d HostDoctor) unitState(ctx context.Context, unit string) (unitState, erro
 			st.load = value
 		case "ActiveState":
 			st.active = value
+		case "UnitFileState":
+			st.file = value
 		}
 	}
 	if st.load == "" || st.active == "" {
@@ -392,6 +395,10 @@ func (d HostDoctor) lmcoderRepairs(ctx context.Context, a asrCheck, baseURL stri
 		res.Repairs = primaryRepairs(a.c, baseURL)
 	case st.load != "loaded":
 		res.See = append(res.See, fmt.Sprintf("%s is not loaded (LoadState=%s), so doctor cannot start it; install or enable lmcoder's ASR service", svc.Unit, st.load))
+	case st.active == "activating":
+		// A start is already in progress. A proxy restart would interrupt the
+		// model load, so the check waits for the start to finish instead.
+		res.See = append(res.See, fmt.Sprintf("%s is activating: a start is in progress, so doctor does not restart the proxy; wait for it to finish, then run doctor again", svc.Unit))
 	case st.active == "inactive" || st.active == "failed":
 		return d.startRepair(ctx, a, res, st)
 	default:
@@ -416,22 +423,39 @@ func (d HostDoctor) startRepair(ctx context.Context, a asrCheck, res Result, st 
 	}
 	res.Detail += fmt.Sprintf("; %s is %s", svc.Unit, st.active)
 	res.Repairs = []string{start}
-	res.Notice = startNotice(svc, render(a.c.Repair.Templates["enable_asr"], "unit", svc.Unit))
+	// The enable hint is shown only for a unit that does not start at boot.
+	enable := ""
+	if st.file != "enabled" {
+		enable = render(a.c.Repair.Templates["enable_asr"], "unit", svc.Unit)
+	}
+	res.Notice = startNotice(svc, enable)
 	res.StartBudget = time.Duration(svc.FirstStartSeconds) * time.Second
+	res.StartUnit = svc.Unit
 	return res
 }
 
 // startNotice lists what starting svc costs, for the warning shown before --fix
 // applies the start. enable is the command that makes it start at boot; doctor
-// only shows it and never runs it.
+// only shows it and never runs it. An empty enable means the unit already
+// starts at boot, so no boot line is shown.
 func startNotice(svc *spec.LocalService, enable string) []string {
-	return []string{
+	lines := []string{
 		fmt.Sprintf("starting %s costs:", svc.Unit),
 		fmt.Sprintf("GPU: about %.2f GiB of VRAM while it serves", svc.VRAMGiB),
 		fmt.Sprintf("RAM: about %.1f GiB resident", svc.RAMGiB),
-		fmt.Sprintf("first start downloads about %.1f GB of model files and can take up to %d min", svc.DownloadGB, svc.FirstStartSeconds/60),
-		fmt.Sprintf("boot: it stays off after a reboot; to enable it later run: %s (--fix does not)", enable),
+		fmt.Sprintf("first start, if the model files are not cached, downloads about %.1f GB", svc.DownloadGB),
+		fmt.Sprintf("first start can take up to %s min", minutes(svc.FirstStartSeconds)),
 	}
+	if enable != "" {
+		lines = append(lines, fmt.Sprintf("boot: it stays off after a reboot; to enable it later run: %s (--fix does not)", enable))
+	}
+	return lines
+}
+
+// minutes formats a duration in seconds as minutes without rounding it down:
+// 300 is "5" and 330 is "5.5".
+func minutes(seconds int) string {
+	return strconv.FormatFloat(float64(seconds)/60, 'f', -1, 64)
 }
 
 // probeASR runs one transcription probe against baseURL, bounded by asrProbeTimeout.

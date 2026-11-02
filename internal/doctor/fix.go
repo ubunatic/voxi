@@ -91,9 +91,12 @@ func (d HostDoctor) Repair(ctx context.Context, report Report, opts Options, in 
 				baselineDump = dump
 			}
 			baselinePIDs := restartMainPIDs(ctx, d.Host, command)
+			if current.StartBudget > 0 && !covered {
+				fmt.Fprintf(out, "  starting %s (waiting up to %s for it to load its models)\n", current.StartUnit, current.StartBudget)
+			}
 			if covered {
 				fmt.Fprintln(out, "  skipped: covered by the earlier restart")
-			} else if err := d.Host.Apply(ctx, command); err != nil {
+			} else if err := d.applyRepair(ctx, current, command); err != nil {
 				fmt.Fprintf(out, "  failed: %v\n", err)
 				report.Checks[idx] = Result{ID: check.ID, Status: ERROR, Detail: fmt.Sprintf("apply %q: %v", command, err)}
 				repairErrors[check.ID] = report.Checks[idx]
@@ -122,12 +125,9 @@ func (d HostDoctor) Repair(ctx context.Context, report Report, opts Options, in 
 				return report, err
 			}
 			if current.StartBudget > 0 && !covered {
-				updated, err = d.awaitStart(ctx, checks[check.ID], opts, current.StartBudget, updated)
+				updated, err = d.awaitStart(ctx, out, checks[check.ID], opts, current.StartUnit, current.StartBudget, updated)
 				if err != nil {
 					return report, err
-				}
-				if updated.Status != OK {
-					fmt.Fprintf(out, "  started service did not transcribe within %s\n", current.StartBudget)
 				}
 			}
 			report.Checks[idx] = updated
@@ -410,13 +410,36 @@ func (r Report) index(id string) int {
 // startPollInterval is how often --fix re-probes a service it just started.
 const startPollInterval = 10 * time.Second
 
-// awaitStart re-checks a check whose repair started a service, until the check
-// is OK or budget runs out. A first start downloads its model files, so the
-// first probe after the start usually fails; only a probe that transcribes
-// proves the service serves.
-func (d HostDoctor) awaitStart(ctx context.Context, c spec.DoctorCheck, opts Options, budget time.Duration, res Result) (Result, error) {
-	for waited := time.Duration(0); res.Status != OK && waited < budget; waited += startPollInterval {
-		if err := d.Host.Wait(ctx, startPollInterval); err != nil {
+// applyRepair runs one repair command. A service start is bounded by its
+// budget, so a start command that never returns cannot stall --fix.
+func (d HostDoctor) applyRepair(ctx context.Context, r Result, command string) error {
+	if r.StartBudget <= 0 {
+		return d.Host.Apply(ctx, command)
+	}
+	bounded, cancel := context.WithTimeout(ctx, r.StartBudget)
+	defer cancel()
+	err := d.Host.Apply(bounded, command)
+	if err != nil && bounded.Err() == context.DeadlineExceeded && ctx.Err() == nil {
+		return fmt.Errorf("did not return within %s: %w", r.StartBudget, err)
+	}
+	return err
+}
+
+// awaitStart re-checks a check whose repair started unit, until the check is
+// OK, the unit reaches failed, or budget of wall-clock time has passed. A first
+// start downloads its model files, so the first probe after the start usually
+// fails; only a probe that transcribes proves the service serves. Each poll
+// prints one progress line. The deadline counts probe time too, so a slow
+// probe shortens the wait instead of extending it.
+func (d HostDoctor) awaitStart(ctx context.Context, out io.Writer, c spec.DoctorCheck, opts Options, unit string, budget time.Duration, res Result) (Result, error) {
+	began := d.Host.Now()
+	deadline := began.Add(budget)
+	for res.Status != OK {
+		left := deadline.Sub(d.Host.Now())
+		if left <= 0 {
+			break
+		}
+		if err := d.Host.Wait(ctx, min(startPollInterval, left)); err != nil {
 			return res, err
 		}
 		next, err := d.check(ctx, c, opts)
@@ -424,6 +447,19 @@ func (d HostDoctor) awaitStart(ctx context.Context, c spec.DoctorCheck, opts Opt
 			return res, err
 		}
 		res = next
+		state, stateErr := d.unitState(ctx, unit)
+		active := "unknown"
+		if stateErr == nil {
+			active = state.active
+		}
+		fmt.Fprintf(out, "  waiting for %s: %s of %s, unit %s\n", unit, d.Host.Now().Sub(began).Round(time.Second), budget, active)
+		if res.Status != OK && active == "failed" {
+			fmt.Fprintf(out, "  %s failed to start; see: journalctl --user -u %s\n", unit, unit)
+			return res, nil
+		}
+	}
+	if res.Status != OK {
+		fmt.Fprintf(out, "  started service did not transcribe within %s\n", budget)
 	}
 	return res, nil
 }

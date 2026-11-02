@@ -66,7 +66,7 @@ func TestDoctorRejectsUnknownColorMode(t *testing.T) {
 func TestStartNoticeIsYellowWhenColorOn(t *testing.T) {
 	s := loadDoctorSpec(t)
 	isolateASRHome(t)
-	h := lmcoderUnitHost("loaded", "inactive", true)
+	h := lmcoderUnitHost(t, "loaded", "inactive", true)
 	probe, _ := startingProbe(1)
 	d := HostDoctor{Host: h, Spec: s, ASRProbe: probe, Color: true}
 	first := d.checkAsrEngine(context.Background(), checkFor(t, s, "asr-engine"))

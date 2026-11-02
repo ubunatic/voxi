@@ -31,6 +31,9 @@ type fixtureHost struct {
 	calls    []string
 	applied  []string
 	waits    []time.Duration
+	// clock is the fake wall clock: Wait advances it, and tests may advance it
+	// to model a slow probe.
+	clock time.Time
 }
 
 func (h *fixtureHost) Run(_ context.Context, name string, args ...string) ([]byte, error) {
@@ -63,8 +66,11 @@ func (h *fixtureHost) Apply(_ context.Context, command string) error {
 func (h *fixtureHost) Wait(_ context.Context, d time.Duration) error {
 	h.waits = append(h.waits, d)
 	h.calls = append(h.calls, "WAIT")
+	h.clock = h.clock.Add(d)
 	return nil
 }
+
+func (h *fixtureHost) Now() time.Time { return h.clock }
 
 func fixture(t *testing.T, name string) string {
 	t.Helper()
