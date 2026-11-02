@@ -1,6 +1,6 @@
 # 210 — Bluetooth headset dictation: mic gain boost and mic keep-awake
 
-**Status**: Open
+**Status**: Closed — M5: 'voxi settings set bluetooth_mic_gain <x>' (default=spec 2.75, 1 off, (0,16]) shown in summary/dump/json/menu, read per capture session so no restart; live round-trip set 3 -> default left config.yaml unchanged; make test-q1 green (38 ok) (3c02fcd). Spec-literal leftovers parked in 213.
 **Priority**: P2 (Medium)
 **Severity**: Major
 **Category**: Feature

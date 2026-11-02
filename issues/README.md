@@ -66,6 +66,5 @@
 | 205 | [205-try-dessa-tts-model.md](205-try-dessa-tts-model.md) | Try dessa TTS model | Open |
 | 208 | [208-continuous-ambient-noise-chunk-triggers-and-r2t2-hallucination-accepted-to-desktop-chunk-2177.md](208-continuous-ambient-noise-chunk-triggers-and-r2t2-hallucination-accepted-to-desktop-chunk-2177.md) | Continuous Ambient Noise Chunk Triggers and R2T2 Hallucination Accepted to Desktop (Chunk 2177) | Open |
 | 209 | [209-do-not-save-high-confidence-low-volume-and-noise-chunks-to-ring-buffer.md](209-do-not-save-high-confidence-low-volume-and-noise-chunks-to-ring-buffer.md) | Do Not Save High-Confidence Low-Volume and Noise Chunks to Ring Buffer | Open |
-| 210 | [210-bluetooth-headset-dictation-mic-gain-boost-and-mic-keep-awake.md](210-bluetooth-headset-dictation-mic-gain-boost-and-mic-keep-awake.md) | Bluetooth headset dictation: mic gain boost and mic keep-awake | Open |
-| 213 | [213-mic-bluetooth-node-prefix-and-hfp-profile-name-still-go-literals.md](213-mic-bluetooth-node-prefix-and-hfp-profile-name-still-go-literals.md) | mic: Bluetooth node prefix and HFP profile name still Go literals | Draft |
+| 213 | [213-mic-bluetooth-node-prefix-and-hfp-profile-name-still-go-literals.md](213-mic-bluetooth-node-prefix-and-hfp-profile-name-still-go-literals.md) | mic: Bluetooth node prefix and HFP profile name still Go literals | Open |
 <!-- harnez:end issues-active-index -->
