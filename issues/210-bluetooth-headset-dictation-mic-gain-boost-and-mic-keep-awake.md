@@ -1,6 +1,6 @@
 # 210 — Bluetooth headset dictation: mic gain boost and mic keep-awake
 
-**Status**: Closed — live on TAH4205 BT headset: source volume reset to 1.0, voxi digital gain 2.75 (=1.4^3), 'voxi mic headset --adopt' keep-awake; soft sentence after 30 s pause transcribed fully incl. first words ('Test one, two, three. This is a quiet sentence.'). M1-M4 3715e41..ae2aed6, make test-q1 green (38 ok). Open: Bluetooth prefix and HFP profile literals still in Go (state.go).
+**Status**: Open
 **Priority**: P2 (Medium)
 **Severity**: Major
 **Category**: Feature
