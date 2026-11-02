@@ -1,6 +1,6 @@
 # 214 — monitor: mic meter shows the level voxi hears (apply Bluetooth gain)
 
-**Status**: Open
+**Status**: Closed — monitor meter now applies the dictation gain to its samples before level computation (shared probe + audio.ApplyGain, 92030f8); BT default shows x2.75 label live in voxi monitor -w; test asserts +8.78 dB at 2.75, non-BT/override 1 unchanged, clipping capped; pw-dump per tick measured 9 ms; make test-q1 green (38 ok).
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Feature
