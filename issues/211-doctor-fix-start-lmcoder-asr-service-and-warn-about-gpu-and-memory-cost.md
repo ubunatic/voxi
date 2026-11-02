@@ -50,3 +50,14 @@ Lean sprint 2026-11-02, host decisions on the developer's plan (d211, haiku:med)
 ## Progress
 - M1 (real probe clip) delivered in 57a650d. Host live check: `voxi doctor` → `OK asr-engine: r2t2-confucius4 online @ :8735, probe transcript ok` (7 OK, 0 FAULT).
 - M2 pre-work: none.
+- M2 (start-ASR repair) delivered in 8cefaf4, M3 (colored warning) in b04cca3. Host live: stopped lmcoder-asr, `voxi doctor --fix --yes --color=always` printed the yellow cost notice, applied `lmcoder service start --asr`, asr-engine OK after repair.
+- M4 pre-work / required refinements (Opus review r211 + host):
+  1. FAULT results with only `See` hints (unit not loaded, lmcoder missing) must print the hint (doctor.go:158 prints See only for WARN); test the printed output.
+  2. Bound the start command (fix.go:96 → host.go:49) with a timeout and print progress ("starting…, waiting for model load") so the user never sees minutes of silence.
+  3. Make the wait budget wall-clock (deadline from spec), not summed sleeps; print a progress line per poll.
+  4. Exit the wait early when the unit reaches ActiveState=failed; test a state change after start.
+  5. Query UnitFileState with the existing unitState call; drop the boot line when enabled (this host is enabled).
+  6. Show the download line only when model files are not cached (or word it "if not cached"); fix integer-minute rounding.
+  7. Treat `activating` as "start in progress: wait", not the proxy restart.
+  8. Tests read the unit name, start command and budget from the loaded spec (docs/Spec.md).
+  Then M4 (docs): docs/AudioDoctor.md documents the repair, warning, --color, and clip regeneration.
