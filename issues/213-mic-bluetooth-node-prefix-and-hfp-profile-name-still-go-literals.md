@@ -1,6 +1,6 @@
 # 213 — mic: Bluetooth node prefix and HFP profile name still Go literals
 
-**Status**: Open
+**Status**: Closed — Bluetooth identity (device_api bluez5, node_prefix bluez_) and HFP profile now from spec bluetooth_mic, one accessor used by mic and doctor (5e39469); existing pw-dump assertions unchanged; make test-q1 green (38 ok); live voxi mic unchanged. Gate literals parked in 215.
 **Priority**: P3 (Low)
 **Severity**: Minor
 **Category**: Refactor
