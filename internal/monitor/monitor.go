@@ -329,7 +329,11 @@ func RunWatchResources(ctx context.Context, d deps.Dependencies, interval time.D
 		}()
 	}
 
-	micMgr := audiolevel.StartManager(sigCtx, buildMicCaptureCmd(d), loadedMonitorSpec().ChunkBytes(), audiolevel.DefaultMinDBFS, 0, micLevelSpec, nil)
+	// The meter shows what voxi hears (issue 214): each chunk gets the gain
+	// dictation applies to the default source, re-probed on the collect cadence.
+	micGain := newMicCaptureGain()
+	refreshMicCaptureGain(sigCtx, d, micGain)
+	micMgr := audiolevel.StartFilteredManager(sigCtx, buildMicCaptureCmd(d), loadedMonitorSpec().ChunkBytes(), audiolevel.DefaultMinDBFS, 0, micLevelSpec, micGain.Filter, nil)
 	defer micMgr.Stop()
 
 	// Data collection (systemctl/proc/sysfs reads, agent RPC — all slow and variable-
@@ -347,6 +351,7 @@ func RunWatchResources(ctx context.Context, d deps.Dependencies, interval time.D
 			case <-sigCtx.Done():
 				return
 			case <-collectTicker.C:
+				refreshMicCaptureGain(sigCtx, d, micGain)
 				report := CollectVoiceResources(sigCtx, d, audiolevel.Reading{})
 				cacheLock.Lock()
 				cachedReport = report
@@ -366,6 +371,7 @@ func RunWatchResources(ctx context.Context, d deps.Dependencies, interval time.D
 		mic := micMgr.Tick(time.Now(), attack, decay)
 		report.MicLevel = mic.Level
 		report.MicAvailable = mic.Available
+		report.MicGain = micGain.Get()
 
 		secLock.Lock()
 		activeSec := sec

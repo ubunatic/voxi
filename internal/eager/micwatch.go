@@ -80,6 +80,26 @@ func bluetoothGainFor(d deps.Dependencies, es *spec.EagerSpec) float64 {
 	return g
 }
 
+// ProbeCaptureGain is the digital gain dictation applies to frames from the
+// default source right now (issue 214). It probes PipeWire once, as a dictation
+// session does at its start, and resolves the gain the same way: 1 unless the
+// default is Bluetooth, then bluetoothGainFor. A missing or failed probe is 1.
+func ProbeCaptureGain(ctx context.Context, d deps.Dependencies, es *spec.EagerSpec) float64 {
+	if d.RunOutput == nil || d.Run == nil || d.LookPath == nil {
+		return 1
+	}
+	if _, err := d.LookPath("pw-dump"); err != nil {
+		return 1
+	}
+	cctx, cancel := context.WithTimeout(ctx, es.MicCheckTimeout())
+	defer cancel()
+	st, _, err := mic.NewDoctor(d, es.MicSettle()).Find(cctx)
+	if err != nil {
+		return 1
+	}
+	return captureGainFor(st, es, bluetoothGainFor(d, es))
+}
+
 // micWatchTick is how often the audio is judged; stalls deliver no frames, so
 // judging cannot ride on Feed alone.
 const micWatchTick = 250 * time.Millisecond

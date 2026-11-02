@@ -92,6 +92,9 @@ Soft speech from a Bluetooth headset was dropped by the acoustic gate (mean RMS 
   `1` to turn the gain off). It must be above 0 and at most the spec's `gain_max` (16). The daemon
   reads it at the start of each dictation session, so no restart is needed. `voxi settings --dump`
   and `--json` show it, and the interactive menu has a Bluetooth Mic Gain row.
+  `voxi monitor -w` applies the same gain to its mic meter (issue 214): the status line shows
+  `×2.75` while it is not 1, and the meter reads the level voxi hears. The monitor re-probes the
+  default source on each collect tick, so a switch to another mic moves the gain too.
 - **Keep-awake and autoswitch-off, opt-in.** `voxi mic headset` writes the WirePlumber drop-in
   (`bluetooth_mic.dropin_name`) that stops the idle headset source from suspending, turns off the
   switch to the headset (HFP) profile, and moves Bluetooth cards that are on `a2dp-sink` to

@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -431,7 +432,7 @@ func PrintVoiceResourceReport(w io.Writer, r VoiceResourceReport, sec ResourceSe
 		modStr = "\x1b[90moff\x1b[0m"
 	}
 	speedLines := []string{
-		fmt.Sprintf("status:  %s (%s / %s)", formatRecordState(r.RecordStatus, r.MicLevel, r.MicAvailable, r.EagerAudioFailure), r.Mode, r.ActiveModel),
+		fmt.Sprintf("status:  %s (%s / %s)%s", formatRecordState(r.RecordStatus, r.MicLevel, r.MicAvailable, r.EagerAudioFailure), r.Mode, r.ActiveModel, micGainSuffix(r.MicGain)),
 		fmt.Sprintf("accel:   \x1b[32m%s\x1b[0m  ·  mods: %s", r.GPUAccel, modStr),
 	}
 	if r.ASRWarning != "" {
@@ -709,6 +710,15 @@ func formatActionLabel(id string) string {
 // static ●), so the status line doubles as the level meter instead of carrying a
 // separate level: row. spec/monitor.yaml's status_icon.always_show_loudness (issue 086)
 // extends that swap to the idle state too, so the loudness glyph is always visible.
+// micGainSuffix labels a mic meter with the gain applied to it (issue 214). It
+// is empty when the meter shows the raw level (gain unset or 1).
+func micGainSuffix(gain float64) string {
+	if gain == 0 || gain == 1 {
+		return ""
+	}
+	return " \x1b[33m×" + strconv.FormatFloat(gain, 'g', -1, 64) + "\x1b[0m"
+}
+
 func formatRecordState(status string, micLevel float64, micAvailable bool, audioFailure *eager.EagerAudioFailureState) string {
 	alwaysLoudness := loadedMonitorSpec().StatusIcon.AlwaysShowLoudness
 	var recordState string
@@ -772,7 +782,7 @@ func PrintCompactTwoBox(w io.Writer, r VoiceResourceReport, recentChunks []chunk
 		recBadge = "\x1b[33;1m⏳ TRANSCRIBE\x1b[0m"
 	}
 	micChar := RenderLevelChar(r.MicLevel)
-	leftLines = append(leftLines, fmt.Sprintf("state:   %s · \x1b[36m%s\x1b[0m · mic %s \x1b[2m%.0f%%\x1b[0m", recBadge, engineName, micChar, r.MicLevel))
+	leftLines = append(leftLines, fmt.Sprintf("state:   %s · \x1b[36m%s\x1b[0m · mic %s \x1b[2m%.0f%%\x1b[0m%s", recBadge, engineName, micChar, r.MicLevel, micGainSuffix(r.MicGain)))
 
 	modStr := "\x1b[90mneutral\x1b[0m"
 	if r.ModifierStatus != "" && r.ModifierStatus != "neutral" {

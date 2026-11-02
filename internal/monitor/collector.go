@@ -60,10 +60,13 @@ type VoiceResourceReport struct {
 	// the active model's ASR backend, always populated so the daemons &
 	// health box can show one line about it, even when never probed --
 	// issue 136 M2.
-	ASRBackend        ASRBackendState
-	ModifierStatus    string
-	MicLevel          float64
-	MicAvailable      bool
+	ASRBackend     ASRBackendState
+	ModifierStatus string
+	MicLevel       float64
+	MicAvailable   bool
+	// MicGain is the digital gain applied to the meter's chunks (issue 214);
+	// 0 or 1 means the meter shows the raw level.
+	MicGain           float64
 	Processes         []ProcessResource
 	EagerMetrics      *eager.EagerMetrics
 	EagerAudioFailure *eager.EagerAudioFailureState

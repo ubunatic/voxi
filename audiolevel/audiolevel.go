@@ -468,6 +468,17 @@ type Spec func() (metric Metric, window, attack, decay time.Duration)
 // WaitDelay bounds how long shutdown can take if it ignores that signal.
 // If onSample is non-nil, it's invoked with every newly computed Reading.
 func RunCapture(ctx context.Context, cmd *exec.Cmd, m *Meter, chunkBytes int, minDBFS float64, spec Spec, onSample func(Reading)) {
+	RunCaptureFiltered(ctx, cmd, m, chunkBytes, minDBFS, spec, nil, onSample)
+}
+
+// Filter transforms one raw PCM16LE chunk before the meter measures and records
+// it. It may return its input unchanged. The monitor uses it to show the level
+// after the gain dictation applies (issue 214).
+type Filter func(pcm []byte) []byte
+
+// RunCaptureFiltered is RunCapture with each chunk passed through filter first
+// (nil means no filter), so the meter and its sparkline see the filtered audio.
+func RunCaptureFiltered(ctx context.Context, cmd *exec.Cmd, m *Meter, chunkBytes int, minDBFS float64, spec Spec, filter Filter, onSample func(Reading)) {
 	if chunkBytes <= 0 {
 		chunkBytes = DefaultChunkBytes
 	}
@@ -488,10 +499,14 @@ func RunCapture(ctx context.Context, cmd *exec.Cmd, m *Meter, chunkBytes int, mi
 	for ctx.Err() == nil {
 		n, err := io.ReadFull(stdout, buf)
 		if n > 0 {
-			level := AmplitudeFromPCM16LE(buf[:n], minDBFS)
+			chunk := buf[:n]
+			if filter != nil {
+				chunk = filter(chunk)
+			}
+			level := AmplitudeFromPCM16LE(chunk, minDBFS)
 			metric, window, attack, decay := spec()
 			reading := m.Update(level, true, time.Now(), metric, window, attack, decay)
-			m.WritePCM(buf[:n])
+			m.WritePCM(chunk)
 			if onSample != nil {
 				onSample(reading)
 			}
@@ -519,12 +534,18 @@ type Manager struct {
 // callers can treat Stop/Snapshot uniformly; Snapshot then always reports
 // Reading{Available: false}.
 func StartManager(parent context.Context, buildCmd func(context.Context) *exec.Cmd, chunkBytes int, minDBFS float64, retryInterval time.Duration, spec Spec, onSample func(Reading)) *Manager {
+	return StartFilteredManager(parent, buildCmd, chunkBytes, minDBFS, retryInterval, spec, nil, onSample)
+}
+
+// StartFilteredManager is StartManager with every chunk passed through filter
+// before it is measured (nil means no filter).
+func StartFilteredManager(parent context.Context, buildCmd func(context.Context) *exec.Cmd, chunkBytes int, minDBFS float64, retryInterval time.Duration, spec Spec, filter Filter, onSample func(Reading)) *Manager {
 	ctx, cancel := context.WithCancel(parent)
 	mgr := &Manager{cancel: cancel}
 	if buildCmd == nil {
 		return mgr
 	}
-	go runManager(ctx, &mgr.meter, buildCmd, chunkBytes, minDBFS, retryInterval, spec, onSample)
+	go runManager(ctx, &mgr.meter, buildCmd, chunkBytes, minDBFS, retryInterval, spec, filter, onSample)
 	return mgr
 }
 
@@ -533,12 +554,12 @@ func StartManager(parent context.Context, buildCmd func(context.Context) *exec.C
 // can come and go mid-session (USB mic unplugged, PipeWire restarted)
 // without that being a reason to give up on the meter for the rest of the
 // run.
-func runManager(ctx context.Context, m *Meter, buildCmd func(context.Context) *exec.Cmd, chunkBytes int, minDBFS float64, retryInterval time.Duration, spec Spec, onSample func(Reading)) {
+func runManager(ctx context.Context, m *Meter, buildCmd func(context.Context) *exec.Cmd, chunkBytes int, minDBFS float64, retryInterval time.Duration, spec Spec, filter Filter, onSample func(Reading)) {
 	if retryInterval <= 0 {
 		retryInterval = DefaultRetryInterval
 	}
 	for ctx.Err() == nil {
-		RunCapture(ctx, buildCmd(ctx), m, chunkBytes, minDBFS, spec, onSample)
+		RunCaptureFiltered(ctx, buildCmd(ctx), m, chunkBytes, minDBFS, spec, filter, onSample)
 		if ctx.Err() != nil {
 			return
 		}
