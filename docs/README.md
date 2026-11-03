@@ -58,6 +58,8 @@ In-depth references for architecture, decisions, and operations of the Voxi Linu
 | [studies/2026-10-04-linux-voice-input-and-sample-store-story.md](studies/2026-10-04-linux-voice-input-and-sample-store-story.md) | From voice typing to a maintainable sample store |
 | [studies/2026-10-22-robust-asr-fallbacks-doctor-repairs-and-offline-upstream-resilience.md](studies/2026-10-22-robust-asr-fallbacks-doctor-repairs-and-offline-upstream-resilience.md) | `voxi` (desktop voice typing daemon, monitor, doctor) & `lmcoder` (local/distributed LLM & ASR proxy) |
 | [studies/2026-10-26-two-agent-lean-sprint-eager-tmp-cleanup.md](studies/2026-10-26-two-agent-lean-sprint-eager-tmp-cleanup.md) | Two-Agent Lean Sprint: Eager Daemon Survives /tmp Cleanup (Issue 202) |
+| [studies/2026-11-03-cross-session-agentic-coding-files-first-go-story.md](studies/2026-11-03-cross-session-agentic-coding-files-first-go-story.md) | Cross-Session Agentic Coding: Files-First, Fast Go, Cheap Developers |
+| [studies/2026-11-03-two-agent-lean-sprint-asr-doctor-and-bt-headset.md](studies/2026-11-03-two-agent-lean-sprint-asr-doctor-and-bt-headset.md) | Two-Agent Lean Sprint: ASR Doctor, Bench Hang, Bluetooth Headset Dictation |
 <!-- harnez:end docs-studies-index -->
 
 
