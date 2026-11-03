@@ -19,3 +19,6 @@
 | kind | session name | Jules ID | PR | state |
 |---|---|---|---|---|
 | audit | jules-audit-215b | 9348235491313542040 | none | FAILED on Jules (no PR, no branch); trial run, not retried |
+| implement | jules-implement-215 | 9082486569140723151 | GitHub #9 | done (replies: 1); landed on Codeberg after host review, make test-q1 38 ok |
+
+Note: `internal/debug/debug.go:225` keeps its own debug threshold 250, a separate debug default, not the gate value.
