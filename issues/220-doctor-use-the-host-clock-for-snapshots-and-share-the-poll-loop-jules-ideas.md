@@ -1,6 +1,6 @@
 # 220 — doctor: use the Host clock for snapshots and share the poll loop (Jules ideas)
 
-**Status**: Open
+**Status**: Closed — snapshot uses Host.Now, waitForGraph/awaitStart share waitPoll with errPollTimeout sentinel and check-first kept, coredump parsing split with unit test; make test-q1 green (38 ok); from Jules PR #13 plus host fixes
 **Priority**: P3 (Low)
 **Severity**: Minor
 **Category**: Refactor
