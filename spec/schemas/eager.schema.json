@@ -4,12 +4,46 @@
   "description": "Modifier-release race guard (issue 101) and post-stop delivery drain (issue 115) tuning for internal/eager.",
   "type": "object",
   "required": [
+    "energy_gate",
     "modifier_gate",
     "drain",
     "mic_check",
     "bluetooth_mic"
   ],
   "properties": {
+    "energy_gate": {
+      "type": "object",
+      "description": "Energy gate thresholds for audio segmentation (issue 215).",
+      "required": [
+        "threshold_rms",
+        "min_mean_rms",
+        "min_voiced_frames",
+        "min_voiced_run_frames"
+      ],
+      "properties": {
+        "threshold_rms": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "description": "Per-frame RMS energy threshold to trigger speech detection."
+        },
+        "min_mean_rms": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "description": "Minimum average RMS across a candidate segment to be accepted as speech."
+        },
+        "min_voiced_frames": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "description": "Minimum number of voiced frames (>= threshold_rms) across the segment."
+        },
+        "min_voiced_run_frames": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "description": "Minimum consecutive voiced frames required to accept a segment."
+        }
+      },
+      "additionalProperties": false
+    },
     "bluetooth_mic": {
       "type": "object",
       "description": "Bluetooth headset dictation (issue 210): digital gain for Bluetooth default sources and the keep-awake drop-in managed by `voxi mic headset`.",

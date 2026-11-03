@@ -20,7 +20,8 @@ const validBluetoothMic = "\nbluetooth_mic: {device_api: bluez5, node_prefix: bl
 // validEagerBase is a document with every other required section valid, so a
 // rejection is attributable to the bluetooth_mic field under test. It omits
 // the bluetooth_mic section; callers append one.
-const validEagerBase = "modifier_gate: {timeout_ms: 1000, start_grace_ms: 750, notify_delay_ms: 500}\n" +
+const validEagerBase = "energy_gate: {threshold_rms: 150, min_mean_rms: 120, min_voiced_frames: 8, min_voiced_run_frames: 7}\n" +
+	"modifier_gate: {timeout_ms: 1000, start_grace_ms: 750, notify_delay_ms: 500}\n" +
 	"\ndrain: {delivery_deadline_ms: 60000, injection_timeout_ms: 15000}\n" + validMicCheck
 
 func TestLoadEagerBluetoothMic(t *testing.T) {

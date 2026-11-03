@@ -8,6 +8,12 @@
 # the physical key-release that ends modifier-gating can simultaneously
 # trigger unrelated WM/DE behavior (e.g. GNOME's Activities overview on a
 # bare Super release) that steals focus before the buffered text lands.
+energy_gate:
+  threshold_rms: 150
+  min_mean_rms: 120
+  min_voiced_frames: 8
+  min_voiced_run_frames: 7
+
 modifier_gate:
   # Staleness window: only buffer/pause when the most recent gating-modifier
   # press is within this many milliseconds of a chunk becoming ready to

@@ -17,6 +17,14 @@ import (
 //go:embed eager.yaml
 var eagerYAML []byte
 
+// EnergyGateSpec holds energy gate thresholds for audio segmentation (issue 215).
+type EnergyGateSpec struct {
+	ThresholdRMS       int `yaml:"threshold_rms"`
+	MinMeanRMS         int `yaml:"min_mean_rms"`
+	MinVoicedFrames    int `yaml:"min_voiced_frames"`
+	MinVoicedRunFrames int `yaml:"min_voiced_run_frames"`
+}
+
 // ModifierGateSpec tunes the modifier-release buffering guard (issue 101):
 // while a gating modifier is held, eager output is buffered rather than
 // typed immediately, since the release that ends gating can simultaneously
@@ -82,6 +90,7 @@ func (bm BluetoothMicSpec) IsBluetoothNode(deviceAPI, nodeName string) bool {
 
 // EagerSpec is the parsed contents of spec/eager.yaml.
 type EagerSpec struct {
+	EnergyGate   EnergyGateSpec   `yaml:"energy_gate"`
 	ModifierGate ModifierGateSpec `yaml:"modifier_gate"`
 	Drain        DrainSpec        `yaml:"drain"`
 	MicCheck     MicCheckSpec     `yaml:"mic_check"`
@@ -105,6 +114,18 @@ func parseEagerSpec(data []byte) (*EagerSpec, error) {
 	var s EagerSpec
 	if err := yaml.Unmarshal(data, &s); err != nil {
 		return nil, fmt.Errorf("spec: parse eager.yaml: %w", err)
+	}
+	if s.EnergyGate.ThresholdRMS <= 0 {
+		return nil, fmt.Errorf("spec: energy_gate.threshold_rms must be positive")
+	}
+	if s.EnergyGate.MinMeanRMS <= 0 {
+		return nil, fmt.Errorf("spec: energy_gate.min_mean_rms must be positive")
+	}
+	if s.EnergyGate.MinVoicedFrames <= 0 {
+		return nil, fmt.Errorf("spec: energy_gate.min_voiced_frames must be positive")
+	}
+	if s.EnergyGate.MinVoicedRunFrames <= 0 {
+		return nil, fmt.Errorf("spec: energy_gate.min_voiced_run_frames must be positive")
 	}
 	if s.ModifierGate.TimeoutMs <= 0 {
 		return nil, fmt.Errorf("spec: modifier_gate.timeout_ms must be positive")

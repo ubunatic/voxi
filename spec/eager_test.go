@@ -100,7 +100,7 @@ func TestParseEagerSpecRejectsUnsafeDrain(t *testing.T) {
 }
 
 func TestParseEagerSpecMicCheck(t *testing.T) {
-	const base = "modifier_gate: {timeout_ms: 10000, start_grace_ms: 750, notify_delay_ms: 500}\ndrain: {delivery_deadline_ms: 60000, injection_timeout_ms: 15000}\n"
+	const base = "energy_gate: {threshold_rms: 150, min_mean_rms: 120, min_voiced_frames: 8, min_voiced_run_frames: 7}\nmodifier_gate: {timeout_ms: 10000, start_grace_ms: 750, notify_delay_ms: 500}\ndrain: {delivery_deadline_ms: 60000, injection_timeout_ms: 15000}\n"
 	if _, err := parseEagerSpec([]byte(base + validMicCheck + validBluetoothMic)); err != nil {
 		t.Fatalf("valid mic_check rejected: %v", err)
 	}
