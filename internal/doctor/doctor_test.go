@@ -535,6 +535,28 @@ func healthyHost(t *testing.T) *fixtureHost {
 	}}
 }
 
+func TestParseCoredumps(t *testing.T) {
+	text := `TIME                            PID   UID   GID SIG     COREFILE EXECUTABLE
+Thu 2026-10-15 12:00:00 UTC   12345  1000  1000 SIGSEGV present  /usr/bin/wireplumber
+Fri 2026-10-16 12:00:00 UTC   12346  1000  1000 SIGSEGV present  /usr/bin/some-other-app
+Sat 2026-10-17 12:00:00 UTC   12347  1000  1000 SIGABRT present  /usr/bin/pipewire`
+
+	processes := []string{"wireplumber", "pipewire"}
+	hits := parseCoredumps(text, processes)
+	if len(hits) != 2 {
+		t.Fatalf("expected 2 hits, got %d", len(hits))
+	}
+	if !strings.Contains(hits[0], "wireplumber") || !strings.Contains(hits[1], "pipewire") {
+		t.Fatalf("unexpected hits: %v", hits)
+	}
+
+	processes = []string{"voxi"}
+	hits = parseCoredumps(text, processes)
+	if len(hits) != 0 {
+		t.Fatalf("expected 0 hits, got %d", len(hits))
+	}
+}
+
 func TestPruneSnapshots(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Date(2026, 10, 17, 12, 0, 0, 0, time.UTC)
@@ -638,12 +660,15 @@ func TestSnapshotPrunesOldFiles(t *testing.T) {
 		}
 	}
 
-	h := &fixtureHost{run: func(name string, _ ...string) commandResult {
-		if name == "pw-dump" {
-			return commandResult{output: `[{"id": 0}]`}
-		}
-		return commandResult{err: errors.New("unexpected command")}
-	}}
+	h := &fixtureHost{
+		clock: now,
+		run: func(name string, _ ...string) commandResult {
+			if name == "pw-dump" {
+				return commandResult{output: `[{"id": 0}]`}
+			}
+			return commandResult{err: errors.New("unexpected command")}
+		},
+	}
 
 	doctor := HostDoctor{Host: h, Spec: s}
 	path, dump, err := doctor.snapshot(context.Background(), stateDir)
