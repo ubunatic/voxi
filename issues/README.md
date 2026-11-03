@@ -70,4 +70,5 @@
 | 216 | [216-try-and-benchmark-paradee-8m-v1-1-tts-small-open-source-model.md](216-try-and-benchmark-paradee-8m-v1-1-tts-small-open-source-model.md) | Try and benchmark Paradee-8M-v1.1 TTS (small open-source model) | Open |
 | 217 | [217-try-and-benchmark-audio8-tts-small-open-source-model-voice-clone.md](217-try-and-benchmark-audio8-tts-small-open-source-model-voice-clone.md) | Try and benchmark Audio8 TTS (small open-source model, voice clone) | Open |
 | 218 | [218-try-and-benchmark-lfm3-2b-audio-omni-and-generic-variants.md](218-try-and-benchmark-lfm3-2b-audio-omni-and-generic-variants.md) | Try and benchmark LFM3 2B (Audio, Omni and Generic variants) | Open |
+| 220 | [220-doctor-use-the-host-clock-for-snapshots-and-share-the-poll-loop-jules-ideas.md](220-doctor-use-the-host-clock-for-snapshots-and-share-the-poll-loop-jules-ideas.md) | doctor: use the Host clock for snapshots and share the poll loop (Jules ideas) | Open |
 <!-- harnez:end issues-active-index -->
