@@ -16,3 +16,8 @@
 - Optional: split the `coredumpctl` text parsing out of `checkCoredumps` (`doctor.go:394`) for a direct unit test.
 
 Dropped Jules ideas: structured exec errors in test fakes (tests already use `*exec.Error`, `doctor_test.go:371`); streaming `pw-dump` decode (one dump measured 9 ms in 214).
+
+## Jules runs
+| kind | session name | Jules ID | PR | state |
+|---|---|---|---|---|
+| implement | jules-implement-220 | 12224919750179986173 | GitHub #13 (closed) | partly done despite "done": snapshot clock not changed, error-string compare, lost first check; host fixed all three |
