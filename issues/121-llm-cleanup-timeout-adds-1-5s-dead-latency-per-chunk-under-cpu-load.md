@@ -99,3 +99,11 @@ section 4 remain unimplemented. This ticket should stay open until one of
 those is built, or until re-validation (issue 123) shows the 2.5s raise
 alone is sufficient and this ticket can be closed as resolved-by-headroom
 instead.
+
+## Jules audit 2026-11-03
+Verdict `partly done` (2/2 refs hold at 9fc8702; report `reports/jules/121.md`). Done: timeout 2.5 s, `internal/eager/pipeline.go:39`. Left: adaptive skip after consecutive timeouts; cleanup still runs for every eligible chunk (`internal/eager/eager.go:512`). Correction: `cleanWithLLM` and `llmCleanupTimeout` live in `internal/eager/pipeline.go`, not `eager.go`.
+
+## Jules runs
+| kind | session name | Jules ID | PR | state |
+|---|---|---|---|---|
+| audit | jules-audit-121 | 3768267609683651672 | GitHub #11 (closed) | partly done; captured above |

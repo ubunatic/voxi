@@ -44,3 +44,11 @@ hardcoded R2T2 string in the engine, and a test covers scaffold-only input.
   TestLiveASR_R2T2Corpus`) fails on `bug-d-etc` and `short-uh` because they return this scaffold,
   on both lmcoder (8735) and voxi's own server (18131). Fixing this ticket should let the test tell
   no-speech from a real empty result instead of failing.
+
+## Jules audit 2026-11-03
+Verdict `still valid` (2/2 refs hold at 9fc8702; report `reports/jules/138.md`). The marker strip leaves `""` (`internal/eager/openai_transcribe.go:252-256`); no `ErrNoSpeech`, `no_speech` or `language None` handling in `internal/` (host search confirmed). Nearest reject reason today: `low_energy_transient` (`internal/eager/eager.go:459`).
+
+## Jules runs
+| kind | session name | Jules ID | PR | state |
+|---|---|---|---|---|
+| audit | jules-audit-138 | 2223918651028091544 | GitHub #12 (closed) | still valid; captured above |
