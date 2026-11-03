@@ -272,3 +272,11 @@ interleaving, and ordered exactly-once typing.
 The issue remains In Progress. Emergency stop, exhaustive FIFO/standalone
 injector lifecycle canaries, and the documented crash window between durable
 claim and injector submission remain open.
+
+## Jules audit 2026-11-03
+Verdict `partly done` (5/5 refs hold at 40f819f; report `reports/jules/083.md`). Done: repetition rejection (`internal/asr/safety.go:35`), stale-generation stop (`internal/eager/session.go:141`), at-most-once delivery (`docs/EagerDeliverySafety.md:19`). Left: emergency stop that clears pending work and kills voxi-owned injectors (no `emergency` in internal/ or cmd/), and injector lifecycle canaries.
+
+## Jules runs
+| kind | session name | Jules ID | PR | state |
+|---|---|---|---|---|
+| audit | jules-audit-083 | 6230790104445295937 | GitHub #7 | partly done; findings captured above |
