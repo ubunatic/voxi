@@ -118,3 +118,10 @@ not currently available; this issue remains In Progress pending a justified
 canary-driven classifier. The complete-sentence detector compares adjacent
 sentences anywhere in a cleaned transcript and intentionally requires at least
 three words per sentence to avoid rejecting short answers.
+
+## Jules runs
+| kind | session name | Jules ID | PR | state |
+|---|---|---|---|---|
+| audit | jules-audit-100 | 13161684769332351830 | GitHub #8 | partly done; report discarded (3/4 refs hold, below 80%: asr.go:72 comment is at :56) |
+
+Host check of its leads at 40f819f: the repeated-pair rejection is live (`internal/eager/pipeline.go:239` → `asr.HasRepeatedSentencePair`); "Aye, you did that." still has no signal. Path correction: `testdata/noise-samples/` is now `testdata/samples/noise/` (JSON sidecars, no corpus.tsv).
