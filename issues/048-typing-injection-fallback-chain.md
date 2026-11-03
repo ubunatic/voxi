@@ -85,3 +85,11 @@ existing `dotoolc`-then-`dotool` attempts both fail to find their binary:
 - No terminal-specific paste-cue handling (Vocalinux's `Ctrl+Shift+V`
   special-case) — not addressed here.
 - No X11 injection path — Voxi is Wayland-only per its project scope.
+
+## Jules audit 2026-11-03
+Verdict `still valid` (3/3 refs hold at 9fc8702; report `reports/jules/048.md`). Starting points: the hard `dotool` check moved to `typeTextObserved` (`internal/typing/typing.go:171`); `CopyText` is at `typing.go:565`; no `wtype` anywhere in `internal/`.
+
+## Jules runs
+| kind | session name | Jules ID | PR | state |
+|---|---|---|---|---|
+| audit | jules-audit-048 | 10136245141909261154 | GitHub #10 (closed) | still valid; captured above |
