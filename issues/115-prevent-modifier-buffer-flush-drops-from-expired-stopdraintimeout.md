@@ -583,3 +583,8 @@ Independent review passed the core fix and found one real defect plus doc drift:
    was not caught automatically.
 
 Section 6.3's live dictation gate is still open and still needs a human.
+
+## Jules runs
+| kind | session name | Jules ID | PR | state |
+|---|---|---|---|---|
+| audit | jules-audit-115 | 14030552783592615717 | GitHub #5 | partly done (code done, live gate open); 4/4 refs hold at 40f819f; report kept |
