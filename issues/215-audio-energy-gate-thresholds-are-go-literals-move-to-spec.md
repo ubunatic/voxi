@@ -1,6 +1,6 @@
 # 215 — audio: energy gate thresholds are Go literals, move to spec
 
-**Status**: Open
+**Status**: Closed — energy gate values now defined once in spec/eager.yaml (schema + validation), read by audio defaults, segmenter zero-fill and eager defaults; behaviour unchanged; make test-q1 green (38 ok); voxi-agent restarted active; from Jules PR #9
 **Priority**: P3 (Low)
 **Severity**: Minor
 **Category**: Refactor

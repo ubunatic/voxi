@@ -66,7 +66,6 @@
 | 205 | [205-try-dessa-tts-model.md](205-try-dessa-tts-model.md) | Try dessa TTS model | Open |
 | 208 | [208-continuous-ambient-noise-chunk-triggers-and-r2t2-hallucination-accepted-to-desktop-chunk-2177.md](208-continuous-ambient-noise-chunk-triggers-and-r2t2-hallucination-accepted-to-desktop-chunk-2177.md) | Continuous Ambient Noise Chunk Triggers and R2T2 Hallucination Accepted to Desktop (Chunk 2177) | Open |
 | 209 | [209-do-not-save-high-confidence-low-volume-and-noise-chunks-to-ring-buffer.md](209-do-not-save-high-confidence-low-volume-and-noise-chunks-to-ring-buffer.md) | Do Not Save High-Confidence Low-Volume and Noise Chunks to Ring Buffer | Open |
-| 215 | [215-audio-energy-gate-thresholds-are-go-literals-move-to-spec.md](215-audio-energy-gate-thresholds-are-go-literals-move-to-spec.md) | audio: energy gate thresholds are Go literals, move to spec | Open |
 | 216 | [216-try-and-benchmark-paradee-8m-v1-1-tts-small-open-source-model.md](216-try-and-benchmark-paradee-8m-v1-1-tts-small-open-source-model.md) | Try and benchmark Paradee-8M-v1.1 TTS (small open-source model) | Open |
 | 217 | [217-try-and-benchmark-audio8-tts-small-open-source-model-voice-clone.md](217-try-and-benchmark-audio8-tts-small-open-source-model-voice-clone.md) | Try and benchmark Audio8 TTS (small open-source model, voice clone) | Open |
 | 218 | [218-try-and-benchmark-lfm3-2b-audio-omni-and-generic-variants.md](218-try-and-benchmark-lfm3-2b-audio-omni-and-generic-variants.md) | Try and benchmark LFM3 2B (Audio, Omni and Generic variants) | Open |
