@@ -58,8 +58,12 @@ func DefaultEagerOptions() EagerOptions {
 		// spec's own tests; a load failure here means a broken build.
 		panic(err)
 	}
+	es, err := spec.LoadEager()
+	if err != nil {
+		panic(err)
+	}
 	return EagerOptions{
-		ThresholdRMS:   150,
+		ThresholdRMS:   es.EnergyGate.ThresholdRMS,
 		SilenceMs:      800,
 		PreRollMs:      500,
 		MinSpeechMs:    200,

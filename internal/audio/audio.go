@@ -6,9 +6,12 @@ import (
 	"math"
 	"os"
 	"strings"
+
+	"ubunatic.com/voxi/spec"
 )
 
 // SegmenterOptions holds configuration parameters for audio segmentation.
+// The default acoustic energy thresholds are loaded from spec/eager.yaml.
 type SegmenterOptions struct {
 	ThresholdRMS       int
 	SilenceMs          int
@@ -22,15 +25,19 @@ type SegmenterOptions struct {
 
 // DefaultSegmenterOptions returns standard defaults.
 func DefaultSegmenterOptions() SegmenterOptions {
+	es, err := spec.LoadEager()
+	if err != nil {
+		panic(err)
+	}
 	return SegmenterOptions{
-		ThresholdRMS:       150,
+		ThresholdRMS:       es.EnergyGate.ThresholdRMS,
 		SilenceMs:          800,
 		PreRollMs:          500,
 		MinSpeechMs:        200,
 		MaxWindowMs:        8000,
-		MinVoicedFrames:    8,
-		MinVoicedRunFrames: 7,
-		MinMeanRMS:         120,
+		MinVoicedFrames:    es.EnergyGate.MinVoicedFrames,
+		MinVoicedRunFrames: es.EnergyGate.MinVoicedRunFrames,
+		MinMeanRMS:         es.EnergyGate.MinMeanRMS,
 	}
 }
 
@@ -81,14 +88,15 @@ func NewAudioSegmenter(opts SegmenterOptions) *AudioSegmenter {
 
 	maxWindowFrames := (opts.MaxWindowMs + frameMs - 1) / frameMs
 
+	defaultOpts := DefaultSegmenterOptions()
 	if opts.MinVoicedFrames <= 0 {
-		opts.MinVoicedFrames = 8
+		opts.MinVoicedFrames = defaultOpts.MinVoicedFrames
 	}
 	if opts.MinVoicedRunFrames <= 0 {
-		opts.MinVoicedRunFrames = 7
+		opts.MinVoicedRunFrames = defaultOpts.MinVoicedRunFrames
 	}
 	if opts.MinMeanRMS <= 0 {
-		opts.MinMeanRMS = 120
+		opts.MinMeanRMS = defaultOpts.MinMeanRMS
 	}
 
 	return &AudioSegmenter{
