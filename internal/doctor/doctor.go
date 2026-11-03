@@ -390,20 +390,7 @@ func (d HostDoctor) checkCoredumps(ctx context.Context, c spec.DoctorCheck, sinc
 	if !strings.Contains(text, "TIME") {
 		return skipped(c.ID, "coredumpctl failed: "+firstLine(text))
 	}
-	var hits []string
-	for _, line := range strings.Split(text, "\n") {
-		for _, field := range strings.Fields(line) {
-			if !strings.HasPrefix(field, "/") {
-				continue
-			}
-			base := filepath.Base(field)
-			for _, process := range c.Coredumps.Processes {
-				if base == process {
-					hits = append(hits, line)
-				}
-			}
-		}
-	}
+	hits := parseCoredumps(text, c.Coredumps.Processes)
 	if len(hits) > 0 {
 		latest := hits[len(hits)-1]
 		var exe string
@@ -416,6 +403,24 @@ func (d HostDoctor) checkCoredumps(ctx context.Context, c spec.DoctorCheck, sinc
 		return Result{ID: c.ID, Status: WARN, Detail: fmt.Sprintf("%d core dump(s) of audio or voxi processes since %s, latest: %s", len(hits), since, strings.Join(strings.Fields(latest), " ")), See: []string{see}}
 	}
 	return Result{ID: c.ID, Status: OK, Detail: "no core dumps of pipewire, wireplumber, gnome-control-center or voxi since " + since}
+}
+
+func parseCoredumps(text string, processes []string) []string {
+	var hits []string
+	for _, line := range strings.Split(text, "\n") {
+		for _, field := range strings.Fields(line) {
+			if !strings.HasPrefix(field, "/") {
+				continue
+			}
+			base := filepath.Base(field)
+			for _, process := range processes {
+				if base == process {
+					hits = append(hits, line)
+				}
+			}
+		}
+	}
+	return hits
 }
 
 func (d HostDoctor) checkMic(ctx context.Context, c spec.DoctorCheck, path string) Result {

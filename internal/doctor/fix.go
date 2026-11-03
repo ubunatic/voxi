@@ -3,6 +3,7 @@ package doctor
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -200,13 +201,45 @@ func restartEffects(command string) map[string]bool {
 	return effects
 }
 
+// errPollTimeout reports that waitPoll's budget ran out before check succeeded.
+var errPollTimeout = errors.New("doctor: poll budget exceeded")
+
+// waitPoll runs check until it reports done, an error, or the wall-clock
+// budget on host's clock runs out (errPollTimeout). With checkFirst, check
+// runs once before the first wait; otherwise every check follows a wait.
+func waitPoll(ctx context.Context, host Host, budget, interval time.Duration, checkFirst bool, check func() (bool, error)) error {
+	deadline := host.Now().Add(budget)
+	if checkFirst {
+		done, err := check()
+		if err != nil || done {
+			return err
+		}
+	}
+	for {
+		left := deadline.Sub(host.Now())
+		if left <= 0 {
+			return errPollTimeout
+		}
+		if err := host.Wait(ctx, min(interval, left)); err != nil {
+			return err
+		}
+		done, err := check()
+		if err != nil {
+			return err
+		}
+		if done {
+			return nil
+		}
+	}
+}
+
 func (d HostDoctor) waitForGraph(ctx context.Context, baselineDump []byte, baselinePIDs map[string]string) error {
 	timeout := time.Duration(d.Spec.Settle.TimeoutMS) * time.Millisecond
 	interval := time.Duration(d.Spec.Settle.IntervalMS) * time.Millisecond
-	var elapsed time.Duration
 	baselineGraph, _ := parseGraph(baselineDump)
 	baselineSignature := graphFingerprint(baselineGraph)
-	for {
+
+	err := waitPoll(ctx, d.Host, timeout, interval, true, func() (bool, error) {
 		dump, err := d.Host.Run(ctx, "pw-dump")
 		if err == nil {
 			graph, parseErr := parseGraph(dump)
@@ -217,24 +250,21 @@ func (d HostDoctor) waitForGraph(ctx context.Context, baselineDump []byte, basel
 						graphChanged := graphFingerprint(graph) != baselineSignature
 						pidChanged := restartPIDChanged(ctx, d.Host, baselinePIDs)
 						if graphChanged || pidChanged {
-							return nil
+							return true, nil
 						}
 					}
 				}
 			}
 		}
-		if elapsed >= timeout {
-			return fmt.Errorf("doctor: PipeWire default sink graph did not settle within %s", timeout)
-		}
-		wait := interval
-		if remaining := timeout - elapsed; wait > remaining {
-			wait = remaining
-		}
-		if err := d.Host.Wait(ctx, wait); err != nil {
-			return fmt.Errorf("doctor: wait for PipeWire graph: %w", err)
-		}
-		elapsed += wait
+		return false, nil
+	})
+	if errors.Is(err, errPollTimeout) {
+		return fmt.Errorf("doctor: PipeWire default sink graph did not settle within %s", timeout)
 	}
+	if err != nil {
+		return fmt.Errorf("doctor: wait for PipeWire graph: %w", err)
+	}
+	return nil
 }
 
 func restartMainPIDs(ctx context.Context, host Host, command string) map[string]string {
@@ -376,7 +406,7 @@ func (d HostDoctor) snapshot(ctx context.Context, stateDir string) (string, []by
 	if err := os.MkdirAll(stateDir, 0o700); err != nil {
 		return "", nil, fmt.Errorf("doctor: create state directory: %w", err)
 	}
-	now := time.Now()
+	now := d.Host.Now()
 	path := filepath.Join(stateDir, snapshotPrefix+now.Format(snapshotTimeFormat)+snapshotSuffix)
 	if err := os.WriteFile(path, dump, 0o600); err != nil {
 		return "", nil, fmt.Errorf("doctor: save pw-dump snapshot: %w", err)
@@ -432,19 +462,14 @@ func (d HostDoctor) applyRepair(ctx context.Context, r Result, command string) e
 // prints one progress line. The deadline counts probe time too, so a slow
 // probe shortens the wait instead of extending it.
 func (d HostDoctor) awaitStart(ctx context.Context, out io.Writer, c spec.DoctorCheck, opts Options, unit string, budget time.Duration, res Result) (Result, error) {
+	if res.Status == OK {
+		return res, nil
+	}
 	began := d.Host.Now()
-	deadline := began.Add(budget)
-	for res.Status != OK {
-		left := deadline.Sub(d.Host.Now())
-		if left <= 0 {
-			break
-		}
-		if err := d.Host.Wait(ctx, min(startPollInterval, left)); err != nil {
-			return res, err
-		}
+	err := waitPoll(ctx, d.Host, budget, startPollInterval, false, func() (bool, error) {
 		next, err := d.check(ctx, c, opts)
 		if err != nil {
-			return res, err
+			return false, err
 		}
 		res = next
 		state, stateErr := d.unitState(ctx, unit)
@@ -453,13 +478,21 @@ func (d HostDoctor) awaitStart(ctx context.Context, out io.Writer, c spec.Doctor
 			active = state.active
 		}
 		fmt.Fprintf(out, "  waiting for %s: %s of %s, unit %s\n", unit, d.Host.Now().Sub(began).Round(time.Second), budget, active)
-		if res.Status != OK && active == "failed" {
-			fmt.Fprintf(out, "  %s failed to start; see: journalctl --user -u %s\n", unit, unit)
-			return res, nil
+		if res.Status == OK {
+			return true, nil
 		}
-	}
-	if res.Status != OK {
+		if active == "failed" {
+			fmt.Fprintf(out, "  %s failed to start; see: journalctl --user -u %s\n", unit, unit)
+			return true, nil
+		}
+		return false, nil
+	})
+	if errors.Is(err, errPollTimeout) {
 		fmt.Fprintf(out, "  started service did not transcribe within %s\n", budget)
+		return res, nil
+	}
+	if err != nil {
+		return res, err
 	}
 	return res, nil
 }
