@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"ubunatic.com/voxi/internal/config"
+	"ubunatic.com/voxi/internal/gpu"
 )
 
 func testEffects(t *testing.T) (*Effects, *[]string) {
@@ -62,6 +63,9 @@ func testEffects(t *testing.T) (*Effects, *[]string) {
 	e.DownloadHTTP = func(_ context.Context, _, _ string) error {
 		return errors.New("mock download disabled")
 	}
+	// Hermetic defaults: no GPU on the test host, and /dev/uinput writable.
+	e.RenderNodeVendor = func() gpu.Vendor { return gpu.Unknown }
+	e.OpenUinput = func() error { return nil }
 	return &e, &commands
 }
 

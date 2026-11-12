@@ -131,6 +131,40 @@ Voxi avoids this entirely through its system service architecture:
    `dotool`) reads `/run/voxi/modifiers` without needing `sudo`, root, or `input` group
    membership.
 
+## GPU & keyboard setup (Intel and AMD hosts)
+
+`voxi install` prepares the hardware-dependent parts of a fresh machine:
+
+1. **GPU vendor**: read from the PCI vendor of the render node's device
+   (`/sys/class/drm/renderD128/device/vendor`; `internal/gpu`). Intel `0x8086`,
+   AMD `0x1002`, NVIDIA `0x10de`. No render node means CPU only.
+2. **CrispASR build**: a GPU selects `crispasr-linux-x86_64-vulkan.tar.gz`. The
+   default `crispasr-linux-x86_64.tar.gz` is CPU-only (`ggml backends : cpu`).
+   After install, `[GPU]` reports whether the installed build has a GPU backend.
+3. **Vulkan driver**: needs the loader (`libvulkan.so.1`) and a vendor ICD manifest
+   (`/usr/share/vulkan/icd.d/intel_icd.json`, `radeon_icd.json`, ...). When either is
+   missing, Voxi asks before running `sudo` with the package manager. pacman packages
+   are `vulkan-icd-loader` plus `vulkan-intel` or `vulkan-radeon` (checked against the
+   Arch file lists). dnf and apt-get use `mesa-vulkan-drivers` with `vulkan-loader` or
+   `libvulkan1`; those names are not yet checked on those distributions. NVIDIA uses
+   its proprietary driver and is not installed automatically. A declined or failed
+   driver step is a warning. CPU transcription still works.
+4. **Keyboard injection (`/dev/uinput`)**: `dotoold` needs write access to `/dev/uinput`.
+   The desktop-session route is the `uaccess` udev tag. Some distributions, including
+   the Arch-based host this was observed on (2026-11-12), ship `/dev/uinput` as
+   `root:root 0600` with no tag. Voxi asks before writing
+   `/etc/udev/rules.d/70-voxi-uinput.rules` (`KERNEL=="uinput", SUBSYSTEM=="misc", TAG+="uaccess"`)
+   with sudo, also writes `/etc/modules-load.d/uinput.conf` (`uinput`) so the module loads at
+   every boot, then reloads udev, runs `sudo modprobe uinput`, and triggers udev. The module
+   load matters: when `uinput` is not loaded (observed 2026-11-12, `lsmod` empty), `/dev/uinput`
+   is a leftover node with no driver, and `udevadm trigger` fails with "No such device". A
+   failed modprobe or trigger prints the manual recovery command and does not fail the install.
+   It does not add `input` group membership.
+   If the user declines, or the session still cannot write the node, `dotoold` is not
+   started and the install says how to finish. This avoids the systemd start-limit
+   failure that aborted the install before. The security stance matches
+   [VoiceInput.md](VoiceInput.md#security-note-uinput-access-is-not-gated-by-voice-input).
+
 ## Verification & Diagnostic Probes
 
 Verify individual unit states:

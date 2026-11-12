@@ -20,6 +20,8 @@ import (
 	"github.com/spf13/cobra"
 	"ubunatic.com/voxi"
 	"ubunatic.com/voxi/internal/config"
+	"ubunatic.com/voxi/internal/crispasr"
+	"ubunatic.com/voxi/internal/gpu"
 	"ubunatic.com/voxi/spec"
 )
 
@@ -46,6 +48,12 @@ type Effects struct {
 	Remove            func(string) error
 	DownloadHTTP      func(context.Context, string, string) error
 	AvailableMemoryMB func() (int, error)
+	// RenderNodeVendor reports the vendor of the GPU behind the Vulkan render
+	// node; gpu.Unknown means no usable GPU (CPU transcription only).
+	RenderNodeVendor func() gpu.Vendor
+	// OpenUinput reports whether this user can open /dev/uinput for writing,
+	// which dotoold needs to inject keystrokes.
+	OpenUinput func() error
 }
 
 // DefaultEffects binds Install to the current Linux host.
@@ -120,7 +128,22 @@ func DefaultEffects() Effects {
 		Remove:            os.Remove,
 		DownloadHTTP:      downloadResilientHTTP,
 		AvailableMemoryMB: availableMemoryMB,
+		RenderNodeVendor:  func() gpu.Vendor { return gpu.ReadVendor(gpu.RenderNodeSysfs) },
+		OpenUinput:        openUinput,
 	}
+}
+
+// uinputDevice is the kernel node dotoold writes keystrokes to.
+const uinputDevice = "/dev/uinput"
+
+// openUinput opens /dev/uinput write-only and closes it again. Opening the
+// node creates no virtual keyboard; that only happens on UI_DEV_CREATE.
+func openUinput() error {
+	f, err := os.OpenFile(uinputDevice, os.O_WRONLY, 0)
+	if err != nil {
+		return err
+	}
+	return f.Close()
 }
 
 // availableMemoryMB reads MemAvailable from /proc/meminfo (Linux only).
@@ -188,7 +211,7 @@ func InstallWithOptions(ctx context.Context, out io.Writer, e Effects, options I
 	if e.Home == "" {
 		return fmt.Errorf("install: HOME is empty; set HOME to a user home directory")
 	}
-	if e.Executable == nil || e.BuildModifier == nil || e.LookPath == nil || e.MkdirAll == nil || e.ReadFile == nil || e.Stat == nil || e.WriteFile == nil || e.Chmod == nil || e.Run == nil || e.RunInteractive == nil || e.Confirm == nil || e.RunOutput == nil || e.RunStdin == nil || e.Symlink == nil || e.Remove == nil || e.DownloadHTTP == nil || e.AvailableMemoryMB == nil {
+	if e.Executable == nil || e.BuildModifier == nil || e.LookPath == nil || e.MkdirAll == nil || e.ReadFile == nil || e.Stat == nil || e.WriteFile == nil || e.Chmod == nil || e.Run == nil || e.RunInteractive == nil || e.Confirm == nil || e.RunOutput == nil || e.RunStdin == nil || e.Symlink == nil || e.Remove == nil || e.DownloadHTTP == nil || e.AvailableMemoryMB == nil || e.RenderNodeVendor == nil || e.OpenUinput == nil {
 		return fmt.Errorf("install: incomplete host effects")
 	}
 	userBin := filepath.Join(e.Home, ".local", "bin")
@@ -285,6 +308,12 @@ func InstallWithOptions(ctx context.Context, out io.Writer, e Effects, options I
 	}); err != nil {
 		return err
 	}
+	reportCrispASRGPU(ctx, out, e, filepath.Join(userBin, "crispasr"))
+	ensureVulkanDriver(ctx, out, e, e.RenderNodeVendor())
+	uinputReady, err := ensureUinputAccess(ctx, out, e)
+	if err != nil {
+		return err
+	}
 	if settings.TTSEnabled {
 		if err := phase("TTS system packages", func() error { return installTTSDependencies(ctx, out, e) }); err != nil {
 			return err
@@ -350,8 +379,14 @@ func InstallWithOptions(ctx context.Context, out io.Writer, e Effects, options I
 		if err := e.Run(ctx, "systemctl", "--user", "daemon-reload"); err != nil {
 			return fmt.Errorf("reload user manager: %w", err)
 		}
-		if err := e.Run(ctx, "systemctl", "--user", "enable", "--now", "dotoold.service"); err != nil {
-			return fmt.Errorf("enable/start dotoold.service: %w", err)
+		if uinputReady {
+			if err := e.Run(ctx, "systemctl", "--user", "enable", "--now", "dotoold.service"); err != nil {
+				return fmt.Errorf("enable/start dotoold.service: %w", err)
+			}
+		} else {
+			// dotoold exits at once without /dev/uinput and would hit systemd's
+			// start limit, aborting the rest of the install. Skip it instead.
+			fmt.Fprintln(out, "[dotoold] not started: /dev/uinput is not accessible yet (typing stays off until voxi install grants access)")
 		}
 		if err := e.Run(ctx, "systemctl", "--user", "enable", "--now", "voxi-agent.service"); err != nil {
 			return fmt.Errorf("enable/start voxi-agent.service: %w", err)
@@ -494,6 +529,21 @@ func detectXKBLayout(ctx context.Context, e Effects) string {
 	return "us"
 }
 
+// reportCrispASRGPU says whether the installed CrispASR can use the GPU. It
+// only reports: CPU transcription still works without a GPU backend.
+func reportCrispASRGPU(ctx context.Context, out io.Writer, e Effects, crispBin string) {
+	vendor := e.RenderNodeVendor()
+	if vendor == gpu.Unknown {
+		return
+	}
+	version, err := e.RunOutput(ctx, crispBin, "--version")
+	if err != nil || !crispasr.HasGPUBackend(version) {
+		fmt.Fprintf(out, "[GPU] warning: %s GPU found but this CrispASR build has no GPU backend; transcription will run on CPU\n", vendor.Name())
+		return
+	}
+	fmt.Fprintf(out, "[GPU] CrispASR Vulkan backend available for %s\n", vendor.Name())
+}
+
 func installUserDependencies(ctx context.Context, e Effects, userBin, serviceDir string) error {
 	if e.GOARCH != "amd64" && e.GOARCH != "arm64" {
 		return fmt.Errorf("unsupported architecture %q for CrispASR prebuilt release", e.GOARCH)
@@ -501,6 +551,10 @@ func installUserDependencies(ctx context.Context, e Effects, userBin, serviceDir
 	asset := "crispasr-linux-x86_64.tar.gz"
 	if e.GOARCH == "arm64" {
 		asset = "crispasr-linux-arm64.tar.gz"
+	} else if e.RenderNodeVendor() != gpu.Unknown {
+		// The default archive is CPU-only (no ggml vulkan backend); a GPU
+		// needs the Vulkan build, which ships as its own release asset.
+		asset = "crispasr-linux-x86_64-vulkan.tar.gz"
 	}
 	crispDir := filepath.Join(e.Home, ".local", "lib", "voxi", "crispasr")
 	if err := e.MkdirAll(crispDir, 0755); err != nil {
@@ -552,6 +606,156 @@ func installUserDependencies(ctx context.Context, e Effects, userBin, serviceDir
 	}
 	_ = serviceDir // unit installation is kept in the following phase.
 	return nil
+}
+
+// vulkanLoaderPaths locate the Vulkan loader (libvulkan.so.1) that the
+// CrispASR Vulkan build links against, across common distributions.
+var vulkanLoaderPaths = []string{
+	"/usr/lib/libvulkan.so.1",
+	"/usr/lib/x86_64-linux-gnu/libvulkan.so.1",
+	"/usr/lib64/libvulkan.so.1",
+}
+
+// vulkanICDPaths locate each vendor's Vulkan driver manifest. Both the loader
+// and a matching ICD must exist before Vulkan clients can see the GPU.
+var vulkanICDPaths = map[gpu.Vendor][]string{
+	gpu.Intel:  {"/usr/share/vulkan/icd.d/intel_icd.json", "/usr/share/vulkan/icd.d/intel_icd.x86_64.json"},
+	gpu.AMD:    {"/usr/share/vulkan/icd.d/radeon_icd.json", "/usr/share/vulkan/icd.d/radeon_icd.x86_64.json"},
+	gpu.NVIDIA: {"/usr/share/vulkan/icd.d/nvidia_icd.json", "/usr/share/vulkan/icd.d/nvidia_icd.x86_64.json"},
+}
+
+// anyPathExists reports whether at least one of paths exists, using the
+// injected Stat so tests stay off the host filesystem.
+func anyPathExists(e Effects, paths []string) bool {
+	for _, p := range paths {
+		if _, err := e.Stat(p); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+func vulkanReady(e Effects, vendor gpu.Vendor) bool {
+	return anyPathExists(e, vulkanLoaderPaths) && anyPathExists(e, vulkanICDPaths[vendor])
+}
+
+// vulkanInstallCommand returns the package-manager argv (without sudo) that
+// installs the Vulkan loader and the open-source driver for vendor. It returns
+// nil when no package is known: NVIDIA needs its own proprietary driver, and
+// the package manager is missing or unsupported.
+func vulkanInstallCommand(manager string, vendor gpu.Vendor) []string {
+	switch {
+	case manager == "pacman" && vendor == gpu.Intel:
+		return []string{"pacman", "-S", "--needed", "vulkan-icd-loader", "vulkan-intel"}
+	case manager == "pacman" && vendor == gpu.AMD:
+		return []string{"pacman", "-S", "--needed", "vulkan-icd-loader", "vulkan-radeon"}
+	case manager == "dnf" && (vendor == gpu.Intel || vendor == gpu.AMD):
+		return []string{"dnf", "install", "vulkan-loader", "mesa-vulkan-drivers"}
+	case manager == "apt-get" && (vendor == gpu.Intel || vendor == gpu.AMD):
+		return []string{"apt-get", "install", "libvulkan1", "mesa-vulkan-drivers"}
+	}
+	return nil
+}
+
+// packageManager returns the first supported system package manager on PATH,
+// or "" when there is none.
+func packageManager(lookPath func(string) (string, error)) string {
+	for _, name := range []string{"pacman", "dnf", "apt-get"} {
+		if _, err := lookPath(name); err == nil {
+			return name
+		}
+	}
+	return ""
+}
+
+// ensureVulkanDriver prepares GPU transcription when a GPU is present. It asks
+// before using sudo and never fails the install: without a usable driver,
+// CrispASR falls back to the CPU, so every problem here is a warning.
+func ensureVulkanDriver(ctx context.Context, out io.Writer, e Effects, vendor gpu.Vendor) {
+	if vendor == gpu.Unknown {
+		fmt.Fprintln(out, "[GPU] no GPU render node found; transcription runs on CPU")
+		return
+	}
+	if vulkanReady(e, vendor) {
+		fmt.Fprintf(out, "[GPU] %s Vulkan driver present\n", vendor.Name())
+		return
+	}
+	argv := vulkanInstallCommand(packageManager(e.LookPath), vendor)
+	if argv == nil {
+		fmt.Fprintf(out, "[GPU] %s Vulkan driver missing (needs libvulkan.so.1 and a Vulkan ICD). Install your distribution's Vulkan driver for this GPU, then re-run voxi install. CPU transcription still works.\n", vendor.Name())
+		return
+	}
+	cmdline := "sudo " + strings.Join(argv, " ")
+	confirmed, err := e.Confirm(fmt.Sprintf("Install the %s Vulkan driver for GPU transcription (%s)?", vendor.Name(), cmdline))
+	if err != nil || !confirmed {
+		fmt.Fprintf(out, "[GPU] %s Vulkan driver not installed; run '%s' and re-run voxi install for GPU transcription\n", vendor.Name(), cmdline)
+		return
+	}
+	if err := e.RunInteractive(ctx, "sudo", argv...); err != nil {
+		fmt.Fprintf(out, "[GPU] Vulkan driver install failed (%v); run '%s' yourself. CPU transcription still works.\n", err, cmdline)
+		return
+	}
+	if !vulkanReady(e, vendor) {
+		fmt.Fprintf(out, "[GPU] Vulkan driver install finished but the loader or driver manifest is still missing; check '%s'\n", cmdline)
+		return
+	}
+	fmt.Fprintf(out, "[GPU] %s Vulkan driver installed\n", vendor.Name())
+}
+
+// uinputRulePath is a system udev rule that tags /dev/uinput with the logind
+// uaccess tag, so the active local session can write it without root. Desktop
+// distributions normally ship this tag; some (including Arch-based ones) do not.
+const uinputRulePath = "/etc/udev/rules.d/70-voxi-uinput.rules"
+
+const uinputRule = `# Installed by voxi install: let the active desktop session write /dev/uinput (dotoold keystroke injection).
+KERNEL=="uinput", SUBSYSTEM=="misc", TAG+="uaccess"
+`
+
+// uinputModulesPath loads the uinput kernel module at boot. The module is not
+// loaded by default on some distributions, and a user process cannot load it.
+const uinputModulesPath = "/etc/modules-load.d/uinput.conf"
+
+const uinputModules = `# Installed by voxi install: load the uinput module for dotoold keystroke injection.
+uinput
+`
+
+// ensureUinputAccess makes sure dotoold can open /dev/uinput. It asks before
+// writing a udev rule and a modules-load file with sudo. It returns false, with
+// guidance printed, when typing cannot be enabled yet; that is reported, not treated as a failed install.
+func ensureUinputAccess(ctx context.Context, out io.Writer, e Effects) (bool, error) {
+	if err := e.OpenUinput(); err == nil {
+		fmt.Fprintf(out, "[keyboard injection] %s writable\n", uinputDevice)
+		return true, nil
+	}
+	confirmed, err := e.Confirm(fmt.Sprintf("Grant the active desktop session access to %s with udev rule %s and load uinput at boot via %s (sudo)?", uinputDevice, uinputRulePath, uinputModulesPath))
+	if err != nil || !confirmed {
+		fmt.Fprintf(out, "[keyboard injection] %s is not writable; typing stays off. Re-run voxi install in a terminal to grant access.\n", uinputDevice)
+		return false, nil
+	}
+	if err := e.RunStdin(ctx, uinputRule, "sudo", "tee", uinputRulePath); err != nil {
+		return false, fmt.Errorf("write %s: %w", uinputRulePath, err)
+	}
+	if err := e.RunStdin(ctx, uinputModules, "sudo", "tee", uinputModulesPath); err != nil {
+		return false, fmt.Errorf("write %s: %w", uinputModulesPath, err)
+	}
+	if err := e.Run(ctx, "sudo", "udevadm", "control", "--reload"); err != nil {
+		return false, fmt.Errorf("reload udev rules: %w", err)
+	}
+	// The uinput driver must be registered before udev can see /dev/uinput. On
+	// hosts where the module is not loaded, the node is left without a driver and
+	// `udevadm trigger` fails with "No such device". modprobe is a no-op when loaded.
+	if err := e.Run(ctx, "sudo", "modprobe", "uinput"); err != nil {
+		fmt.Fprintf(out, "[keyboard injection] could not load the uinput module (%v); run: sudo modprobe uinput\n", err)
+	}
+	if err := e.Run(ctx, "sudo", "udevadm", "trigger", "--name-match="+uinputDevice); err != nil {
+		fmt.Fprintf(out, "[keyboard injection] could not apply the udev rule to %s (%v); run: sudo modprobe uinput && sudo udevadm trigger --name-match=%s\n", uinputDevice, err, uinputDevice)
+	}
+	if err := e.OpenUinput(); err != nil {
+		fmt.Fprintf(out, "[keyboard injection] rule installed but %s is still not writable (%v); log out and back in, then re-run voxi install\n", uinputDevice, err)
+		return false, nil
+	}
+	fmt.Fprintf(out, "[keyboard injection] %s access granted\n", uinputDevice)
+	return true, nil
 }
 
 func installPiper(ctx context.Context, e Effects, userBin string) error {
@@ -907,7 +1111,9 @@ func NewCommand(e Effects, out io.Writer) *cobra.Command {
 		Use:   "install",
 		Short: "Install Voxi for this user (optional: --modifierd needs sudo)",
 		Long: "Install the CLI and systemd user services under your home directory, then enable and start voxi-agent.service.\n" +
-			"When TTS tools are missing, Voxi asks before using sudo and the system package manager.\n\n" +
+			"When TTS tools are missing, Voxi asks before using sudo and the system package manager.\n" +
+			"When a GPU is present, Voxi installs the Vulkan CrispASR build and asks before installing the Vulkan driver (CPU transcription is the fallback).\n" +
+			"For typing, Voxi asks before adding a udev rule with sudo so the session can write /dev/uinput; without it, dotoold is not started.\n\n" +
 			"Use --no-tts to persistently opt out of TTS packages. Use --voxcpm to install the VoxCPM Vulkan runtime and cloned-voice model. Use --modifierd for the optional system-wide physical modifier daemon; it also requires sudo and Linux systemd.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {

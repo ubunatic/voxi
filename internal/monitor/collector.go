@@ -17,6 +17,7 @@ import (
 	"ubunatic.com/voxi/internal/config"
 	"ubunatic.com/voxi/internal/deps"
 	"ubunatic.com/voxi/internal/eager"
+	"ubunatic.com/voxi/internal/gpu"
 	"ubunatic.com/voxi/internal/mode"
 	"ubunatic.com/voxi/internal/modifiers"
 	"ubunatic.com/voxi/internal/record"
@@ -300,10 +301,21 @@ func parseSystemdProperties(out string) map[string]string {
 }
 
 func detectGPUStatus() string {
-	if _, err := os.Stat("/dev/dri/renderD128"); err == nil {
-		return "AMD Radeon Vulkan 1.4"
+	if _, err := os.Stat(gpu.RenderNode); err != nil {
+		return "CPU fallback"
 	}
-	return "CPU fallback"
+	return gpuAccelLabel(gpu.RenderNodeSysfs)
+}
+
+// gpuAccelLabel names the GPU behind a render node from its sysfs device
+// directory. It reads the real PCI vendor instead of assuming one, and falls
+// back to a neutral "GPU" when the vendor file is missing or unknown.
+func gpuAccelLabel(deviceDir string) string {
+	v := gpu.ReadVendor(deviceDir)
+	if v == gpu.Unknown {
+		return "GPU (Vulkan)"
+	}
+	return v.Name() + " GPU (Vulkan)"
 }
 
 func detectActiveModel(d deps.Dependencies) string {
