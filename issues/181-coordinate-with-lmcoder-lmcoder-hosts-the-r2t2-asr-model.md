@@ -103,3 +103,12 @@ speaks. Sent to the lmcoder session; waiting for its contract (wake signal, cold
   answered). Verified by the user 2026-10-06: dictation (one and three chunks, RTF ~0.2) served by
   x600, local asr unused; local asr stopped on its own at 20:27:38, ~5.5 min after its last start.
   Open: the reboot check, §5.
+
+## 8. Note (2026-11-12, issue 222): voxi's downloader covers only the no-lmcoder fallback
+
+Voxi's own R2T2 fallback (`r2t2-confucius4-voxi`, `voxi-r2t2.service`) now downloads its two weight
+files itself, after a confirmation and a sha256 check (issue 222). This does not replace the lmcoder
+plan in §5 and §7: when lmcoder serves `r2t2-confucius4`, voxi downloads nothing. On a machine without
+lmcoder, the fallback is the only place voxi fetches the model, so the two paths should keep the same
+file names and hashes (the `files` list under `r2t2-confucius4-voxi` in `spec/models.yaml`) until
+lmcoder's registry owns the download.

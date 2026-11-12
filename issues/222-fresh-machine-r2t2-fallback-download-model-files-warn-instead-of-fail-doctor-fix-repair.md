@@ -1,6 +1,6 @@
 # 222 — Fresh-machine R2T2 fallback: download model files, warn instead of fail, doctor --fix repair
 
-**Status**: Open
+**Status**: In Progress — code done and verified in an isolated home; waiting for llama-server on this host
 **Priority**: P2 (Medium)
 **Severity**: Major
 **Category**: Bug
@@ -77,3 +77,38 @@ Open facts (verify before implementing):
 
 Verification on the live host: remove nothing; test on a copy of `~/.cache/voxi/models` in a
 temporary `XDG_CACHE_HOME` before touching the real directory.
+
+## 4. Results (2026-11-12)
+
+Implemented: spec `files` with sizes and sha256 (`spec/models.yaml`); install warns and disables
+instead of failing; `voxi install --r2t2 [--yes]` repair; doctor offers `voxi install --r2t2 --yes`
+when the fallback probe fails and the files are missing (sizes only; sha256 is checked by the repair).
+Tests: `make test-q1` passes (exit 0).
+
+Live checks:
+
+- `make install` on this host: install succeeds with the warning "llama-server is not on PATH" and
+  `voxi-r2t2.service` stays disabled. No hard failure.
+- Isolated home (temporary `HOME`/`XDG_*`, `systemctl` shimmed, a stub `llama-server` set by
+  `llama_server_path`): `voxi install --r2t2 --yes` downloaded both files, each matched its spec
+  sha256, the unit was written, and `systemctl --user enable --now voxi-r2t2.service` was called.
+  A second run from empty files gave the same result. Non-interactive without `--yes` downloaded
+  nothing and exited 1 with the reason.
+- Doctor in the same isolated home with the files removed: FAULT, "model files missing: …", and the
+  repair line `voxi install --r2t2 --yes` printed.
+- Not run: `voxi doctor --fix` applying the repair. `doctor --yes` would also apply the unrelated
+  `stream-routing` repair (`systemctl --user restart wireplumber`) on the real session, so the
+  repair command was run directly instead.
+
+Resolved open facts:
+
+- Per-model `base_url` overrides the global one: the live probe goes to `127.0.0.1:18131`, while
+  the config sets `openai_asr_base_url` to `8090`.
+- Port 8749: most likely the eager failover from 8735 (`docs/ASREngines.md`, failover list). Not
+  confirmed from the chunk log.
+- Arch `llama-server` package: unverified; `pacman -Ss` shows `extra/llama-cpp`, `pacman -Fl` was not
+  checked.
+
+Remaining for "done": `llama-server` on this host, which is a sudo package install and so needs the
+user. Until then the live fallback stays down (`r2t2-confucius4-voxi` is selected in
+`~/.config/voxi/config.yaml`, so doctor reports FAULT here).
