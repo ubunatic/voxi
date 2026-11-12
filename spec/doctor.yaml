@@ -100,11 +100,12 @@ checks:
     order: 8
     repair_order: 6
     repair:
-      prompt: Start the stopped lmcoder ASR service, or restart the lmcoder proxy while the service runs. The local fallback is never offered here; it is not checked for model files.
+      prompt: Start the stopped lmcoder ASR service, restart the lmcoder proxy while the service runs, or repair the voxi R2T2 fallback (download its model files after a sha256 check, then enable voxi-r2t2.service).
       templates:
         start_asr: "lmcoder service start --asr"
         enable_asr: "systemctl --user enable {{unit}}"
         restart_proxy: "systemctl --user restart lmcoder-proxy.service"
+        r2t2_install: "voxi install --r2t2 --yes"
 scripts:
   routing-probe.sh: scripts/routing-probe.sh
 settle:

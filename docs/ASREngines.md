@@ -199,6 +199,12 @@ backend crashes:
    the agent so its running eager process picks up the setting.
 5. **Scriptable configuration**: `voxi settings set model <name>` changes the saved model;
    restart `voxi-agent.service` to apply it to the running agent.
+6. **R2T2 fallback files (issue 222)**: `r2t2-confucius4-voxi` needs its two weight files in
+   `~/.cache/voxi/models`. Doctor compares their sizes with the spec and, when they are missing or the
+   fallback fails its probe, offers `voxi install --r2t2 --yes`. That repair checks each sha256 before it
+   enables `voxi-r2t2.service`; see
+   [InstallationArchitecture.md](InstallationArchitecture.md#r2t2-fallback-model-files-issue-222). The
+   lmcoder-served `r2t2-confucius4` entry does not use these files.
 
 ## Model Onboarding & Runtime Architecture Principles
 

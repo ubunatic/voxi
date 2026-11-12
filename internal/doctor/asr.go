@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -291,11 +292,81 @@ func (d HostDoctor) checkOpenAIASREngine(ctx context.Context, a asrCheck) Result
 		// fallback here would switch to model files that may be missing.
 		res = d.lmcoderRepairs(ctx, a, baseURL, res)
 	case eager.IsLoopbackEndpoint(baseURL, eager.VoxiLlamaServerPort) || a.name == "r2t2-confucius4-voxi":
-		// No repair: restarting the fallback service would start it without
-		// checking that its model files exist. Guidance only.
-		res.See = []string{"systemctl --user status voxi-r2t2.service", "check the model files in ~/.cache/voxi/models"}
+		res = d.r2t2Repairs(ctx, a, res)
 	}
 	return res
+}
+
+// asrR2T2Unit is the voxi-owned llama-server unit that serves the R2T2 fallback.
+const asrR2T2Unit = "voxi-r2t2.service"
+
+// r2t2Repairs offers the repair for the voxi R2T2 fallback (issue 222). The
+// repair runs `voxi install --r2t2 --yes`, which verifies or downloads the model
+// files before it enables the unit. Doctor shows the download before it applies
+// the repair. Only the r2t2-confucius4-voxi entry has model files to repair.
+func (d HostDoctor) r2t2Repairs(ctx context.Context, a asrCheck, res Result) Result {
+	res.See = append(res.See, "systemctl --user status "+asrR2T2Unit, "check the model files in ~/.cache/voxi/models")
+	if a.name != "r2t2-confucius4-voxi" {
+		return res
+	}
+	llama := "llama-server"
+	if a.settings != nil && a.settings.LlamaServerPath != "" {
+		llama = a.settings.LlamaServerPath
+	}
+	if _, err := d.Host.Run(ctx, "which", llama); err != nil {
+		res.See = append(res.See, fmt.Sprintf("%s is not on PATH; install llama-server (Arch: the llama-cpp package) or set llama_server_path in ~/.config/voxi/config.yaml", llama))
+		return res
+	}
+	command := a.c.Repair.Templates["r2t2_install"]
+	if command == "" {
+		res.See = append(res.See, "spec/doctor.yaml has no r2t2_install repair template")
+		return res
+	}
+	res.Repairs = []string{command}
+	missing, total := missingR2T2Files(a.model.Files)
+	var notice []string
+	if len(missing) > 0 {
+		res.Detail += fmt.Sprintf("; model files missing: %s", strings.Join(missing, ", "))
+		notice = append(notice, fmt.Sprintf("downloads %s of R2T2 model files from %s and checks each sha256", gibString(total), r2t2Host(a.model.Files)))
+	}
+	notice = append(notice, "enables "+asrR2T2Unit+", so it starts with the graphical session; the model loads for a while before it answers")
+	res.Notice = notice
+	return res
+}
+
+// missingR2T2Files names the model files that are absent or not the spec's
+// size, and totals the bytes to fetch. Doctor compares sizes only; the repair
+// checks each sha256 before it accepts a file.
+func missingR2T2Files(files []spec.ModelFile) ([]string, int64) {
+	dir := ""
+	if home, err := os.UserHomeDir(); err == nil {
+		dir = filepath.Join(home, ".cache", "voxi", "models")
+	}
+	var missing []string
+	var total int64
+	for _, f := range files {
+		info, err := os.Stat(filepath.Join(dir, f.Name))
+		if dir == "" || err != nil || !info.Mode().IsRegular() || info.Size() != f.SizeBytes {
+			missing = append(missing, f.Name)
+			total += f.SizeBytes
+		}
+	}
+	return missing, total
+}
+
+// r2t2Host names the host the model files come from, for the repair notice.
+func r2t2Host(files []spec.ModelFile) string {
+	for _, f := range files {
+		if u, err := url.Parse(f.URL); err == nil && u.Host != "" {
+			return u.Host
+		}
+	}
+	return "the configured URL"
+}
+
+// gibString formats a byte count in GiB for the repair notice.
+func gibString(n int64) string {
+	return fmt.Sprintf("about %.2f GiB", float64(n)/(1<<30))
 }
 
 // probeOK reports a successful primary probe. For the voxi llama-server

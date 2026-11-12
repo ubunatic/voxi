@@ -78,6 +78,18 @@ type Model struct {
 	// LocalService names the systemd --user unit that serves this model and
 	// what starting it costs. Nil when no such unit is managed by voxi tools.
 	LocalService *LocalService `yaml:"local_service"`
+	// Files lists the weight files voxi downloads for this model when it
+	// runs its own server (issue 222). Each file is accepted only when its
+	// size and sha256 match. Empty when voxi does not download the model.
+	Files []ModelFile `yaml:"files"`
+}
+
+// ModelFile is one downloadable weight file of a model.
+type ModelFile struct {
+	Name      string `yaml:"name"`
+	URL       string `yaml:"url"`
+	SizeBytes int64  `yaml:"size_bytes"`
+	SHA256    string `yaml:"sha256"`
 }
 
 // LocalService is the unit that serves a model and its start costs (issue 211).
@@ -175,6 +187,11 @@ func parseModelSpec(data []byte) (*ModelSpec, error) {
 		if m.ResponseFormat != "" && m.ResponseFormat != "text" && m.ResponseFormat != "json" {
 			return nil, fmt.Errorf("spec: model %q has invalid response_format %q, must be \"text\" or \"json\"", name, m.ResponseFormat)
 		}
+		for _, f := range m.Files {
+			if f.Name == "" || f.URL == "" || f.SizeBytes <= 0 || !validSHA256(f.SHA256) {
+				return nil, fmt.Errorf("spec: model %q file %q needs name, url, a positive size_bytes and a 64-hex sha256", name, f.Name)
+			}
+		}
 		if m.CPUFallback == "" {
 			continue
 		}
@@ -187,6 +204,19 @@ func parseModelSpec(data []byte) (*ModelSpec, error) {
 		}
 	}
 	return &s, nil
+}
+
+// validSHA256 reports whether s is a lowercase 64-character hex digest.
+func validSHA256(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	for _, r := range s {
+		if !(r >= '0' && r <= '9' || r >= 'a' && r <= 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 // StopWords returns the hallucination stop-word patterns for name, falling

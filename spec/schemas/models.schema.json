@@ -125,6 +125,21 @@
               "first_start_seconds": { "type": "integer", "minimum": 1, "description": "How long a first start may take, including the download; doctor waits this long for the probe." }
             },
             "additionalProperties": false
+          },
+          "files": {
+            "type": "array",
+            "description": "Weight files voxi downloads for this model when it runs its own server (issue 222). A file is accepted only when its size and sha256 match.",
+            "items": {
+              "type": "object",
+              "required": ["name", "url", "size_bytes", "sha256"],
+              "properties": {
+                "name": { "type": "string", "minLength": 1, "description": "File name inside ~/.cache/voxi/models." },
+                "url": { "type": "string", "minLength": 1, "description": "HTTPS URL of the file." },
+                "size_bytes": { "type": "integer", "minimum": 1, "description": "Exact file size in bytes." },
+                "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "Lowercase hex sha256 of the file." }
+              },
+              "additionalProperties": false
+            }
           }
         },
         "additionalProperties": false

@@ -54,6 +54,12 @@ type Effects struct {
 	// OpenUinput reports whether this user can open /dev/uinput for writing,
 	// which dotoold needs to inject keystrokes.
 	OpenUinput func() error
+	// LoadModels returns the parsed model spec; tests substitute files whose
+	// sizes and hashes they can produce.
+	LoadModels func() (*spec.ModelSpec, error)
+	// ConfirmDownload asks before a large model download. Unlike Confirm it
+	// defaults to no, so an empty answer or no terminal declines.
+	ConfirmDownload func(string) (bool, error)
 }
 
 // DefaultEffects binds Install to the current Linux host.
@@ -130,6 +136,8 @@ func DefaultEffects() Effects {
 		AvailableMemoryMB: availableMemoryMB,
 		RenderNodeVendor:  func() gpu.Vendor { return gpu.ReadVendor(gpu.RenderNodeSysfs) },
 		OpenUinput:        openUinput,
+		LoadModels:        spec.LoadModels,
+		ConfirmDownload:   confirmDownloadOnTTY,
 	}
 }
 
@@ -166,12 +174,23 @@ func availableMemoryMB() (int, error) {
 }
 
 func confirmOnTTY(prompt string) (bool, error) {
+	return askOnTTY(prompt, "[Y/n] ", true)
+}
+
+// confirmDownloadOnTTY asks before a model download; an empty answer declines.
+func confirmDownloadOnTTY(prompt string) (bool, error) {
+	return askOnTTY(prompt, "[y/N] ", false)
+}
+
+// askOnTTY prints prompt on the terminal and reads one answer. Without a
+// terminal it declines, so a non-interactive install never runs a prompted step.
+func askOnTTY(prompt, choices string, defaultYes bool) (bool, error) {
 	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 	if err != nil {
 		return false, nil
 	}
 	defer tty.Close()
-	if _, err := fmt.Fprintf(tty, "%s [Y/n] ", prompt); err != nil {
+	if _, err := fmt.Fprintf(tty, "%s %s", prompt, choices); err != nil {
 		return false, err
 	}
 	answer, err := bufio.NewReader(tty).ReadString('\n')
@@ -182,7 +201,9 @@ func confirmOnTTY(prompt string) (bool, error) {
 		return false, nil
 	}
 	switch strings.ToLower(strings.TrimSpace(answer)) {
-	case "", "y", "yes":
+	case "":
+		return defaultYes, nil
+	case "y", "yes":
 		return true, nil
 	default:
 		return false, nil
@@ -195,6 +216,12 @@ type InstallOptions struct {
 	Modifierd  bool
 	DisableTTS bool
 	VoxCPM     bool
+	// R2T2Repair runs only the R2T2 fallback repair: fetch missing model
+	// files, write voxi-r2t2.service, and enable it. `voxi doctor --fix` uses it.
+	R2T2Repair bool
+	// AssumeYes accepts the R2T2 model download without asking. Doctor sets it
+	// after the user has already approved the repair.
+	AssumeYes bool
 }
 
 // Install performs the user installation and, when requested, the privileged
@@ -211,7 +238,7 @@ func InstallWithOptions(ctx context.Context, out io.Writer, e Effects, options I
 	if e.Home == "" {
 		return fmt.Errorf("install: HOME is empty; set HOME to a user home directory")
 	}
-	if e.Executable == nil || e.BuildModifier == nil || e.LookPath == nil || e.MkdirAll == nil || e.ReadFile == nil || e.Stat == nil || e.WriteFile == nil || e.Chmod == nil || e.Run == nil || e.RunInteractive == nil || e.Confirm == nil || e.RunOutput == nil || e.RunStdin == nil || e.Symlink == nil || e.Remove == nil || e.DownloadHTTP == nil || e.AvailableMemoryMB == nil || e.RenderNodeVendor == nil || e.OpenUinput == nil {
+	if e.Executable == nil || e.BuildModifier == nil || e.LookPath == nil || e.MkdirAll == nil || e.ReadFile == nil || e.Stat == nil || e.WriteFile == nil || e.Chmod == nil || e.Run == nil || e.RunInteractive == nil || e.Confirm == nil || e.RunOutput == nil || e.RunStdin == nil || e.Symlink == nil || e.Remove == nil || e.DownloadHTTP == nil || e.AvailableMemoryMB == nil || e.RenderNodeVendor == nil || e.OpenUinput == nil || e.LoadModels == nil || e.ConfirmDownload == nil {
 		return fmt.Errorf("install: incomplete host effects")
 	}
 	userBin := filepath.Join(e.Home, ".local", "bin")
@@ -227,7 +254,7 @@ func InstallWithOptions(ctx context.Context, out io.Writer, e Effects, options I
 		}
 		settings.TTSEnabled = false
 	}
-	models, err := spec.LoadModels()
+	models, err := e.LoadModels()
 	if err != nil {
 		return fmt.Errorf("install: load model spec: %w", err)
 	}
@@ -239,22 +266,28 @@ func InstallWithOptions(ctx context.Context, out io.Writer, e Effects, options I
 	if !validR2T2URL {
 		return fmt.Errorf("install: %s base_url %q must use http://127.0.0.1:<port>", R2T2FallbackModel, r2t2Model.BaseURL)
 	}
+	llamaServerPath, llamaErr := resolveLlamaServerPath(e, settings.LlamaServerPath)
+	if options.R2T2Repair {
+		return repairR2T2(ctx, out, e, settings, models, r2t2Port, llamaServerPath, llamaErr, options.AssumeYes)
+	}
 	r2t2Active := IsR2T2Active(settings.ASRModel, models)
+	// r2t2Reason says why a selected fallback stays disabled. It is a warning,
+	// never an install error (issue 222).
+	r2t2Reason := ""
 	if r2t2Active {
-		for _, name := range []string{"Confucius4-R2T2-Q4_K_M.gguf", "mmproj-Confucius4-R2T2-Q8_0.gguf"} {
-			path := filepath.Join(e.Home, ".cache", "voxi", "models", name)
-			info, err := e.Stat(path)
+		switch {
+		case llamaErr != nil:
+			r2t2Reason = "llama-server is not on PATH (install llama-server, or set llama_server_path in ~/.config/voxi/config.yaml)"
+		default:
+			r2t2Reason, err = ensureR2T2Files(ctx, out, e, r2t2Model.Files, false)
 			if err != nil {
-				return fmt.Errorf("install: R2T2 is selected but model file is unavailable at %s: %w", path, err)
-			}
-			if !info.Mode().IsRegular() {
-				return fmt.Errorf("install: R2T2 model path is not a regular file: %s", path)
+				return err
 			}
 		}
-	}
-	llamaServerPath, llamaErr := resolveLlamaServerPath(e, settings.LlamaServerPath)
-	if llamaErr != nil && r2t2Active {
-		return fmt.Errorf("install: R2T2 is selected but llama-server could not be resolved; set llama_server_path in ~/.config/voxi/config.yaml or install llama-server on PATH: %w", llamaErr)
+		if r2t2Reason != "" {
+			r2t2Active = false
+			fmt.Fprintf(out, "[R2T2 service] warning: %s; voxi-r2t2.service stays disabled. Fix this and run `voxi install --r2t2` or `voxi doctor --fix`\n", r2t2Reason)
+		}
 	}
 	if llamaErr != nil {
 		// The unit is installed even when disabled. Keep a valid absolute
@@ -363,8 +396,7 @@ func InstallWithOptions(ctx context.Context, out io.Writer, e Effects, options I
 				data = bytes.ReplaceAll(data, []byte("@DOTOOL_XKB_LAYOUT@"), []byte(layout))
 			}
 			if name == "voxi-r2t2.service" {
-				data = bytes.ReplaceAll(data, []byte("@LLAMA_SERVER_PATH@"), []byte(llamaServerPath))
-				data = bytes.ReplaceAll(data, []byte("@R2T2_PORT@"), []byte(r2t2Port))
+				data = r2t2UnitData(data, llamaServerPath, r2t2Port)
 			}
 			if err := e.WriteFile(filepath.Join(serviceDir, name), data, 0644); err != nil {
 				return fmt.Errorf("write %s: %w", name, err)
@@ -399,7 +431,11 @@ func InstallWithOptions(ctx context.Context, out io.Writer, e Effects, options I
 			if err := e.Run(ctx, "systemctl", "--user", "disable", "--now", "voxi-r2t2.service"); err != nil {
 				return fmt.Errorf("disable/stop voxi-r2t2.service: %w", err)
 			}
-			fmt.Fprintf(out, "[R2T2 service] disabled (selected ASR model %q does not use a loopback openai-transcribe endpoint)\n", settings.ASRModel)
+			if r2t2Reason != "" {
+				fmt.Fprintf(out, "[R2T2 service] disabled: %s\n", r2t2Reason)
+			} else {
+				fmt.Fprintf(out, "[R2T2 service] disabled (selected ASR model %q does not use a loopback openai-transcribe endpoint)\n", settings.ASRModel)
+			}
 		}
 		return nil
 	}); err != nil {
@@ -444,6 +480,110 @@ func InstallWithOptions(ctx context.Context, out io.Writer, e Effects, options I
 		}
 		return nil
 	})
+}
+
+// r2t2UnitData fills the placeholders of voxi-r2t2.service.
+func r2t2UnitData(unit []byte, llamaServerPath, port string) []byte {
+	unit = bytes.ReplaceAll(unit, []byte("@LLAMA_SERVER_PATH@"), []byte(llamaServerPath))
+	return bytes.ReplaceAll(unit, []byte("@R2T2_PORT@"), []byte(port))
+}
+
+// ensureR2T2Files makes every R2T2 weight file present and verified in
+// ~/.cache/voxi/models. A file that is already verified is kept. Otherwise it
+// is downloaded after the user confirms (or without asking when accept is set)
+// and checked against its size and sha256 before it is renamed into place.
+// It returns a reason when the fallback cannot run; a declined or failed
+// download is a reason, not an error, so install never fails on it.
+func ensureR2T2Files(ctx context.Context, out io.Writer, e Effects, files []spec.ModelFile, accept bool) (string, error) {
+	dir := filepath.Join(e.Home, ".cache", "voxi", "models")
+	for _, f := range files {
+		path := filepath.Join(dir, f.Name)
+		if r2t2FileVerified(e, path, f) {
+			continue
+		}
+		size := humanBytes(f.SizeBytes)
+		if !accept {
+			ok, err := e.ConfirmDownload(fmt.Sprintf("Download %s (%s) from %s for the R2T2 fallback?", f.Name, size, f.URL))
+			if err := ctx.Err(); err != nil {
+				return "", err
+			}
+			if err != nil {
+				return fmt.Sprintf("could not ask about %s (%v)", f.Name, err), nil
+			}
+			if !ok {
+				return fmt.Sprintf("model file %s is missing or does not match its sha256 and was not downloaded", path), nil
+			}
+		}
+		if err := e.MkdirAll(dir, 0755); err != nil {
+			return "", fmt.Errorf("create %s: %w", dir, err)
+		}
+		fmt.Fprintf(out, "[R2T2 files] downloading %s (%s); this can take several minutes\n", f.Name, size)
+		if err := downloadVerified(ctx, e, f.URL, path, f.SHA256); err != nil {
+			if err := ctx.Err(); err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("download of %s failed (%v)", f.Name, err), nil
+		}
+		fmt.Fprintf(out, "[R2T2 files] %s verified\n", f.Name)
+	}
+	return "", nil
+}
+
+// r2t2FileVerified reports whether path is a regular file with the spec's size
+// and sha256. The size is checked first, so a truncated download is never hashed.
+func r2t2FileVerified(e Effects, path string, f spec.ModelFile) bool {
+	info, err := e.Stat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Size() != f.SizeBytes {
+		return false
+	}
+	return verifySHA256(path, f.SHA256) == nil
+}
+
+// humanBytes formats a size for the download prompt, in GiB or MiB.
+func humanBytes(n int64) string {
+	if n >= 1<<30 {
+		return fmt.Sprintf("%.2f GiB", float64(n)/(1<<30))
+	}
+	return fmt.Sprintf("%.0f MiB", float64(n)/(1<<20))
+}
+
+// repairR2T2 is `voxi install --r2t2`, the R2T2 part of `voxi doctor --fix`:
+// it fetches missing model files, writes voxi-r2t2.service with the resolved
+// llama-server, and enables it. Unlike a normal install, every failure is an
+// error, because the repair exists to make the fallback run.
+func repairR2T2(ctx context.Context, out io.Writer, e Effects, settings *config.UserSettings, models *spec.ModelSpec, port, llamaServerPath string, llamaErr error, assumeYes bool) error {
+	if !IsR2T2Active(settings.ASRModel, models) {
+		return fmt.Errorf("R2T2 fallback is not the selected ASR model (asr_model %q); select it with `voxi settings set model %s`", settings.ASRModel, R2T2FallbackModel)
+	}
+	if llamaErr != nil {
+		return fmt.Errorf("llama-server could not be resolved (install llama-server or set llama_server_path in ~/.config/voxi/config.yaml): %w", llamaErr)
+	}
+	reason, err := ensureR2T2Files(ctx, out, e, models.Models[R2T2FallbackModel].Files, assumeYes)
+	if err != nil {
+		return err
+	}
+	if reason != "" {
+		return fmt.Errorf("R2T2 fallback not repaired: %s", reason)
+	}
+	serviceDir := filepath.Join(e.Home, ".config", "systemd", "user")
+	if err := e.MkdirAll(serviceDir, 0755); err != nil {
+		return fmt.Errorf("create %s: %w", serviceDir, err)
+	}
+	unit, err := voxi.ServiceAsset("voxi-r2t2.service")
+	if err != nil {
+		return fmt.Errorf("read embedded voxi-r2t2.service: %w", err)
+	}
+	if err := e.WriteFile(filepath.Join(serviceDir, "voxi-r2t2.service"), r2t2UnitData(unit, llamaServerPath, port), 0644); err != nil {
+		return fmt.Errorf("write voxi-r2t2.service: %w", err)
+	}
+	if err := e.Run(ctx, "systemctl", "--user", "daemon-reload"); err != nil {
+		return fmt.Errorf("reload user manager: %w", err)
+	}
+	if err := e.Run(ctx, "systemctl", "--user", "enable", "--now", "voxi-r2t2.service"); err != nil {
+		return fmt.Errorf("enable/start voxi-r2t2.service: %w", err)
+	}
+	fmt.Fprintln(out, "[R2T2 service] enabled and started; the model loads for a while before it answers")
+	return nil
 }
 
 // LoopbackEndpointPort parses rawURL and returns the port number if rawURL is an http://127.0.0.1:<port> URL.
@@ -1107,21 +1247,33 @@ func NewCommand(e Effects, out io.Writer) *cobra.Command {
 	var modifierd bool
 	var noTTS bool
 	var voxcpm bool
+	var r2t2 bool
+	var yes bool
 	cmd := &cobra.Command{
 		Use:   "install",
 		Short: "Install Voxi for this user (optional: --modifierd needs sudo)",
 		Long: "Install the CLI and systemd user services under your home directory, then enable and start voxi-agent.service.\n" +
 			"When TTS tools are missing, Voxi asks before using sudo and the system package manager.\n" +
 			"When a GPU is present, Voxi installs the Vulkan CrispASR build and asks before installing the Vulkan driver (CPU transcription is the fallback).\n" +
-			"For typing, Voxi asks before adding a udev rule with sudo so the session can write /dev/uinput; without it, dotoold is not started.\n\n" +
-			"Use --no-tts to persistently opt out of TTS packages. Use --voxcpm to install the VoxCPM Vulkan runtime and cloned-voice model. Use --modifierd for the optional system-wide physical modifier daemon; it also requires sudo and Linux systemd.",
+			"For typing, Voxi asks before adding a udev rule with sudo so the session can write /dev/uinput; without it, dotoold is not started.\n" +
+			"When the R2T2 fallback is selected, Voxi asks before downloading its model files (about 1.4 GiB). Without them it warns and leaves voxi-r2t2.service disabled.\n\n" +
+			"Use --no-tts to persistently opt out of TTS packages. Use --voxcpm to install the VoxCPM Vulkan runtime and cloned-voice model. Use --modifierd for the optional system-wide physical modifier daemon; it also requires sudo and Linux systemd.\n" +
+			"Use --r2t2 to repair only the R2T2 fallback (`voxi doctor --fix` runs it); add --yes to download its model files without asking.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return InstallWithOptions(cmd.Context(), out, e, InstallOptions{Modifierd: modifierd, DisableTTS: noTTS, VoxCPM: voxcpm})
+			if r2t2 && (modifierd || noTTS || voxcpm) {
+				return fmt.Errorf("--r2t2 repairs only the R2T2 fallback and cannot be combined with --modifierd, --no-tts or --voxcpm")
+			}
+			if yes && !r2t2 {
+				return fmt.Errorf("--yes applies to the R2T2 model download and needs --r2t2")
+			}
+			return InstallWithOptions(cmd.Context(), out, e, InstallOptions{Modifierd: modifierd, DisableTTS: noTTS, VoxCPM: voxcpm, R2T2Repair: r2t2, AssumeYes: yes})
 		},
 	}
 	cmd.Flags().BoolVar(&modifierd, "modifierd", false, "also install the optional system-wide modifier daemon (requires sudo)")
 	cmd.Flags().BoolVar(&noTTS, "no-tts", false, "disable TTS and skip Festival/espeak-ng system packages")
 	cmd.Flags().BoolVar(&voxcpm, "voxcpm", false, "install the VoxCPM Vulkan runtime, model, and cloned-voice references")
+	cmd.Flags().BoolVar(&r2t2, "r2t2", false, "repair only the R2T2 fallback: fetch its model files and enable voxi-r2t2.service")
+	cmd.Flags().BoolVar(&yes, "yes", false, "with --r2t2, download the R2T2 model files without asking")
 	return cmd
 }

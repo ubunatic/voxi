@@ -184,5 +184,19 @@ models:
     response_format: json
     strip_before_marker: "<asr_text>"
     base_url: "http://127.0.0.1:18131/v1"
+    # The weight files voxi-r2t2.service loads from ~/.cache/voxi/models (issue
+    # 222). Install and `voxi doctor --fix` download them after the user
+    # confirms, and accept a file only when its size and sha256 match. Sizes
+    # and hashes are the Hugging Face LFS values (x-linked-size and
+    # x-linked-etag), about 1.4 GiB in total.
+    files:
+      - name: Confucius4-R2T2-Q4_K_M.gguf
+        url: "https://huggingface.co/netease-youdao/Confucius4-R2T2-GGUF/resolve/main/Confucius4-R2T2-Q4_K_M.gguf"
+        size_bytes: 1107404736
+        sha256: "fa3cb46c8c3a66a58812b9098ba6e96a0266d4e8c9b3cf5ba34432fd2f9f6466"
+      - name: mmproj-Confucius4-R2T2-Q8_0.gguf
+        url: "https://huggingface.co/netease-youdao/Confucius4-R2T2-GGUF/resolve/main/mmproj-Confucius4-R2T2-Q8_0.gguf"
+        size_bytes: 348336544
+        sha256: "8dc2c67e6a0484114928142d098db7ad94ae9f34c78948ef9d37a9678418cb65"
     requires_gpu: true
     stop_words: *common_stop_words

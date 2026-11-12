@@ -23,8 +23,11 @@ binary, user service units, CrispASR, Piper neural TTS engine and default voice 
 lmcoder; `voxi-r2t2.service` is the fallback and is enabled only when the
 selected model's endpoint matches its loopback address and port (the
 `r2t2-confucius4-voxi` entry). The R2T2
-unit's port comes from the model spec, and installation requires both weight
-files before enabling it. The `tts_enabled` setting defaults to true. Piper is
+unit's port comes from the model spec. Installation checks both weight files
+against their spec sizes and sha256 hashes. When they are missing, it asks
+before downloading them (about 1.4 GiB). A declined or failed download, or a
+missing `llama-server`, leaves the unit disabled with a warning. It never fails
+the install (issue 222). The `tts_enabled` setting defaults to true. Piper is
 installed as a self-contained C++ release archive into `~/.local/lib/voxi/piper/`
 (symlinked to `~/.local/bin/piper`) with voice models staged in `~/.local/share/voxi/voices/`,
 requiring zero `pip` or global Python dependencies. If fallback TTS
@@ -164,6 +167,30 @@ Voxi avoids this entirely through its system service architecture:
    started and the install says how to finish. This avoids the systemd start-limit
    failure that aborted the install before. The security stance matches
    [VoiceInput.md](VoiceInput.md#security-note-uinput-access-is-not-gated-by-voice-input).
+
+## R2T2 fallback model files (issue 222)
+
+The `r2t2-confucius4-voxi` entry in `spec/models.yaml` lists its two weight files
+with their Hugging Face URL, byte size and sha256. On a fresh machine, when this
+model is selected, `voxi install` does the following for each file:
+
+1. A file in `~/.cache/voxi/models` whose size and sha256 match the spec is kept.
+2. Otherwise it asks `Download <file> (<size>) from <host>? [y/N]`. The default is
+   no, and without a terminal the answer is no.
+3. An accepted download goes to `<file>.partial`, is checked against the spec's sha256,
+   and is renamed into place only when it matches. A mismatch is reported and the partial
+   file is removed.
+4. When a file is declined, fails or does not match, or `llama-server` is not on `PATH`,
+   `voxi-r2t2.service` stays disabled and the install prints a warning that says how to fix it.
+
+`voxi doctor --fix` offers the same repair when the R2T2 fallback fails its probe. It runs
+`voxi install --r2t2 --yes`, which skips the second prompt because doctor has already asked.
+`voxi install --r2t2` on its own runs only this repair and asks first. It is an error when
+`r2t2-confucius4-voxi` is not the selected model. `llama-server` is only checked and reported:
+Voxi does not install it, because package names differ between distributions. Set
+`llama_server_path` in `~/.config/voxi/config.yaml` when the binary is elsewhere.
+
+The lmcoder-served `r2t2-confucius4` entry (issue 181) does not use these files.
 
 ## Verification & Diagnostic Probes
 
