@@ -101,6 +101,63 @@ one's scope:
    devices by name and configure per-device whether Voxi should pause for
    them, overriding the automatic speaker/headphone heuristic above.
 
+## 7. Outcome (2026-11-16, commit 95aa701)
+
+Built as scoped in Section 2. User documentation: `docs/VoiceInput.md`,
+section "Media Pause During Recording".
+
+**Canary** (`scripts/canary-media-pause.sh`, run with `systemd-run --user`
+so it has the context of `voxi-agent.service`): the session bus is
+reachable without extra privileges. Firefox answered `Pause` in 4 ms and
+reported `Paused` after 6 ms; `Play` likewise. One measurement on one
+machine with one player.
+
+**Decisions on the open questions (Section 4)**
+
+- D-Bus directly from Go with `github.com/godbus/dbus/v5`, which was already
+  a dependency (voxi's TTS player uses it). No `playerctl` runtime dependency.
+- One canonical hook: `runEagerCaptureSessionAt` in `internal/eager/eager.go`,
+  next to the TTS playback mute, including the failed-capture-start path.
+  The non-eager voxtype path (`internal/record`) is a short-lived CLI per
+  toggle and is **not** covered.
+- Default is **on**, against the ticket's off-by-default lean: the owner
+  asked for playback to stop "always" when a recording starts. The switch is
+  the user setting `pause_media` (`voxi settings set pause_media off`), read
+  per session; the time limit and the excluded bus names are in
+  `spec/eager.yaml` (`media_pause`).
+
+**Design points**
+
+- `internal/media.Pauser` runs each pause or resume pass in the background,
+  in request order, so a pass never delays recording start or stop.
+- Calls go to the player's unique bus owner, so a player that restarted
+  during the recording is never resumed.
+- Resume sends `Play` only to a player that still reports `Paused`.
+- Excluded: voxi's own TTS player (a recording stops TTS for good, issue
+  152) and the `playerctld` proxy, which would forward to a real player.
+- The bus address is taken from the injected environment; with none there
+  is no pauser, which keeps tests away from the developer's players.
+
+**Live verification** on the dev machine against Firefox, through the
+restarted `voxi-agent.service`:
+
+- playing player: `Paused` 25 ms after `voxi record start`, `Playing`
+  20 ms after `voxi record stop`;
+- player paused by hand before the recording: stayed paused after stop;
+- player resumed by hand during the recording: left alone at stop (journal:
+  `is now "Playing", left alone`);
+- `pause_media off`: player kept playing through a recording.
+
+**Known limits**
+
+- An explicit `start` while a recording runs ends that session and begins a
+  new one: players are resumed and paused again, an audible blip. A player
+  slow to report `Playing` in between could stay playing. Not seen live.
+- If the daemon is killed during a recording, the players it paused stay
+  paused.
+- Section 5 items (headphone detection, per-device settings) stay deferred;
+  no follow-up tickets were filed.
+
 ## 6. Verification Guidance
 
 - Canary first (per `docs/Canary.md`): confirm MPRIS pause/resume works
