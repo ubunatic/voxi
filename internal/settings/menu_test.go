@@ -10,8 +10,8 @@ func TestMenuModelNavigation(t *testing.T) {
 	s := config.DefaultUserSettings()
 	m := NewMenuModel(s, nil)
 
-	if len(m.Items) != 11 {
-		t.Fatalf("expected 11 items (incl. Bluetooth Mic Gain), got %d", len(m.Items))
+	if len(m.Items) != 12 {
+		t.Fatalf("expected 12 items (incl. Pause Media and Bluetooth Mic Gain), got %d", len(m.Items))
 	}
 	if m.Cursor != 0 {
 		t.Fatalf("expected initial cursor 0, got %d", m.Cursor)
@@ -50,6 +50,7 @@ func TestMenuModelTogglesAndCycles(t *testing.T) {
 		TypeDelayMs:      0,
 		DictationHistory: true,
 		ModifierGating:   true,
+		PauseMedia:       true,
 	}
 	m := NewMenuModel(s, []string{"cohere-transcribe-03-2026", "large-v3-turbo", "small.en", "base.en"})
 
@@ -107,8 +108,18 @@ func TestMenuModelTogglesAndCycles(t *testing.T) {
 		t.Errorf("next delay = %s, want 1ms", m.CurrentItem().Choices[m.CurrentItem().ChoiceIndex])
 	}
 
-	// 6. Save action (Cursor 9; row 8 is Bluetooth Mic Gain)
-	m.Cursor = 9
+	// 6. Pause Media While Recording (Cursor 7): Toggle bool
+	m.Cursor = 7
+	if m.CurrentItem().ID != "pause_media" || !m.CurrentItem().BoolValue {
+		t.Fatalf("row 7 = %s (%v), want pause_media showing the saved true", m.CurrentItem().ID, m.CurrentItem().BoolValue)
+	}
+	m.ToggleOrNext()
+	if got := m.ToUserSettings(s).PauseMedia; got {
+		t.Errorf("PauseMedia after toggle = %v, want false", got)
+	}
+
+	// 7. Save action (Cursor 10; row 9 is Bluetooth Mic Gain)
+	m.Cursor = 10
 	m.ToggleOrNext()
 	if !m.Saved || !m.Closed {
 		t.Errorf("expected Saved=true, Closed=true on Save row action")

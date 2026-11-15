@@ -97,6 +97,31 @@ queue by default; use `--no-llm` to read the original input. See
 keys control playback. Starting dictation stops TTS before capture, while a
 failed TTS stop only emits a warning and cannot block recording.
 
+### Media Pause During Recording
+
+In eager mode, starting a recording pauses every media player that is playing
+(browser tabs, music and video players), so their sound does not reach the
+microphone. When the recording ends, Voxi resumes exactly the players it
+paused. It leaves alone a player that was already paused before the recording,
+one you stopped or restarted yourself while recording, and one that quit.
+
+Players are reached over MPRIS, the desktop's standard media-player interface
+on the session D-Bus, so audio from a program without MPRIS keeps playing.
+Voxi's own TTS player is not part of this: a recording stops TTS for good.
+
+The pause runs in the background and fails open: with no session bus, no
+players or a player that does not answer, the recording starts and stops as
+usual and a line in `journalctl --user -u voxi-agent.service` says what
+happened. Each pass has a time limit (`media_pause.timeout_ms` in
+`spec/eager.yaml`), and `media_pause.exclude_players` lists bus names that are
+never paused.
+
+The feature is on by default. Turn it off or on with
+`voxi settings set pause_media off` (or `on`), or `pause_media: false` in
+`~/.config/voxi/config.yaml`; the change applies to the next recording, no
+restart needed. `scripts/canary-media-pause.sh` checks that pause and resume
+work from the systemd user context on a given machine (issue 125).
+
 ## Commands
 
 ```text

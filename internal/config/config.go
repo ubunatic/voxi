@@ -44,6 +44,9 @@ type UserSettings struct {
 	// BluetoothMicGain overrides the spec's Bluetooth default-source gain
 	// (issue 210 M5). 0 means unset: the spec default applies. Read per session.
 	BluetoothMicGain float64 `json:"bluetooth_mic_gain" yaml:"bluetooth_mic_gain,omitempty"`
+	// PauseMedia pauses playing media players while a dictation recording runs
+	// and resumes the ones voxi paused when it ends (issue 125). Read per session.
+	PauseMedia bool `json:"pause_media" yaml:"pause_media"`
 }
 
 // EffectiveBluetoothMicGain is the Bluetooth default-source gain: the
@@ -79,6 +82,7 @@ func DefaultUserSettings() *UserSettings {
 		DictationHistory: true,
 		ModifierGating:   true,
 		TTSEnabled:       true,
+		PauseMedia:       true,
 	}
 }
 

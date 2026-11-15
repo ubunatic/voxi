@@ -51,6 +51,7 @@ func NewCommand(d deps.Dependencies, availableASRModels []string) *cobra.Command
 			"  • TTS Backend (tts_backend)\n" +
 			"  • Keystroke Delay (type_delay_ms)\n" +
 			"  • Bluetooth Mic Gain (bluetooth_mic_gain; 1 = off, default = spec value)\n" +
+			"  • Pause Media While Recording (pause_media)\n" +
 			"  • Dictation History\n" +
 			"  • Modifier Key Gating (voxi-modifierd)\n\n" +
 			"Pass --test (or 'voxi settings test') to verify that all configured features\n" +
@@ -146,6 +147,8 @@ func NewCommand(d deps.Dependencies, availableASRModels []string) *cobra.Command
 				s.DictationHistory = val == "true" || val == "1" || val == "on"
 			case "modifier_gating", "modifiers":
 				s.ModifierGating = val == "true" || val == "1" || val == "on"
+			case "pause_media":
+				s.PauseMedia = val == "true" || val == "1" || val == "on"
 			case "bluetooth_mic_gain", "bluetooth_gain":
 				bm, err := bluetoothGainSpec()
 				if err != nil {

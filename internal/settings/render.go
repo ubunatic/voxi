@@ -154,7 +154,13 @@ func RenderSummary(s *config.UserSettings, home string) string {
 	if s.ModifierGating {
 		modStatus = "[✓] Enabled"
 	}
-	b.WriteString(fmt.Sprintf("  %-22s %s\n\n", "Modifier Gating:", modStatus))
+	b.WriteString(fmt.Sprintf("  %-22s %s\n", "Modifier Gating:", modStatus))
+
+	mediaStatus := "[ ] Disabled"
+	if s.PauseMedia {
+		mediaStatus = "[✓] Enabled"
+	}
+	b.WriteString(fmt.Sprintf("  %-22s %s\n\n", "Pause Media:", mediaStatus))
 
 	b.WriteString("Config Files:\n")
 	b.WriteString(fmt.Sprintf("  YAML: %s\n", config.VoxiConfigYAMLPath(home)))

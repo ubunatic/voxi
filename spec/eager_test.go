@@ -8,7 +8,11 @@ import (
 // validDrain is appended to the ad hoc modifier_gate documents below so a
 // rejection is attributable to the field under test rather than to the
 // unrelated, now also-required drain section.
-const validDrain = "\ndrain: {delivery_deadline_ms: 60000, injection_timeout_ms: 15000}\n" + validMicCheck + validBluetoothMic
+const validDrain = "\ndrain: {delivery_deadline_ms: 60000, injection_timeout_ms: 15000}\n" + validMicCheck + validBluetoothMic + validMediaPause
+
+// validMediaPause keeps the also-required media_pause section (issue 125) out
+// of the way of tests aimed at other fields.
+const validMediaPause = "\nmedia_pause: {timeout_ms: 1000, exclude_players: []}\n"
 
 // validMicCheck keeps the also-required mic_check section (issue 177) out of
 // the way of tests aimed at other fields.
@@ -101,7 +105,7 @@ func TestParseEagerSpecRejectsUnsafeDrain(t *testing.T) {
 
 func TestParseEagerSpecMicCheck(t *testing.T) {
 	const base = "energy_gate: {threshold_rms: 150, min_mean_rms: 120, min_voiced_frames: 8, min_voiced_run_frames: 7}\nmodifier_gate: {timeout_ms: 10000, start_grace_ms: 750, notify_delay_ms: 500}\ndrain: {delivery_deadline_ms: 60000, injection_timeout_ms: 15000}\n"
-	if _, err := parseEagerSpec([]byte(base + validMicCheck + validBluetoothMic)); err != nil {
+	if _, err := parseEagerSpec([]byte(base + validMicCheck + validBluetoothMic + validMediaPause)); err != nil {
 		t.Fatalf("valid mic_check rejected: %v", err)
 	}
 	cases := map[string]string{
@@ -114,5 +118,38 @@ func TestParseEagerSpecMicCheck(t *testing.T) {
 		if _, err := parseEagerSpec([]byte(base + doc)); err == nil {
 			t.Errorf("parseEagerSpec(%s) expected an error, got nil", name)
 		}
+	}
+}
+
+func TestLoadEagerMediaPause(t *testing.T) {
+	s, err := LoadEager()
+	if err != nil {
+		t.Fatalf("LoadEager() error = %v", err)
+	}
+	if got, want := s.MediaPauseTimeout().Milliseconds(), int64(s.MediaPause.TimeoutMs); got != want || got <= 0 {
+		t.Errorf("MediaPauseTimeout() = %vms, want positive %vms", got, want)
+	}
+	if !contains(s.MediaPause.ExcludePlayers, "org.mpris.MediaPlayer2.playerctld") {
+		t.Errorf("ExcludePlayers = %v, want the playerctld proxy", s.MediaPause.ExcludePlayers)
+	}
+}
+
+func TestParseEagerSpecMediaPause(t *testing.T) {
+	const base = "energy_gate: {threshold_rms: 150, min_mean_rms: 120, min_voiced_frames: 8, min_voiced_run_frames: 7}\nmodifier_gate: {timeout_ms: 10000, start_grace_ms: 750, notify_delay_ms: 500}\ndrain: {delivery_deadline_ms: 60000, injection_timeout_ms: 15000}\n" + validMicCheck + validBluetoothMic
+	if _, err := parseEagerSpec([]byte(base + validMediaPause)); err != nil {
+		t.Fatalf("valid media_pause rejected: %v", err)
+	}
+	cases := map[string]string{
+		"missing":          "",
+		"zero timeout":     "media_pause: {timeout_ms: 0, exclude_players: []}",
+		"negative timeout": "media_pause: {timeout_ms: -5, exclude_players: []}",
+		"empty name":       `media_pause: {timeout_ms: 1000, exclude_players: [""]}`,
+	}
+	for name, doc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if _, err := parseEagerSpec([]byte(base + doc)); err == nil {
+				t.Errorf("parseEagerSpec(%s) expected an error, got nil", name)
+			}
+		})
 	}
 }

@@ -111,3 +111,16 @@ bluetooth_mic:
   # Line voxi writes into its drop-in when it turned autoswitch off (prefix + "true");
   # `--off` restores autoswitch only when this line is present.
   restore_record_prefix: "# voxi-restore-autoswitch: "
+
+# Media pause during recording (issue 125). When a recording starts, voxi pauses
+# every MPRIS media player that is playing; when it ends, voxi resumes the
+# players it paused that are still paused. Both passes run beside the recording
+# and never delay it. The user switch is pause_media in config.yaml.
+media_pause:
+  # Budget for one whole pause or resume pass over all players (session D-Bus).
+  # Measured 2026-11-16 with scripts/canary-media-pause.sh: Firefox answers
+  # Pause and Play in 4 ms, so this only bounds a player that hangs.
+  timeout_ms: 1000
+  # Bus names that are never paused: proxies that mirror another player. Voxi's
+  # own TTS player is always skipped (a recording stops it for good, issue 152).
+  exclude_players: ["org.mpris.MediaPlayer2.playerctld"]

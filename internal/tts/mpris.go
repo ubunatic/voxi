@@ -11,6 +11,11 @@ import (
 	"github.com/godbus/dbus/v5/prop"
 )
 
+// MPRISName is the session-bus name voxi's TTS player owns. Recording must
+// never pause-and-resume it like other players (issue 125): a recording stops
+// TTS for good (issue 152).
+const MPRISName = mprisName
+
 const (
 	mprisName = "org.mpris.MediaPlayer2.voxi"
 	mprisPath = dbus.ObjectPath("/org/mpris/MediaPlayer2")

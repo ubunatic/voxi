@@ -104,6 +104,9 @@ func runEagerDaemon(ctx context.Context, d deps.Dependencies, opts EagerOptions)
 	if err != nil {
 		return fmt.Errorf("eager: load eager spec: %w", err)
 	}
+	// One pauser for the daemon's lifetime keeps pause and resume passes of
+	// consecutive sessions in order (issue 125).
+	opts.mediaPauser = newMediaPauser(d, eagerSpec)
 
 	recorder := telemetry.NewRecorder(telemetry.Path(d.Getenv("XDG_DATA_HOME"), d.Getenv("HOME")))
 	var sessions *eagerSessionManager
@@ -226,6 +229,9 @@ func runEagerDaemon(ctx context.Context, d deps.Dependencies, opts EagerOptions)
 	// transcription, and so a final queued utterance still gets typed before
 	// the daemon process exits.
 	sessions.Wait()
+	// The last session queued its media resume in the background; let it reach
+	// the players before the process exits (bounded by media_pause.timeout_ms).
+	opts.mediaPauser.Wait()
 
 	return nil
 }

@@ -8,7 +8,8 @@
     "modifier_gate",
     "drain",
     "mic_check",
-    "bluetooth_mic"
+    "bluetooth_mic",
+    "media_pause"
   ],
   "properties": {
     "energy_gate": {
@@ -207,6 +208,31 @@
           "minimum": 0,
           "maximum": 10000,
           "description": "How long to wait for WirePlumber to apply a profile or default change."
+        }
+      },
+      "additionalProperties": false
+    },
+    "media_pause": {
+      "type": "object",
+      "description": "Pausing MPRIS media players for the duration of a recording (issue 125).",
+      "required": [
+        "timeout_ms",
+        "exclude_players"
+      ],
+      "properties": {
+        "timeout_ms": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 10000,
+          "description": "Budget in milliseconds for one whole pause or resume pass over all players."
+        },
+        "exclude_players": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^org\\.mpris\\.MediaPlayer2\\."
+          },
+          "description": "Session-bus names of MPRIS players that are never paused."
         }
       },
       "additionalProperties": false

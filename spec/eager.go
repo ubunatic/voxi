@@ -88,6 +88,13 @@ func (bm BluetoothMicSpec) IsBluetoothNode(deviceAPI, nodeName string) bool {
 	return bm.IsBluetoothDevice(deviceAPI) || strings.HasPrefix(nodeName, bm.NodePrefix)
 }
 
+// MediaPauseSpec tunes pausing MPRIS media players for the duration of a
+// recording (issue 125, internal/media).
+type MediaPauseSpec struct {
+	TimeoutMs      int      `yaml:"timeout_ms"`
+	ExcludePlayers []string `yaml:"exclude_players"`
+}
+
 // EagerSpec is the parsed contents of spec/eager.yaml.
 type EagerSpec struct {
 	EnergyGate   EnergyGateSpec   `yaml:"energy_gate"`
@@ -95,6 +102,7 @@ type EagerSpec struct {
 	Drain        DrainSpec        `yaml:"drain"`
 	MicCheck     MicCheckSpec     `yaml:"mic_check"`
 	BluetoothMic BluetoothMicSpec `yaml:"bluetooth_mic"`
+	MediaPause   MediaPauseSpec   `yaml:"media_pause"`
 }
 
 // minInjectionTimeoutMs is the physical-modifier-release wait inside
@@ -176,7 +184,20 @@ func parseEagerSpec(data []byte) (*EagerSpec, error) {
 	if bm.RestoreRecordPrefix == "" {
 		return nil, fmt.Errorf("spec: bluetooth_mic.restore_record_prefix must not be empty")
 	}
+	if s.MediaPause.TimeoutMs <= 0 {
+		return nil, fmt.Errorf("spec: media_pause.timeout_ms must be positive")
+	}
+	for _, name := range s.MediaPause.ExcludePlayers {
+		if strings.TrimSpace(name) == "" {
+			return nil, fmt.Errorf("spec: media_pause.exclude_players must not contain an empty name")
+		}
+	}
 	return &s, nil
+}
+
+// MediaPauseTimeout converts MediaPause.TimeoutMs to a time.Duration.
+func (s *EagerSpec) MediaPauseTimeout() time.Duration {
+	return time.Duration(s.MediaPause.TimeoutMs) * time.Millisecond
 }
 
 // ModifierTimeout converts ModifierGate.TimeoutMs to a time.Duration.

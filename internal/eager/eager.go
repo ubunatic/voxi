@@ -20,6 +20,7 @@ import (
 	"ubunatic.com/voxi/internal/deps"
 	"ubunatic.com/voxi/internal/feedback"
 	"ubunatic.com/voxi/internal/history"
+	"ubunatic.com/voxi/internal/media"
 	"ubunatic.com/voxi/internal/speechcontext"
 	"ubunatic.com/voxi/internal/telemetry"
 	"ubunatic.com/voxi/internal/typing"
@@ -47,6 +48,9 @@ type EagerOptions struct {
 	// AudioCapture optionally overrides audio capture (e.g. for testing without audio hardware).
 	AudioCapture          AudioCapture
 	audioFailurePublisher *eagerAudioFailurePublisher
+	// mediaPauser pauses media players for each capture session (issue 125).
+	// Nil, the value in tests, does nothing.
+	mediaPauser *media.Pauser
 }
 
 // DefaultEagerOptions returns standard defaults for eager sentence streaming dictation.
@@ -267,6 +271,11 @@ func RunEagerDictation(ctx context.Context, d deps.Dependencies, opts EagerOptio
 		_ = recorder.Record(telemetry.Event{Event: telemetry.MicDeactivated, Timestamp: time.Now(), SessionID: sessionID})
 	}()
 
+	if es, err := spec.LoadEager(); err == nil {
+		opts.mediaPauser = newMediaPauser(d, es)
+		// Let the resume queued at capture stop reach the players before exit.
+		defer opts.mediaPauser.Wait()
+	}
 	return runEagerCaptureSessionAt(ctx, d, opts, tmpDir, recCmdName, recArgs, false, sessionID, nil, recorder, nil, nil)
 }
 
@@ -676,10 +685,15 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 		capture = newCommandAudioCapture(recCmdName, recArgs)
 	}
 
+	// Pause other media players first: it runs in the background and never
+	// delays the capture start (issue 125).
+	mediaPauser := sessionMediaPauser(d, opts.mediaPauser)
+	mediaPauser.Pause()
 	beginPlaybackMute(ctx, d)
 	audioOut, err := capture.Start(ctx)
 	if err != nil {
 		endPlaybackMute(ctx, d)
+		mediaPauser.Resume()
 		return fmt.Errorf("start audio capture: %w", err)
 	}
 	_ = recorder.Record(telemetry.Event{Event: telemetry.CaptureStarted, Timestamp: time.Now(), SessionID: sessionID})
@@ -799,6 +813,7 @@ func runEagerCaptureSessionAt(ctx context.Context, d deps.Dependencies, opts Eag
 	watch.stop()
 
 	endPlaybackMute(ctx, d)
+	mediaPauser.Resume()
 	_ = recorder.Record(telemetry.Event{Event: telemetry.CaptureStopped, Timestamp: time.Now(), SessionID: sessionID})
 	signalCaptureStopped()
 

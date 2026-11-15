@@ -187,6 +187,13 @@ func NewMenuModel(s *config.UserSettings, availableASRModels []string) *MenuMode
 			BoolValue:   s.ModifierGating,
 		},
 		{
+			ID:          "pause_media",
+			Title:       "Pause Media While Recording",
+			Description: "Pause playing media players during dictation and resume the ones Voxi paused; applies to the next dictation session",
+			Kind:        ItemBool,
+			BoolValue:   s.PauseMedia,
+		},
+		{
 			ID:          "tts_backend",
 			Title:       "TTS Backend",
 			Description: "Text-to-speech engine: piper, voxcpm (cloned voice), or fallbacks; Save restarts voxi-agent.service",
@@ -392,6 +399,8 @@ func (m *MenuModel) ToUserSettings(base *config.UserSettings) *config.UserSettin
 			res.DictationHistory = item.BoolValue
 		case "modifier_gating":
 			res.ModifierGating = item.BoolValue
+		case "pause_media":
+			res.PauseMedia = item.BoolValue
 		}
 	}
 	return res
