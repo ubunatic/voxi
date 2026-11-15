@@ -1,6 +1,6 @@
 # 125: Pause Media Playback During Recording, Resume Only If Voxi Paused It
 
-**Status**: In Progress
+**Status**: Closed
 **Priority**: P3 (Low)
 **Severity**: Enhancement
 **Category**: Feature
