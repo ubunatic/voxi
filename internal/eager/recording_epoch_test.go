@@ -23,8 +23,20 @@ func (c *epochController) Control(action tts.Action) error {
 	return nil
 }
 
+// shortTempDir allocates a minimal temp directory under $TMPDIR so Unix
+// domain sockets stay well within Linux's 107-byte sun_path limit.
+func shortTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "vx")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
+}
+
 func TestEagerCaptureMutesAndUnmutesPlaybackEpoch(t *testing.T) {
-	runtimeDir := t.TempDir()
+	runtimeDir := shortTempDir(t)
 	controller := &epochController{}
 	ctx, cancel := context.WithCancel(context.Background())
 	server, err := tts.StartServer(ctx, tts.SocketPath(runtimeDir, os.Getuid()), controller)

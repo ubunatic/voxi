@@ -70,8 +70,20 @@ func TestSetModeRefusesActiveRecording(t *testing.T) {
 	}
 }
 
+// shortTempDir allocates a minimal temp directory under $TMPDIR so Unix
+// domain sockets stay well within Linux's 107-byte sun_path limit.
+func shortTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "vx")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
+}
+
 func TestServeClientCommands(t *testing.T) {
-	dir := t.TempDir()
+	dir := shortTempDir(t)
 	a, err := New(Options{StatePath: filepath.Join(dir, "agent.json")})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -111,14 +123,14 @@ func TestServeClientCommands(t *testing.T) {
 }
 
 func TestClientUnavailable(t *testing.T) {
-	client := Client{SocketPath: filepath.Join(t.TempDir(), "missing.sock")}
+	client := Client{SocketPath: filepath.Join(shortTempDir(t), "missing.sock")}
 	if _, err := client.Status(context.Background()); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("Status() error = %v, want ErrUnavailable", err)
 	}
 }
 
 func TestServeRefusesToReplaceNonSocket(t *testing.T) {
-	socketPath := filepath.Join(t.TempDir(), "agent.sock")
+	socketPath := filepath.Join(shortTempDir(t), "agent.sock")
 	if err := os.WriteFile(socketPath, []byte("do not replace"), 0600); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}

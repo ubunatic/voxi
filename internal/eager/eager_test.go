@@ -1327,10 +1327,7 @@ func TestRunEagerDaemonReachesReadyAndCleansTempDirOnSIGTERM(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	runtimeDir := filepath.Join(tmp, "runtime")
-	if err := os.MkdirAll(runtimeDir, 0755); err != nil {
-		t.Fatal(err)
-	}
+	runtimeDir := shortTempDir(t)
 	crispasrPath := filepath.Join(tmp, "fake-crispasr")
 
 	d := deps.Dependencies{

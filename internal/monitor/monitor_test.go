@@ -80,8 +80,20 @@ func (telemetryTTSController) Snapshot() tts.Snapshot {
 	return tts.Snapshot{Status: "playing", Current: "daemon speech", History: []tts.ChunkRecord{{ID: 1, Text: "daemon speech"}}}
 }
 
+// shortTempDir allocates a minimal temp directory under $TMPDIR so Unix
+// domain sockets stay well within Linux's 107-byte sun_path limit.
+func shortTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "vx")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
+}
+
 func TestMonitorReadsTTSStateAsSocketClient(t *testing.T) {
-	runtimeDir := t.TempDir()
+	runtimeDir := shortTempDir(t)
 	path := tts.SocketPath(runtimeDir, os.Getuid())
 	ctx, cancel := context.WithCancel(context.Background())
 	server, err := tts.StartServer(ctx, path, telemetryTTSController{})

@@ -55,8 +55,20 @@ func TestControlRecordingVoxtype(t *testing.T) {
 	}
 }
 
+// shortTempDir allocates a minimal temp directory under $TMPDIR so Unix
+// domain sockets stay well within Linux's 107-byte sun_path limit.
+func shortTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "vx")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
+}
+
 func TestBeginTTSRecordingEpochSendsMuteToDaemon(t *testing.T) {
-	runtimeDir := t.TempDir()
+	runtimeDir := shortTempDir(t)
 	t.Setenv("XDG_RUNTIME_DIR", runtimeDir)
 	events := make(chan string, 1)
 	controller := &recordingTTSController{events: events}
@@ -74,7 +86,7 @@ func TestBeginTTSRecordingEpochSendsMuteToDaemon(t *testing.T) {
 }
 
 func TestBeginTTSRecordingEpochWarnsAndContinuesAfterShortTimeout(t *testing.T) {
-	runtimeDir := t.TempDir()
+	runtimeDir := shortTempDir(t)
 	t.Setenv("XDG_RUNTIME_DIR", runtimeDir)
 	server, err := tts.StartServer(context.Background(), tts.SocketPath(runtimeDir, os.Getuid()), &delayedTTSController{delay: 600 * time.Millisecond})
 	if err != nil {
@@ -108,7 +120,7 @@ func (c *recordingTTSController) Control(action tts.Action) error {
 }
 
 func TestControlRecordingToggleTransitionsEpochOnIdle(t *testing.T) {
-	runtimeDir := t.TempDir()
+	runtimeDir := shortTempDir(t)
 	t.Setenv("XDG_RUNTIME_DIR", runtimeDir)
 	events := make(chan string, 2)
 	controller := &recordingTTSController{events: events}
@@ -202,7 +214,7 @@ func listenEagerSocket(t *testing.T, runtimeDir string) <-chan string {
 // must reach the eager daemon directly and must never require voxtype on
 // PATH.
 func TestControlRecordingDefaultEngineNoVoxtype(t *testing.T) {
-	runtimeDir := t.TempDir()
+	runtimeDir := shortTempDir(t)
 	t.Setenv("XDG_RUNTIME_DIR", runtimeDir)
 
 	received := listenEagerSocket(t, runtimeDir)
@@ -234,7 +246,7 @@ func TestControlRecordingDefaultEngineNoVoxtype(t *testing.T) {
 }
 
 func TestGetRecordingStatusDefaultEngineNoVoxtype(t *testing.T) {
-	runtimeDir := t.TempDir()
+	runtimeDir := shortTempDir(t)
 	t.Setenv("XDG_RUNTIME_DIR", runtimeDir)
 
 	d := deps.Dependencies{

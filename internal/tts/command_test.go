@@ -14,7 +14,7 @@ import (
 )
 
 func TestSayCommandArgumentsAndStdin(t *testing.T) {
-	runtimeDir := t.TempDir()
+	runtimeDir := shortTempDir(t)
 	controller := &recordingController{}
 	ctx, cancel := context.WithCancel(context.Background())
 	server, err := StartServer(ctx, SocketPath(runtimeDir, 0), controller)
@@ -63,7 +63,7 @@ func TestSayCommandArgumentsAndStdin(t *testing.T) {
 
 func TestSayCommandReportsNoMonitor(t *testing.T) {
 	home := t.TempDir()
-	runtimeDir := t.TempDir()
+	runtimeDir := shortTempDir(t)
 	d := deps.Dependencies{
 		Getenv: func(key string) string {
 			switch key {
@@ -110,7 +110,7 @@ func TestSayOfflineOutputDoesNotDialDaemon(t *testing.T) {
 }
 
 func TestSayCommandInterruptFromPrimaryRunsWlPasteAndReplaces(t *testing.T) {
-	runtimeDir := t.TempDir()
+	runtimeDir := shortTempDir(t)
 	controller := &recordingReplaceController{}
 	ctx, cancel := context.WithCancel(context.Background())
 	server, err := StartServer(ctx, SocketPath(runtimeDir, 0), controller)
@@ -145,7 +145,7 @@ func TestSayCommandInterruptFromPrimaryRunsWlPasteAndReplaces(t *testing.T) {
 }
 
 func TestSayCommandUsesLLMByDefaultAndContinuesSession(t *testing.T) {
-	runtimeDir := t.TempDir()
+	runtimeDir := shortTempDir(t)
 	home := t.TempDir()
 	controller := &recordingController{}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -209,7 +209,7 @@ func TestSayCommandUsesLLMByDefaultAndContinuesSession(t *testing.T) {
 
 func TestSayCommandLLMHostFlagOverridesConfig(t *testing.T) {
 	configHome := t.TempDir()
-	runtimeDir := t.TempDir()
+	runtimeDir := shortTempDir(t)
 	controller := &recordingController{}
 	ctx, cancel := context.WithCancel(context.Background())
 	server, err := StartServer(ctx, SocketPath(runtimeDir, 0), controller)
@@ -252,7 +252,7 @@ func TestSayCommandLLMHostFlagOverridesConfig(t *testing.T) {
 }
 
 func TestSayCommandFallsBackForRemainingTextWhenContinuationFails(t *testing.T) {
-	runtimeDir := t.TempDir()
+	runtimeDir := shortTempDir(t)
 	controller := &recordingController{}
 	ctx, cancel := context.WithCancel(context.Background())
 	server, err := StartServer(ctx, SocketPath(runtimeDir, 0), controller)

@@ -12,8 +12,20 @@ import (
 	"time"
 )
 
+// shortTempDir allocates a minimal temp directory under $TMPDIR so Unix
+// domain sockets stay well within Linux's 107-byte sun_path limit.
+func shortTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "vx")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
+}
+
 func TestClientWithoutMonitorFailsQuickly(t *testing.T) {
-	client := Client{SocketPath: filepath.Join(t.TempDir(), "missing.sock")}
+	client := Client{SocketPath: filepath.Join(shortTempDir(t), "missing.sock")}
 	started := time.Now()
 	_, err := client.Enqueue(context.Background(), "hello")
 	if !errors.Is(err, ErrNoMonitor) || !strings.Contains(err.Error(), "no monitor") {
@@ -25,7 +37,7 @@ func TestClientWithoutMonitorFailsQuickly(t *testing.T) {
 }
 
 func TestClientReportsConfigurationOptOutWhileMonitorRuns(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "tts.sock")
+	path := filepath.Join(shortTempDir(t), "tts.sock")
 	manager := NewManagerWithEnabled(context.Background(), &fakeBackend{}, false)
 	defer manager.Close()
 	server, err := StartServer(context.Background(), path, manager)
@@ -40,7 +52,7 @@ func TestClientReportsConfigurationOptOutWhileMonitorRuns(t *testing.T) {
 }
 
 func TestClientWithStaleSocketReportsNoMonitorQuickly(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "stale.sock")
+	path := filepath.Join(shortTempDir(t), "stale.sock")
 	stale, err := net.Listen("unix", path)
 	if err != nil {
 		t.Fatal(err)
@@ -60,7 +72,7 @@ func TestClientWithStaleSocketReportsNoMonitorQuickly(t *testing.T) {
 }
 
 func TestServerRemovesStaleSocketAndAcceptsRequest(t *testing.T) {
-	dir := t.TempDir()
+	dir := shortTempDir(t)
 	path := filepath.Join(dir, "tts.sock")
 	stale, err := net.Listen("unix", path)
 	if err != nil {
@@ -115,7 +127,7 @@ func TestServerRemovesStaleSocketAndAcceptsRequest(t *testing.T) {
 }
 
 func TestServerDoesNotReplaceActiveSocket(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "tts.sock")
+	path := filepath.Join(shortTempDir(t), "tts.sock")
 	ctx, cancel := context.WithCancel(context.Background())
 	server, err := StartServer(ctx, path, &recordingController{})
 	if err != nil {
