@@ -80,9 +80,14 @@ func TestDaemonsBoxASRLineOwnLine(t *testing.T) {
 			if asrLineIdx == -1 || procLineIdx == -1 || asrLineIdx > procLineIdx {
 				t.Errorf("expected ASR line before process list; asr idx=%d proc idx=%d", asrLineIdx, procLineIdx)
 			}
-			// Sanity: fits comfortably within a ~90-column terminal.
-			if w := StringDisplayWidth(asrLine); w > 90 {
-				t.Errorf("ASR line too wide for a 90-column terminal: %d", w)
+			// Sanity: the ASR content fits comfortably within a 90-column box,
+			// and the rendered box line stays within PrintVoiceResourceReport's
+			// 110-column cap regardless of the caller's /dev/tty width.
+			if w := StringDisplayWidth(asr.StripANSI(formatASRBackendLine(tc.state))); w > 86 {
+				t.Errorf("ASR content too wide for a 90-column box: %d", w)
+			}
+			if w := StringDisplayWidth(asrLine); w > 110 {
+				t.Errorf("ASR box line exceeds 110-column cap: %d", w)
 			}
 		})
 	}
