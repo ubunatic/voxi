@@ -1,6 +1,6 @@
 # 223 — Categorize replacement rules (jargon vs repair) for sample annotation and benchmarks
 
-**Status**: Open
+**Status**: Closed — Delivered M1 (ae920e3: Replacement.Category, Filter/ApplyReplacementsByCategory, voxi feedback replacement add --category/set-category/list, VoiceInput.md) and M2 (c32c43a: voxi bench --replacements none|jargon|all); full make test passed across all packages (zero failures), live replacement list shows all 10 rules categorized as [jargon]
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Feature
