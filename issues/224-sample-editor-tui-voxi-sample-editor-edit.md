@@ -1,6 +1,6 @@
 # 224 — Sample editor TUI (voxi sample editor / edit)
 
-**Status**: Open
+**Status**: Closed — Delivered loom-based sample editor TUI via voxi sample editor and bare voxi sample edit across M1 (c65065a), M2 (a3272d5), and M3 (ba37629): purpose tabs, live search, transcript/keyterms editing (Store.UpdateDetails), purpose moves with voice consent, delete, playback, mic/recent-chunk import, and docs/SampleStore.md update. Verified with make test (all packages ok, internal/sample 1.091s), make lint (66 baseline issues), make install, live PTY checks, and three reviewer passes (M3 severity: none).
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Feature
