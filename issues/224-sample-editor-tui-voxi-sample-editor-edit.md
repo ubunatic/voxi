@@ -32,7 +32,31 @@ Managing private samples in `~/.local/share/voxi/samples/{dictation,noise,voice}
   - **Delete (`d` / `Del`)**: confirmation prompt before removing both audio and JSON sidecar via `Store.Delete`.
   - **Jargon Annotation**: surface `Keyterms` / special jargon clearly in the detail and edit views so sample-based ASR evaluations can distinguish expected jargon from model-quality `repair` replacements (#223).
 
-## 4. Implementation & Verification Plan
+## 4. Decision (2026-11-23)
 
-- Place TUI state, rendering, and key-handling in `internal/sample/` with unit tests using `t.TempDir()` (never touching `~/.local/share/voxi/samples/`).
-- Run `make lint`, `make test-short`, and `make install` to verify.
+- **Loom widget correction**: `ubunatic.com/loom v0.2.18` provides `loom.TextInput` (`NewTextInput`), not `loom.TextEntry`. Use `loom.TextInput` for inline single-line input (search filter, sample ID, transcript, comma-separated keyterms/jargon), with word-wrapped transcript display in the detail pane.
+- **Mic recording & raw stdin**: `loom.Pane` owns terminal stdin in raw mode during the TUI session. Drive `devsample.CaptureUtteranceWithReader` with a controlled pipe/cancel signal rather than sharing live stdin directly, so `Enter`/`Space` in the TUI stops capture cleanly without stdin contention.
+- **Testability & safety**: Inject store, chunk buffer, audio player, and mic recorder interfaces into the TUI model. All tests must use `t.TempDir()`, never touch `~/.local/share/voxi/samples/`, and use zero sleeps.
+- **Two milestones**: Ship browse/edit/move/delete + CLI routing first (M1), then playback, add-from-mic/chunk, and docs sync (M2).
+
+## 5. Milestones & Verification Plan
+
+### M1: Store Helpers, CLI Routing & Core Browse/Edit/Move/Delete TUI
+- Add `Store.UpdateKeyterms(id string, keyterms []string) error` (or `Update` helper preserving trimmed unique keyterms) in `internal/sample/store.go`.
+- Update `internal/sample/command.go`:
+  - `voxi sample edit` accepts `MaximumNArgs(1)`: `edit <ID>` retains `$VISUAL`/`$EDITOR` behavior; bare `edit` launches the `loom` TUI (with explicit non-TTY error if no interactive terminal is attached).
+  - Add `voxi sample editor` subcommand (`ExactArgs(0)`) launching the same TUI.
+- Implement core `loom.Widget` in `internal/sample/` (`editor.go`):
+  - Purpose tabs (`All`, `dictation`, `noise`, `voice`) via `1`–`4` / `Tab`, `/` search filter (`loom.TextInput`), `↑`/`↓`/`j`/`k` selection, `★` badge for keyterms, `✓` badge for `voice` consent, detail pane.
+  - `e` Edit mode (`loom.TextInput` for `Transcript` and `Keyterms`; preserves non-empty transcript requirement on `dictation` and `voice`).
+  - `m` Move purpose (`dictation`/`noise`/`voice`) via `Store.Move`, enforcing non-empty transcript + explicit `[y]`/`[n]` own-voice consent confirmation via `Store.GrantConsent` when moving into `voice`.
+  - `d`/`Delete` confirmation prompt calling `Store.Delete`.
+- Unit tests (`internal/sample/editor_test.go`, `command_test.go`) covering `ConsumeKey`, `loom.Render`, TTY guard, CLI routing, and all store mutations in `t.TempDir()`.
+
+### M2: Playback, Add Flows (Mic & Recent Chunks) & Docs
+- `p`/`Space` audio playback off the key loop using `devsample.PlayerCommand` (and clean stop on re-press or quit).
+- `a` Add flow:
+  - Source choice: `[1] Record from mic` (controlled `devsample.CaptureUtteranceWithReader` + optional `TranscribeRawTranscript`, saving WAV + sidecar via `Store.Put`) or `[2] Import from recent chunks` (`chunks.Buffer.List(true)`, `Buffer.ReadWAV`, prefilled transcript and `devsample.SuggestKeyterms`).
+  - `loom.TextInput` prompts for `ID`, `Purpose`, `Transcript`, `Keyterms`, plus own-voice consent when adding to `voice`.
+- Word wrapping/narrow-width handling in detail view; update `docs/SampleStore.md` (and check `website/man/index.html` / `voxi man` tests if applicable).
+- Unit tests with fake player/recorder/chunk buffer in `t.TempDir()`, followed by `make lint`, `make test-short`, and `make install`.
