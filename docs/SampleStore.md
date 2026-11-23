@@ -38,8 +38,10 @@ Stores and files:
 Commands and packages:
 
 - `voxi chunks list|show|play|delete` — `internal/chunks`.
-- `voxi sample list|show|play|record|add|edit|move|delete` — `internal/sample` plus shared
-  capture, editor, and playback helpers in `internal/devsample`.
+- `voxi sample list|show|play|record|add|edit|editor|move|delete|publish|merge` — `internal/sample`
+  plus shared capture, editor, and playback helpers in `internal/devsample`. Bare `voxi sample edit`
+  (with no ID) and `voxi sample editor` open the interactive `loom` TUI to browse, play, record/import,
+  edit transcripts and keyterms, move, and delete samples.
 - `voxi config import` handles stop-words, replacements, and vocabulary only.
 - `voxi voice prepare|train|clone` with `--samples-dir` — `internal/tts/clone`.
 - Scripts reading `corpus.tsv`: `scripts/speech_context_bench`, `scripts/clack_features`.

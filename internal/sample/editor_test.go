@@ -373,18 +373,14 @@ func TestEditorKeysQuitOnlyInBrowse(t *testing.T) {
 	}
 }
 
-func TestEditorM2KeysReservedWithoutAudio(t *testing.T) {
+func TestEditorPlaybackMissingAudioSetsStatus(t *testing.T) {
 	e, s := newTestEditor(t, Sample{ID: "a", Purpose: Dictation, Transcript: "one"})
 	press(e, "p")
-	if !strings.Contains(e.status, "M2") {
+	if !strings.Contains(e.status, "no audio") {
 		t.Fatalf("p status = %q", e.status)
 	}
-	press(e, "a")
-	if !strings.Contains(e.status, "M2") || e.mode != modeBrowse {
-		t.Fatalf("a status = %q mode=%v", e.status, e.mode)
-	}
 	if x, _ := s.Get("a"); x.Transcript != "one" {
-		t.Fatalf("reserved keys changed the store: %+v", x)
+		t.Fatalf("playback on missing audio changed the store: %+v", x)
 	}
 }
 

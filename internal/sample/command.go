@@ -166,7 +166,7 @@ func NewCommand(d deps.Dependencies) *cobra.Command {
 	cmd.AddCommand(record)
 	cmd.AddCommand(&cobra.Command{Use: "edit [ID]", Short: "Edit a sample transcript, or open the sample editor", Long: "Edit the transcript for a sample using $VISUAL or $EDITOR. Without an ID, open the interactive sample editor (same as voxi sample editor).\n\nExample: voxi sample edit greeting\nExample: voxi sample edit", Args: cobra.MaximumNArgs(1), RunE: func(c *cobra.Command, a []string) error {
 		if len(a) == 0 {
-			return runEditorCommand(d, open)
+			return runEditorCommand(c.Context(), d, open)
 		}
 		s, err := open()
 		if err != nil {
@@ -186,7 +186,7 @@ func NewCommand(d deps.Dependencies) *cobra.Command {
 		return s.UpdateTranscript(a[0], text)
 	}})
 	cmd.AddCommand(&cobra.Command{Use: "editor", Short: "Browse, edit, move, and delete samples in a terminal editor", Long: "Open the interactive sample editor to browse, filter, edit, move, and delete private samples. It needs an interactive terminal.\n\nExample: voxi sample editor", Args: cobra.NoArgs, RunE: func(c *cobra.Command, _ []string) error {
-		return runEditorCommand(d, open)
+		return runEditorCommand(c.Context(), d, open)
 	}})
 	var moveOwnVoice bool
 	move := &cobra.Command{Use: "move ID PURPOSE", Short: "Move a sample to another purpose", Long: "Move a sample to the dictation, noise, or voice purpose. Moving into voice asks you to confirm that the sample is your own voice and that you consent to cloning it.\n\nExample: voxi sample move greeting noise", Args: cobra.ExactArgs(2), RunE: func(c *cobra.Command, a []string) error {
@@ -332,7 +332,7 @@ func publishSample(ctx context.Context, d deps.Dependencies, s *Store, x Sample,
 
 // runEditorCommand opens the interactive sample editor. It refuses to start unless
 // stdin and stdout are both terminals, because loom needs a real terminal to draw.
-func runEditorCommand(d deps.Dependencies, open func() (*Store, error)) error {
+func runEditorCommand(ctx context.Context, d deps.Dependencies, open func() (*Store, error)) error {
 	if !interactiveTerminal(d) {
 		return errors.New("sample editor needs an interactive terminal on stdin and stdout; use voxi sample list or voxi sample edit ID instead")
 	}
@@ -340,7 +340,7 @@ func runEditorCommand(d deps.Dependencies, open func() (*Store, error)) error {
 	if err != nil {
 		return err
 	}
-	return runSampleEditor(s)
+	return runSampleEditor(ctx, d, s)
 }
 
 // interactiveTerminal reports whether d's stdin and stdout are both *os.File terminals.
