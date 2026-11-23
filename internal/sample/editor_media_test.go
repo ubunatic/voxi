@@ -383,3 +383,98 @@ func TestEditorAddFromRecentChunksAndCancelCleanup(t *testing.T) {
 		t.Fatalf("saved chunk sample = %+v", got)
 	}
 }
+
+// TestEditorPlaybackChildContextCancelledOnCompletion checks that the context
+// handed to play is live while it runs and cancelled once playback returns
+// normally. Spawn runs inline, so the closure has finished when press returns.
+func TestEditorPlaybackChildContextCancelledOnCompletion(t *testing.T) {
+	e, s := newTestEditor(t)
+	putSampleWithAudio(t, s, Sample{ID: "clip", Purpose: Dictation, Transcript: "hello"})
+	e.reload("")
+	e.spawn = func(f func()) { f() }
+	var child context.Context
+	e.play = func(ctx context.Context, wavPath string) error {
+		child = ctx
+		if err := ctx.Err(); err != nil {
+			t.Fatalf("child context already cancelled while playing: %v", err)
+		}
+		return nil
+	}
+	press(e, "p")
+	if child == nil {
+		t.Fatal("play was not called")
+	}
+	if err := child.Err(); !errors.Is(err, context.Canceled) {
+		t.Fatalf("child playback context after normal completion: err=%v, want canceled", err)
+	}
+	if e.playCancel != nil {
+		t.Fatal("playCancel should be cleared after completion")
+	}
+}
+
+// TestEditorPlaybackChildContextCancelledOnError covers a play call that fails.
+func TestEditorPlaybackChildContextCancelledOnError(t *testing.T) {
+	e, s := newTestEditor(t)
+	putSampleWithAudio(t, s, Sample{ID: "clip", Purpose: Dictation, Transcript: "hello"})
+	e.reload("")
+	e.spawn = func(f func()) { f() }
+	var child context.Context
+	e.play = func(ctx context.Context, wavPath string) error {
+		child = ctx
+		return errors.New("no output device")
+	}
+	press(e, "p")
+	if child == nil || child.Err() == nil {
+		t.Fatalf("child playback context not cancelled after failed play: err=%v", child)
+	}
+	if e.status != "playback failed: no output device" {
+		t.Fatalf("status = %q", e.status)
+	}
+}
+
+// TestEditorRecordingChildContextCancelledOnEarlyError checks that the recorder's
+// context is cancelled when recording fails before the user stops it.
+func TestEditorRecordingChildContextCancelledOnEarlyError(t *testing.T) {
+	e, _ := newTestEditor(t)
+	e.spawn = func(f func()) { f() }
+	var child context.Context
+	e.record = func(ctx context.Context, stop <-chan struct{}) ([]byte, time.Duration, error) {
+		child = ctx
+		if err := ctx.Err(); err != nil {
+			t.Fatalf("recorder context already cancelled at start: %v", err)
+		}
+		return nil, 0, errors.New("device busy")
+	}
+	pressKeys(e, "a", "1")
+	if child == nil || !errors.Is(child.Err(), context.Canceled) {
+		t.Fatalf("recorder context after early error: err=%v, want canceled", child)
+	}
+	if e.mode != modeBrowse || e.status != "recording failed: device busy" {
+		t.Fatalf("early error: mode=%v status=%q", e.mode, e.status)
+	}
+	if e.recCancel != nil || e.recStop != nil {
+		t.Fatal("recording state should be cleared after early error")
+	}
+}
+
+// TestEditorRecordingChildContextCancelledOnCompletion checks the normal path:
+// the recorder returns audio, ASR fills the form, and the context is released.
+func TestEditorRecordingChildContextCancelledOnCompletion(t *testing.T) {
+	e, _ := newTestEditor(t)
+	e.spawn = func(f func()) { f() }
+	var child context.Context
+	e.record = func(ctx context.Context, stop <-chan struct{}) ([]byte, time.Duration, error) {
+		child = ctx
+		return make([]byte, 320), time.Second, nil
+	}
+	e.transcribe = func(ctx context.Context, pcm []byte) (string, error) { return "ok", nil }
+	e.suggestKeyterms = func(string) []string { return nil }
+	t.Cleanup(e.cleanup) // removes the temp WAV the form is holding
+	pressKeys(e, "a", "1")
+	if e.mode != modeAddForm {
+		t.Fatalf("expected add form, mode=%v status=%q", e.mode, e.status)
+	}
+	if child == nil || !errors.Is(child.Err(), context.Canceled) {
+		t.Fatalf("recorder context after normal completion: err=%v, want canceled", child)
+	}
+}

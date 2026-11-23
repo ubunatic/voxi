@@ -40,17 +40,22 @@ func defaultSamplePlayer(d deps.Dependencies) func(ctx context.Context, wavPath 
 // io.Pipe so it never contends with loom.Pane's raw terminal stdin.
 func defaultSampleRecorder(d deps.Dependencies) func(ctx context.Context, stop <-chan struct{}) ([]byte, time.Duration, error) {
 	return func(ctx context.Context, stop <-chan struct{}) ([]byte, time.Duration, error) {
+		// rctx ends the pipe goroutine on every return path, including an early capture
+		// error that never reads stop. Defers run in reverse, so pr.Close runs first and
+		// unblocks a pending write before cancel fires.
+		rctx, cancel := context.WithCancel(ctx)
+		defer cancel()
 		pr, pw := io.Pipe()
 		defer pr.Close()
 		go func() {
+			defer pw.Close()
 			select {
 			case <-stop:
 				_, _ = pw.Write([]byte("\n"))
-			case <-ctx.Done():
+			case <-rctx.Done():
 			}
-			_ = pw.Close()
 		}()
-		return devsample.CaptureUtteranceWithReader(ctx, d, bufio.NewReader(pr))
+		return devsample.CaptureUtteranceWithReader(rctx, d, bufio.NewReader(pr))
 	}
 }
 
@@ -145,6 +150,7 @@ func (e *sampleEditor) togglePlaybackLocked() {
 	playFn := e.play
 	e.setStatus("playing " + x.ID + "… (p/Space to stop)")
 	e.queueLocked(func() {
+		defer cancel() // release the child context on normal and error completion
 		err := playFn(pctx, wavPath)
 		e.mu.Lock()
 		if e.playSeq == seq {
@@ -215,6 +221,7 @@ func (e *sampleEditor) startMicRecordingLocked() {
 	trFn := e.transcribe
 	sugFn := e.suggestKeyterms
 	e.queueLocked(func() {
+		defer cancel() // release the child context on normal and error completion
 		pcm, dur, err := recFn(rctx, stopCh)
 		if rctx.Err() != nil {
 			return
