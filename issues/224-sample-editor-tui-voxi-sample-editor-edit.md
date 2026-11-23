@@ -56,3 +56,11 @@ Delivered in `c65065a` (`feat(sample): add core sample editor TUI (issue 224 M1)
   - Shared form via `loom.TextInput` for `ID` (validating format and uniqueness via `Store.Has`), `Purpose` (`dictation`/`noise`/`voice`), `Transcript`, `Keyterms`, plus own-voice consent prompt and non-empty transcript guard when adding to `voice`.
 - Update `docs/SampleStore.md` (document `editor` / bare `edit` plus existing `publish`/`merge` commands).
 - Unit tests with fake player/recorder/chunk buffer in `t.TempDir()` (zero sleeps, never touching `~/.local/share/voxi/samples/`), followed by `make lint`, full `make test-q1` (or `QUOTA_BYPASS=1 make test`), and `make install`.
+
+Delivered in `a3272d5` (`feat(sample): add playback, mic/chunk import, and docs to sample editor (issue 224 M2)`): `p`/`Space` playback, `a` add flow (mic via controlled pipe + recent chunks via `chunks.Buffer`), `editor_render.go` split clearing the file-length lint warning, and `docs/SampleStore.md` update. Reviewed by `rev-224-m2` (`agy:gemini-4-neon`, severity `low`).
+
+### M3: Context Cancel Cleanup & Final Verification
+**Pre-Work / Required Refinements (from `rev-224-m2`):**
+- Call `defer cancel()` inside both spawned closures in `internal/sample/editor_media.go` (`togglePlaybackLocked` around `:140-164` and `startMicRecordingLocked` around `:203-284`) so child contexts and `defaultSampleRecorder`'s pipe-writer goroutine never leak on normal or error completion before `e.ctx` ends.
+- Add a regression test in `internal/sample/editor_media_test.go` asserting the child `ctx` passed to `play` and `record` is cancelled after normal/error completion.
+- Re-verify `go test -race -count=1 ./internal/sample/...`, `make lint`, `make test-q1`, and `make install`.
