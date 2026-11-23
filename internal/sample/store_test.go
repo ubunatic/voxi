@@ -242,3 +242,78 @@ func TestPublicPermissions(t *testing.T) {
 		t.Errorf("public sidecar mode %o", info.Mode().Perm())
 	}
 }
+
+func TestNormalizeKeyterms(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		in   []string
+		want []string
+	}{
+		{"empty input", nil, nil},
+		{"only blanks", []string{"", "  ", "\t"}, nil},
+		{"trims and drops blanks", []string{"  kubectl ", "", "voxi"}, []string{"kubectl", "voxi"}},
+		{"keeps first occurrence in order", []string{"b", "a", "b", " a ", "c"}, []string{"b", "a", "c"}},
+		{"case sensitive match", []string{"Kube", "kube"}, []string{"Kube", "kube"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := NormalizeKeyterms(tc.in)
+			if strings.Join(got, "|") != strings.Join(tc.want, "|") || (got == nil) != (tc.want == nil) {
+				t.Fatalf("NormalizeKeyterms(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestUpdateDetailsNormalizesAndWritesAtomically(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "store")
+	s, err := Open(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Add(Sample{ID: "jargon", Purpose: Dictation, Transcript: "old", Keyterms: []string{"stale"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpdateDetails("jargon", "  new transcript  ", []string{" kubectl ", "", "voxi", "kubectl"}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Get("jargon")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Transcript != "new transcript" || strings.Join(got.Keyterms, "|") != "kubectl|voxi" {
+		t.Fatalf("updated sample = %+v", got)
+	}
+	if got.Purpose != Dictation || got.Audio != "" {
+		t.Fatalf("purpose or audio changed: %+v", got)
+	}
+	entries, err := os.ReadDir(filepath.Join(root, "dictation"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ent := range entries {
+		if strings.HasPrefix(ent.Name(), ".sample-") {
+			t.Fatalf("temp sidecar left behind: %s", ent.Name())
+		}
+	}
+	if err := s.UpdateDetails("jargon", "cleared", nil); err != nil {
+		t.Fatal(err)
+	}
+	got, err = s.Get("jargon")
+	if err != nil || got.Keyterms != nil {
+		t.Fatalf("cleared keyterms = %+v, %v", got.Keyterms, err)
+	}
+}
+
+func TestUpdateDetailsUnknownIDFails(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "store"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = s.UpdateDetails("missing", "text", []string{"term"})
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("unknown id error = %v, want os.ErrNotExist", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(s.Root(), "dictation", "missing.json")); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("unknown id created a sidecar: %v", statErr)
+	}
+}

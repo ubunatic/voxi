@@ -158,6 +158,36 @@ func (s *Store) UpdateTranscript(id, transcript string) error {
 	return s.write(x)
 }
 
+// UpdateDetails replaces a sample's transcript and keyterms in one atomic write.
+// The transcript is trimmed and the keyterms are normalised by NormalizeKeyterms.
+// Transcript policy (non-empty for dictation and voice) belongs to the caller.
+func (s *Store) UpdateDetails(id, transcript string, keyterms []string) error {
+	x, err := s.Get(id)
+	if err != nil {
+		return err
+	}
+	x.Transcript = strings.TrimSpace(transcript)
+	x.Keyterms = NormalizeKeyterms(keyterms)
+	return s.write(x)
+}
+
+// NormalizeKeyterms trims each keyterm, drops empty entries, and removes repeats
+// while keeping the first occurrence of every term in order. Matching is exact
+// after trimming. It returns nil when nothing remains, so the sidecar omits the field.
+func NormalizeKeyterms(keyterms []string) []string {
+	var out []string
+	seen := make(map[string]bool, len(keyterms))
+	for _, k := range keyterms {
+		k = strings.TrimSpace(k)
+		if k == "" || seen[k] {
+			continue
+		}
+		seen[k] = true
+		out = append(out, k)
+	}
+	return out
+}
+
 // GrantConsent records that the user confirmed id is their own voice and may be cloned.
 func (s *Store) GrantConsent(id string, at time.Time) error {
 	x, err := s.Get(id)

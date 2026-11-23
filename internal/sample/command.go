@@ -3,6 +3,7 @@ package sample
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 	"ubunatic.com/voxi/internal/audio"
 	"ubunatic.com/voxi/internal/chunks"
 	"ubunatic.com/voxi/internal/deps"
@@ -162,7 +164,10 @@ func NewCommand(d deps.Dependencies) *cobra.Command {
 	record.Flags().StringVar(&recordPurpose, "purpose", string(Dictation), "sample purpose: dictation, noise, or voice")
 	record.Flags().BoolVar(&recordOwnVoice, "own-voice", false, ownVoiceFlagUsage)
 	cmd.AddCommand(record)
-	cmd.AddCommand(&cobra.Command{Use: "edit ID", Short: "Edit a sample transcript", Long: "Edit the transcript for a sample using $VISUAL or $EDITOR.\n\nExample: voxi sample edit greeting", Args: cobra.ExactArgs(1), RunE: func(c *cobra.Command, a []string) error {
+	cmd.AddCommand(&cobra.Command{Use: "edit [ID]", Short: "Edit a sample transcript, or open the sample editor", Long: "Edit the transcript for a sample using $VISUAL or $EDITOR. Without an ID, open the interactive sample editor (same as voxi sample editor).\n\nExample: voxi sample edit greeting\nExample: voxi sample edit", Args: cobra.MaximumNArgs(1), RunE: func(c *cobra.Command, a []string) error {
+		if len(a) == 0 {
+			return runEditorCommand(d, open)
+		}
 		s, err := open()
 		if err != nil {
 			return err
@@ -179,6 +184,9 @@ func NewCommand(d deps.Dependencies) *cobra.Command {
 			return fmt.Errorf("sample transcript must not be empty")
 		}
 		return s.UpdateTranscript(a[0], text)
+	}})
+	cmd.AddCommand(&cobra.Command{Use: "editor", Short: "Browse, edit, move, and delete samples in a terminal editor", Long: "Open the interactive sample editor to browse, filter, edit, move, and delete private samples. It needs an interactive terminal.\n\nExample: voxi sample editor", Args: cobra.NoArgs, RunE: func(c *cobra.Command, _ []string) error {
+		return runEditorCommand(d, open)
 	}})
 	var moveOwnVoice bool
 	move := &cobra.Command{Use: "move ID PURPOSE", Short: "Move a sample to another purpose", Long: "Move a sample to the dictation, noise, or voice purpose. Moving into voice asks you to confirm that the sample is your own voice and that you consent to cloning it.\n\nExample: voxi sample move greeting noise", Args: cobra.ExactArgs(2), RunE: func(c *cobra.Command, a []string) error {
@@ -320,6 +328,27 @@ func publishSample(ctx context.Context, d deps.Dependencies, s *Store, x Sample,
 		fmt.Fprintf(d.Stdout, "published %s to %s\n", x.ID, pub.AudioPath(Sample{Purpose: Noise, Audio: x.ID + ".flac"}))
 	}
 	return nil
+}
+
+// runEditorCommand opens the interactive sample editor. It refuses to start unless
+// stdin and stdout are both terminals, because loom needs a real terminal to draw.
+func runEditorCommand(d deps.Dependencies, open func() (*Store, error)) error {
+	if !interactiveTerminal(d) {
+		return errors.New("sample editor needs an interactive terminal on stdin and stdout; use voxi sample list or voxi sample edit ID instead")
+	}
+	s, err := open()
+	if err != nil {
+		return err
+	}
+	return runSampleEditor(s)
+}
+
+// interactiveTerminal reports whether d's stdin and stdout are both *os.File terminals.
+// Test writers and pipes fail this check.
+func interactiveTerminal(d deps.Dependencies) bool {
+	in, okIn := d.Stdin.(*os.File)
+	out, okOut := d.Stdout.(*os.File)
+	return okIn && okOut && in != nil && out != nil && term.IsTerminal(int(in.Fd())) && term.IsTerminal(int(out.Fd()))
 }
 
 func editTranscript(ctx context.Context, d deps.Dependencies, initial string) (string, error) {

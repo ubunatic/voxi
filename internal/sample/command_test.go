@@ -202,7 +202,7 @@ func TestAddChunkAndLastCopyAudioSidecarAndPermissions(t *testing.T) {
 
 func TestEveryCommandHasShortAndExample(t *testing.T) {
 	cmd := NewCommand(deps.Dependencies{Getenv: func(string) string { return t.TempDir() }})
-	want := []string{"add", "delete", "edit", "list", "merge", "move", "play", "publish", "record", "show"}
+	want := []string{"add", "delete", "edit", "editor", "list", "merge", "move", "play", "publish", "record", "show"}
 	got := make([]string, 0, len(cmd.Commands()))
 	for _, child := range cmd.Commands() {
 		got = append(got, child.Name())
@@ -479,5 +479,70 @@ func TestEditAndMoveCommands(t *testing.T) {
 	cmd.SetArgs([]string{"move", "editme", "voice"})
 	if err := cmd.Execute(); err == nil {
 		t.Fatal("move into voice unexpectedly succeeded")
+	}
+}
+
+func TestEditorCommandsRefuseNonTerminalBeforeTouchingStore(t *testing.T) {
+	dataHome := t.TempDir()
+	for _, args := range [][]string{{"editor"}, {"edit"}} {
+		var out bytes.Buffer
+		cmd := testCommand(t, dataHome, "", &out, deps.Dependencies{Stdin: strings.NewReader("")})
+		cmd.SetArgs(args)
+		err := cmd.Execute()
+		if err == nil || !strings.Contains(err.Error(), "interactive terminal") {
+			t.Fatalf("%v without a terminal: err = %v, want interactive terminal error", args, err)
+		}
+	}
+	if _, err := os.Stat(Root(dataHome)); !os.IsNotExist(err) {
+		t.Fatalf("non-terminal editor touched the store: %v", err)
+	}
+}
+
+func TestEditorCommandArgumentValidation(t *testing.T) {
+	dataHome := t.TempDir()
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{"editor takes no arguments", []string{"editor", "extra"}},
+		{"edit takes at most one ID", []string{"edit", "a", "b"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			cmd := testCommand(t, dataHome, "", &out, deps.Dependencies{Stdin: strings.NewReader("")})
+			cmd.SetArgs(tc.args)
+			if err := cmd.Execute(); err == nil {
+				t.Fatalf("%v accepted", tc.args)
+			}
+		})
+	}
+}
+
+func TestEditWithIDRegressionStillUsesEditorPath(t *testing.T) {
+	dataHome := t.TempDir()
+	var out bytes.Buffer
+	cmd := testCommand(t, dataHome, "", &out, deps.Dependencies{Stdin: strings.NewReader("")})
+	cmd.SetArgs([]string{"edit", "missing"})
+	err := cmd.Execute()
+	if err == nil || strings.Contains(err.Error(), "interactive terminal") {
+		t.Fatalf("edit ID should look up the sample, not the TTY guard: err = %v", err)
+	}
+}
+
+func TestInteractiveTerminalRejectsPipesAndBuffers(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	defer w.Close()
+	for _, d := range []deps.Dependencies{
+		{},
+		{Stdin: r, Stdout: w},
+		{Stdin: strings.NewReader(""), Stdout: &bytes.Buffer{}},
+	} {
+		if interactiveTerminal(d) {
+			t.Fatalf("non-terminal streams %T/%T reported interactive", d.Stdin, d.Stdout)
+		}
 	}
 }
