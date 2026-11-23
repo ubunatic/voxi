@@ -179,11 +179,12 @@ func NewCommand(out io.Writer, home string, builtins []spec.StopWord, maxVocabul
 		func() *cobra.Command {
 			add := &cobra.Command{Use: "add HEARD WRITTEN", Short: "Add a heard-form to written-form mapping, case-insensitive and case-adaptive", Args: cobra.ExactArgs(2), RunE: func(cmd *cobra.Command, a []string) error {
 				fixedCase, _ := cmd.Flags().GetBool("fixed-case")
+				category, _ := cmd.Flags().GetString("category")
 				rules, err := LoadReplacements(replacementPath)
 				if err != nil {
 					return err
 				}
-				rules, rule, err := AddReplacement(rules, a[0], a[1], fixedCase)
+				rules, rule, err := AddReplacementWithCategory(rules, a[0], a[1], fixedCase, category)
 				if err != nil {
 					return err
 				}
@@ -194,23 +195,45 @@ func NewCommand(out io.Writer, home string, builtins []spec.StopWord, maxVocabul
 				if fixedCase {
 					note = " (fixed case: always written exactly as given)"
 				}
+				if rule.Category != "" {
+					note += fmt.Sprintf(" (category: %s)", rule.Category)
+				}
 				fmt.Fprintf(out, "Added transcript replacement %q -> %q%s. Remove it with: voxi feedback replacement remove %q\n", rule.From, rule.To, note, rule.From)
 				return nil
 			}}
 			add.Flags().Bool("fixed-case", false, "always write WRITTEN exactly as given, regardless of how HEARD was cased (use for domains and the like)")
+			add.Flags().String("category", "", "classify the rule: jargon (domain term) or repair (ASR error fix); empty leaves it uncategorized")
 			return add
 		}(),
+		&cobra.Command{Use: "set-category HEARD CATEGORY", Short: "Set an existing rule's category to jargon or repair", Args: cobra.ExactArgs(2), RunE: func(_ *cobra.Command, a []string) error {
+			rules, err := LoadReplacements(replacementPath)
+			if err != nil {
+				return err
+			}
+			rules, rule, err := SetReplacementCategory(rules, a[0], a[1])
+			if err != nil {
+				return err
+			}
+			if err := SaveReplacements(replacementPath, rules); err != nil {
+				return err
+			}
+			fmt.Fprintf(out, "Set category of transcript replacement %q -> %q to %s.\n", rule.From, rule.To, rule.Category)
+			return nil
+		}},
 		&cobra.Command{Use: "list", Short: "List exact transcript corrections", Args: cobra.NoArgs, RunE: func(_ *cobra.Command, _ []string) error {
 			rules, err := LoadReplacements(replacementPath)
 			if err != nil {
 				return err
 			}
 			for _, rule := range rules {
-				if rule.FixedCase {
-					fmt.Fprintf(out, "%s\t%s\t[fixed-case]\n", rule.From, rule.To)
-				} else {
-					fmt.Fprintf(out, "%s\t%s\n", rule.From, rule.To)
+				line := rule.From + "\t" + rule.To
+				if rule.Category != "" {
+					line += "\t[" + rule.Category + "]"
 				}
+				if rule.FixedCase {
+					line += "\t[fixed-case]"
+				}
+				fmt.Fprintln(out, line)
 			}
 			return nil
 		}},

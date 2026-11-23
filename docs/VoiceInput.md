@@ -152,7 +152,9 @@ voxi history record               # stdin/stdout pass-through hook for Voxtype
 voxi config get type-delay-ms     # read type_delay_ms from ~/.config/voxtype/config.toml
 voxi config set type-delay-ms <MS> # edit type_delay_ms preserving comments
 voxi feedback replacement add Voxy voxi # exact post-transcription correction
-voxi feedback replacement list         # HEARD<TAB>WRITTEN mappings
+voxi feedback replacement add Voxy voxi --category jargon # classify: jargon or repair
+voxi feedback replacement set-category Voxy repair         # classify an existing rule
+voxi feedback replacement list         # HEARD<TAB>WRITTEN[<TAB>[category]][<TAB>[fixed-case]]
 voxi feedback replacement remove Voxy  # remove a heard-form mapping
 voxi settings                 # interactive TUI for LLM cleaner, models, typing delay, history
 voxi settings --test          # verify all configured features & dependencies (JSON: --json)
@@ -168,6 +170,21 @@ Multi-word sources are supported and their spaces match non-empty transcript whi
 All matches are applied once against the original chunk, with the longest overlapping
 source winning; output is therefore literal and non-cascading. Add separate aliases when
 an ASR engine emits multiple forms. No fuzzy, phonetic, semantic, or model-based matching occurs.
+
+Each rule has an optional category that only evaluations read; live dictation applies every
+rule regardless of category:
+
+- `jargon`: a domain term the ASR model cannot know without help (project, product, or model
+  names such as `taia`, `haiku`, `qwen`). Keep these when measuring model quality.
+- `repair`: a correction for an ASR error on a common word or artifact. Skip these when
+  measuring raw model quality, since they hide the model's own mistakes.
+- none: uncategorized (the default for rules created before categories existed). Evaluations
+  that select a category never include uncategorized rules.
+
+`add --category jargon|repair` sets the category when the rule is created (case and surrounding
+whitespace are ignored). `set-category HEARD jargon|repair` changes an existing rule in place
+and cannot clear a category; remove and re-add the rule to make it uncategorized. `list` shows
+the category as `[jargon]` or `[repair]` after the target, followed by `[fixed-case]` when set.
 
 Corrections are loaded when an eager session starts and happen after transcript cleanup,
 before acceptance, chunk metadata, aggregation, typing, and history. They apply to each ASR

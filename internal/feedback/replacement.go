@@ -21,10 +21,34 @@ const replacementFileName = "replacements.json"
 // always render exactly as stored regardless of context, such as domain
 // names ("ubunatic.com" must stay lowercase even after a capitalized
 // sentence-initial "Ubunatic.com").
+//
+// Category classifies the rule for evaluation purposes only: CategoryJargon
+// rules map domain vocabulary a generic ASR model cannot know (project and
+// product names), CategoryRepair rules compensate for ASR errors. Empty means
+// uncategorized. Live dictation ignores Category; evaluations may filter on it.
 type Replacement struct {
 	From      string `json:"from"`
 	To        string `json:"to"`
 	FixedCase bool   `json:"fixed_case,omitempty"`
+	Category  string `json:"category,omitempty"`
+}
+
+// Replacement categories. See Replacement.Category.
+const (
+	CategoryJargon = "jargon"
+	CategoryRepair = "repair"
+)
+
+// NormalizeCategory trims and lowercases a replacement category. The empty
+// string is valid and means uncategorized; any other value must be
+// CategoryJargon or CategoryRepair.
+func NormalizeCategory(cat string) (string, error) {
+	c := strings.ToLower(strings.TrimSpace(cat))
+	switch c {
+	case "", CategoryJargon, CategoryRepair:
+		return c, nil
+	}
+	return "", fmt.Errorf("replacement category %q is invalid: use %q, %q, or leave it empty", cat, CategoryJargon, CategoryRepair)
 }
 
 // ReplacementPath returns the private user replacement dictionary path.
@@ -50,7 +74,12 @@ func LoadReplacements(path string) ([]Replacement, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid stored replacement %d: %w", i+1, err)
 		}
+		category, err := NormalizeCategory(rule.Category)
+		if err != nil {
+			return nil, fmt.Errorf("invalid stored replacement %d: %w", i+1, err)
+		}
 		normalized.FixedCase = rule.FixedCase
+		normalized.Category = category
 		rules[i] = normalized
 	}
 	return normalizeReplacements(rules), nil
@@ -94,11 +123,21 @@ func SaveReplacements(path string, rules []Replacement) error {
 // fixedCase is set), and a case-only variant is rejected as a duplicate
 // rather than needing its own entry.
 func AddReplacement(rules []Replacement, from, to string, fixedCase bool) ([]Replacement, Replacement, error) {
+	return AddReplacementWithCategory(rules, from, to, fixedCase, "")
+}
+
+// AddReplacementWithCategory is AddReplacement with a rule category
+// (CategoryJargon, CategoryRepair, or "" for uncategorized).
+func AddReplacementWithCategory(rules []Replacement, from, to string, fixedCase bool, category string) ([]Replacement, Replacement, error) {
 	rule, err := normalizeReplacement(from, to)
 	if err != nil {
 		return rules, Replacement{}, err
 	}
 	rule.FixedCase = fixedCase
+	rule.Category, err = NormalizeCategory(category)
+	if err != nil {
+		return rules, Replacement{}, err
+	}
 	for _, existing := range rules {
 		if strings.EqualFold(existing.From, rule.From) {
 			return rules, Replacement{}, fmt.Errorf("replacement source %q is already mapped to %q (as %q; matching is case-insensitive)", rule.From, existing.To, existing.From)
@@ -106,6 +145,55 @@ func AddReplacement(rules []Replacement, from, to string, fixedCase bool) ([]Rep
 	}
 	rules = append(rules, rule)
 	return normalizeReplacements(rules), rule, nil
+}
+
+// SetReplacementCategory sets the category of the existing rule whose source
+// matches from (case-insensitive). category must be CategoryJargon or
+// CategoryRepair; an empty category is rejected so classification stays an
+// explicit choice.
+func SetReplacementCategory(rules []Replacement, from, category string) ([]Replacement, Replacement, error) {
+	category, err := NormalizeCategory(category)
+	if err != nil {
+		return rules, Replacement{}, err
+	}
+	if category == "" {
+		return rules, Replacement{}, fmt.Errorf("replacement category must be %q or %q", CategoryJargon, CategoryRepair)
+	}
+	from = normalizeSpace(from)
+	for i, rule := range rules {
+		if strings.EqualFold(rule.From, from) {
+			out := append([]Replacement(nil), rules...)
+			out[i].Category = category
+			return normalizeReplacements(out), out[i], nil
+		}
+	}
+	return rules, Replacement{}, fmt.Errorf("replacement source %q was not found", from)
+}
+
+// FilterReplacementsByCategory returns the rules whose Category is one of
+// categories, compared case-insensitively after trimming. An empty string in
+// categories selects uncategorized rules. Uncategorized rules never match a
+// named category, and no categories selects nothing.
+func FilterReplacementsByCategory(rules []Replacement, categories ...string) []Replacement {
+	want := make(map[string]bool, len(categories))
+	for _, c := range categories {
+		want[strings.ToLower(strings.TrimSpace(c))] = true
+	}
+	var out []Replacement
+	for _, rule := range rules {
+		if want[strings.ToLower(strings.TrimSpace(rule.Category))] {
+			out = append(out, rule)
+		}
+	}
+	return out
+}
+
+// ApplyReplacementsByCategory applies only the rules selected by
+// FilterReplacementsByCategory and returns the applied rules as
+// ApplyReplacementsWithAudit does. Live dictation keeps using
+// ApplyReplacementsWithAudit so every rule still applies.
+func ApplyReplacementsByCategory(text string, rules []Replacement, categories ...string) (string, []Replacement) {
+	return ApplyReplacementsWithAudit(text, FilterReplacementsByCategory(rules, categories...))
 }
 
 // RemoveReplacement removes a source mapping. Matching is case-insensitive.

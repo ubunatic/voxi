@@ -223,3 +223,211 @@ func TestApplyReplacementsWithAudit(t *testing.T) {
 		t.Errorf("expected no applied rules on unmatched text, got %v (%+v)", noMatchText, noApplied)
 	}
 }
+
+func TestLegacyReplacementJSONLoadsUncategorized(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "replacements.json")
+	if err := os.WriteFile(path, []byte(`[{"from":"Voxy","to":"voxi","fixed_case":true}]`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadReplacements(path)
+	if err != nil || len(loaded) != 1 {
+		t.Fatalf("loaded = %#v, err = %v", loaded, err)
+	}
+	if loaded[0].Category != "" || !loaded[0].FixedCase || loaded[0].To != "voxi" {
+		t.Fatalf("legacy rule = %#v", loaded[0])
+	}
+	if err := SaveReplacements(path, loaded); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), `"category"`) {
+		t.Fatalf("uncategorized rule must omit category key: %s", b)
+	}
+}
+
+func TestLoadReplacementsCategoryNormalizedAndValidated(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "replacements.json")
+	if err := os.WriteFile(path, []byte(`[{"from":"taia","to":"taia","category":" Jargon "}]`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadReplacements(path)
+	if err != nil || len(loaded) != 1 || loaded[0].Category != CategoryJargon {
+		t.Fatalf("loaded = %#v, err = %v", loaded, err)
+	}
+	if err := os.WriteFile(path, []byte(`[{"from":"x","to":"y","category":"typo"}]`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadReplacements(path); err == nil || !strings.Contains(err.Error(), "invalid stored replacement 1") {
+		t.Fatalf("invalid stored category error = %v", err)
+	}
+}
+
+func TestNormalizeCategory(t *testing.T) {
+	tests := []struct {
+		in, want string
+		wantErr  bool
+	}{
+		{"", "", false},
+		{"   ", "", false},
+		{"jargon", "jargon", false},
+		{"repair", "repair", false},
+		{" JARGON\t", "jargon", false},
+		{"Repair", "repair", false},
+		{"typo", "", true},
+		{"jargon repair", "", true},
+	}
+	for _, tt := range tests {
+		got, err := NormalizeCategory(tt.in)
+		if (err != nil) != tt.wantErr {
+			t.Errorf("NormalizeCategory(%q) err = %v, wantErr %v", tt.in, err, tt.wantErr)
+		}
+		if got != tt.want {
+			t.Errorf("NormalizeCategory(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestAddReplacementWithCategory(t *testing.T) {
+	rules, rule, err := AddReplacementWithCategory(nil, "taia", "taia", false, " Jargon ")
+	if err != nil || rule.Category != CategoryJargon || len(rules) != 1 || rules[0].Category != CategoryJargon {
+		t.Fatalf("add jargon: rules = %#v, rule = %#v, err = %v", rules, rule, err)
+	}
+	if _, _, err := AddReplacementWithCategory(rules, "heiko", "haiku", false, "typo"); err == nil {
+		t.Error("invalid category accepted")
+	}
+	if _, _, err := AddReplacementWithCategory(rules, "TAIA", "other", false, "repair"); err == nil || !strings.Contains(err.Error(), "already mapped") {
+		t.Errorf("duplicate with category error = %v", err)
+	}
+	// AddReplacement keeps its signature and stays uncategorized.
+	plain, plainRule, err := AddReplacement(nil, "jules", "jules", false)
+	if err != nil || plainRule.Category != "" || plain[0].Category != "" {
+		t.Fatalf("AddReplacement category = %#v, err = %v", plain, err)
+	}
+}
+
+func TestSetReplacementCategory(t *testing.T) {
+	rules := []Replacement{{From: "Heiko", To: "haiku"}, {From: "quan", To: "qwen", Category: CategoryJargon}}
+	updated, rule, err := SetReplacementCategory(rules, " HEIKO ", "Repair")
+	if err != nil || rule.Category != CategoryRepair || rule.From != "Heiko" {
+		t.Fatalf("set repair: rule = %#v, err = %v", rule, err)
+	}
+	if updated[0].Category != CategoryRepair || updated[1].Category != CategoryJargon {
+		t.Fatalf("updated = %#v", updated)
+	}
+	if rules[0].Category != "" {
+		t.Fatalf("input slice mutated: %#v", rules)
+	}
+	if _, _, err := SetReplacementCategory(updated, "missing", CategoryJargon); err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Errorf("nonexistent rule error = %v", err)
+	}
+	if _, _, err := SetReplacementCategory(updated, "quan", ""); err == nil {
+		t.Error("empty category accepted")
+	}
+	if _, _, err := SetReplacementCategory(updated, "quan", "typo"); err == nil {
+		t.Error("invalid category accepted")
+	}
+}
+
+func TestFilterAndApplyReplacementsByCategory(t *testing.T) {
+	rules := []Replacement{
+		{From: "taia", To: "taia", Category: CategoryJargon},
+		{From: "heiko", To: "haiku", Category: CategoryRepair},
+		{From: "jewel", To: "jules"},
+	}
+	if got := FilterReplacementsByCategory(rules, CategoryJargon); len(got) != 1 || got[0].From != "taia" {
+		t.Fatalf("jargon filter = %#v", got)
+	}
+	if got := FilterReplacementsByCategory(rules, " REPAIR "); len(got) != 1 || got[0].From != "heiko" {
+		t.Fatalf("repair filter = %#v", got)
+	}
+	if got := FilterReplacementsByCategory(rules); len(got) != 0 {
+		t.Fatalf("no categories must select nothing, got %#v", got)
+	}
+	if got := FilterReplacementsByCategory(rules, ""); len(got) != 1 || got[0].From != "jewel" {
+		t.Fatalf("empty category must select uncategorized, got %#v", got)
+	}
+
+	text := "taia heiko jewel"
+	gotJargon, appliedJargon := ApplyReplacementsByCategory(text, rules, CategoryJargon)
+	if gotJargon != "taia heiko jewel" || len(appliedJargon) != 1 || appliedJargon[0].From != "taia" {
+		t.Errorf("jargon apply = %q, %+v", gotJargon, appliedJargon)
+	}
+	gotRepair, appliedRepair := ApplyReplacementsByCategory(text, rules, CategoryRepair)
+	if gotRepair != "taia haiku jewel" || len(appliedRepair) != 1 || appliedRepair[0].From != "heiko" {
+		t.Errorf("repair apply = %q, %+v", gotRepair, appliedRepair)
+	}
+	gotAll, appliedAll := ApplyReplacementsWithAudit(text, rules)
+	if gotAll != "taia haiku jules" || len(appliedAll) != 3 {
+		t.Errorf("live apply must keep all rules: %q, %+v", gotAll, appliedAll)
+	}
+}
+
+func TestCategoryPreservedByDedupeAndImportMerge(t *testing.T) {
+	kept, dropped := DedupeReplacements([]Replacement{
+		{From: "Boxie", To: "Voxi", Category: CategoryRepair},
+		{From: "boxie", To: "voxi"},
+	})
+	if len(kept) != 1 || kept[0].Category != CategoryRepair || len(dropped) != 1 {
+		t.Fatalf("dedupe kept = %#v, dropped = %#v", kept, dropped)
+	}
+
+	dest := []Replacement{{From: "taia", To: "taia"}}
+	src := []Replacement{{From: "taia", To: "taia", Category: CategoryJargon}, {From: "qwen", To: "qwen", Category: CategoryJargon}}
+	merged, summary := mergeReplacements(dest, src, true)
+	if summary.Imported != 2 || len(merged) != 2 {
+		t.Fatalf("merge summary = %+v, merged = %#v", summary, merged)
+	}
+	for _, r := range merged {
+		if r.Category != CategoryJargon {
+			t.Errorf("merged rule lost category: %#v", r)
+		}
+	}
+}
+
+func TestReplacementCategoryCommands(t *testing.T) {
+	home := t.TempDir()
+	var out bytes.Buffer
+	run := func(args ...string) error {
+		out.Reset()
+		cmd := NewCommand(&out, home, rules, 64, nil)
+		cmd.SetArgs(args)
+		return cmd.Execute()
+	}
+	if err := run("replacement", "add", "taia", "taia", "--category", " Jargon "); err != nil {
+		t.Fatal(err)
+	}
+	if got := out.String(); !strings.Contains(got, "(category: jargon)") {
+		t.Fatalf("add output = %q", got)
+	}
+	if err := run("replacement", "add", "heiko", "haiku", "--category", "typo"); err == nil {
+		t.Fatal("add with invalid category accepted")
+	}
+	if err := run("replacement", "add", "ubonatic dot com", "ubunatic.com", "--fixed-case"); err != nil {
+		t.Fatal(err)
+	}
+	if err := run("replacement", "add", "heiko", "haiku"); err != nil {
+		t.Fatal(err)
+	}
+	if err := run("replacement", "set-category", "heiko", "repair"); err != nil {
+		t.Fatal(err)
+	}
+	if got := out.String(); got != "Set category of transcript replacement \"heiko\" -> \"haiku\" to repair.\n" {
+		t.Fatalf("set-category output = %q", got)
+	}
+	if err := run("replacement", "set-category", "missing", "repair"); err == nil {
+		t.Error("set-category on missing rule accepted")
+	}
+	if err := run("replacement", "set-category", "heiko", "typo"); err == nil {
+		t.Error("set-category with invalid category accepted")
+	}
+	if err := run("replacement", "list"); err != nil {
+		t.Fatal(err)
+	}
+	want := "heiko\thaiku\t[repair]\ntaia\ttaia\t[jargon]\nubonatic dot com\tubunatic.com\t[fixed-case]\n"
+	if got := out.String(); got != want {
+		t.Fatalf("list = %q, want %q", got, want)
+	}
+}
