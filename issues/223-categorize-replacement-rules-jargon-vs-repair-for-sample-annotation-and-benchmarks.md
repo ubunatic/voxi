@@ -25,11 +25,22 @@ When evaluating raw ASR model quality in benchmarks (`voxi bench`) or against an
 - **Schema (`internal/feedback/replacement.go`)**:
   - Add `Category string` (`json:"category,omitempty"`) to `Replacement`, supporting `"jargon"` and `"repair"` (with clear fallback/validation for legacy uncategorized entries).
   - Add a category-filtered apply helper (e.g. `ApplyReplacementsByCategory` / filter parameter on `ApplyReplacementsWithAudit`) while keeping live dictation applying all enabled rules by default.
-- **CLI (`voxi feedback replace`)**:
-  - Allow specifying and updating rule categories (`--category jargon|repair`) and displaying categories in `list`.
+- **CLI (`voxi feedback replacement`)**:
+  - Allow specifying and updating rule categories (`--category jargon|repair` on `add`, `set-category HEARD CATEGORY` subcommand) and displaying categories in `list`.
   - Categorize/audit existing rules in `~/.config/voxi/replacements.json` (currently 10 entries: `ThaiR`/`Thaia`/`taya`/`teyr`/`tire`/`tyer` → `taia`, `heiko` → `haiku`, `jewel`/`jewels` → `jules`, `quan` → `qwen`).
 - **Benchmarks & Sample Evaluation**:
-  - Wire replacement category filtering into benchmark/sample-eval paths so `repair` rules are skipped when scoring raw model quality while `jargon` rules can be retained.
+  - Wire replacement category filtering into `voxi bench` (`internal/bench/bench.go`) so `repair` rules are skipped when scoring raw model quality while `jargon` rules can be retained.
+
+## Decision
+
+- **CLI command & update UX**: The existing command is `voxi feedback replacement` (not `replace`) and has no `update` subcommand. Add `--category jargon|repair` to `add`, add `set-category HEARD CATEGORY` to update existing rules in place, and show `[jargon]` / `[repair]` in `list`.
+- **Bench default & flag**: `voxi bench` currently applies no replacements. Add `--replacements none|jargon|all` (default `none` so existing raw-ASR baselines are unchanged; `jargon` applies only `jargon` rules and skips `repair` and uncategorized rules).
+- **Live dictation**: `internal/eager/eager.go` continues to apply all rules via `ApplyReplacementsWithAudit` without category filtering.
+
+## Milestones
+
+- **M1 (Schema, CLI & Docs)**: Add `Category` (`jargon`|`repair`) to `feedback.Replacement`, validation & `FilterReplacementsByCategory` / `ApplyReplacementsByCategory`, `voxi feedback replacement` (`add --category`, `set-category`, `list` output), preserve `Category` in `DedupeReplacements` / `import.go`, unit tests in `internal/feedback/replacement_test.go`, and update `docs/VoiceInput.md`.
+- **M2 (Bench Filtering & Verification)**: Wire `--replacements none|jargon|all` into `internal/bench` and `cmd/voxi` bench command, add unit tests in `internal/bench/`, run `make lint` and `make test-q1`, run `make install`, and categorize the 10 existing `taia`/`haiku`/`jules`/`qwen` rules in `~/.config/voxi/replacements.json` as `jargon`.
 
 ## 4. Implementation & Verification Plan
 
