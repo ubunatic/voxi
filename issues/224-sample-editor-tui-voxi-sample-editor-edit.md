@@ -42,21 +42,17 @@ Managing private samples in `~/.local/share/voxi/samples/{dictation,noise,voice}
 ## 5. Milestones & Verification Plan
 
 ### M1: Store Helpers, CLI Routing & Core Browse/Edit/Move/Delete TUI
-- Add `Store.UpdateKeyterms(id string, keyterms []string) error` (or `Update` helper preserving trimmed unique keyterms) in `internal/sample/store.go`.
-- Update `internal/sample/command.go`:
-  - `voxi sample edit` accepts `MaximumNArgs(1)`: `edit <ID>` retains `$VISUAL`/`$EDITOR` behavior; bare `edit` launches the `loom` TUI (with explicit non-TTY error if no interactive terminal is attached).
-  - Add `voxi sample editor` subcommand (`ExactArgs(0)`) launching the same TUI.
-- Implement core `loom.Widget` in `internal/sample/` (`editor.go`):
-  - Purpose tabs (`All`, `dictation`, `noise`, `voice`) via `1`–`4` / `Tab`, `/` search filter (`loom.TextInput`), `↑`/`↓`/`j`/`k` selection, `★` badge for keyterms, `✓` badge for `voice` consent, detail pane.
-  - `e` Edit mode (`loom.TextInput` for `Transcript` and `Keyterms`; preserves non-empty transcript requirement on `dictation` and `voice`).
-  - `m` Move purpose (`dictation`/`noise`/`voice`) via `Store.Move`, enforcing non-empty transcript + explicit `[y]`/`[n]` own-voice consent confirmation via `Store.GrantConsent` when moving into `voice`.
-  - `d`/`Delete` confirmation prompt calling `Store.Delete`.
-- Unit tests (`internal/sample/editor_test.go`, `command_test.go`) covering `ConsumeKey`, `loom.Render`, TTY guard, CLI routing, and all store mutations in `t.TempDir()`.
+Delivered in `c65065a` (`feat(sample): add core sample editor TUI (issue 224 M1)`): `Store.UpdateDetails` + `NormalizeKeyterms`, `voxi sample editor` / bare `voxi sample edit` CLI routing with TTY guard, and core `loom` browse/search/edit/move/delete widget. Reviewed by `rev-224-m1` (`agy:gemini-4-neon`, severity `none`) and live-checked in a forked PTY.
 
 ### M2: Playback, Add Flows (Mic & Recent Chunks) & Docs
-- `p`/`Space` audio playback off the key loop using `devsample.PlayerCommand` (and clean stop on re-press or quit).
+**Pre-Work / Required Refinements:**
+- Pass `c.Context()` and `deps.Dependencies` through `runEditorCommand` -> `runSampleEditor` (without bloating `NewCommand` further).
+- Wire off-key-loop runner callbacks (`spawn` + `pane.Invalidate()`) cleanly so background playback, mic recording, and optional ASR prefill refresh the UI thread-safely and cancel cleanly on `q` / `Ctrl-C`.
+
+**M2 Scope:**
+- `p`/`Space` audio playback off the key loop using `devsample.PlayerCommand` (and injected `Player` interface for tests); pressing again, moving, deleting, or quitting cancels active playback cleanly; missing audio reports cleanly in status.
 - `a` Add flow:
-  - Source choice: `[1] Record from mic` (controlled `devsample.CaptureUtteranceWithReader` + optional `TranscribeRawTranscript`, saving WAV + sidecar via `Store.Put`) or `[2] Import from recent chunks` (`chunks.Buffer.List(true)`, `Buffer.ReadWAV`, prefilled transcript and `devsample.SuggestKeyterms`).
-  - `loom.TextInput` prompts for `ID`, `Purpose`, `Transcript`, `Keyterms`, plus own-voice consent when adding to `voice`.
-- Word wrapping/narrow-width handling in detail view; update `docs/SampleStore.md` (and check `website/man/index.html` / `voxi man` tests if applicable).
-- Unit tests with fake player/recorder/chunk buffer in `t.TempDir()`, followed by `make lint`, `make test-short`, and `make install`.
+  - Source choice: `[1] Record from mic` (off-key-loop `devsample.CaptureUtteranceWithReader` with controlled `io.Pipe()` + cancelable `ctx` so `Enter`/`Space` stops recording cleanly while `loom` owns raw stdin, optional non-fatal `TranscribeRawTranscript`, temp WAV written via existing `internal/sample` audio helper and removed after `Store.Put`) or `[2] Import from recent chunks` (`chunks.Buffer.List(true)`, chunk picker list, `Buffer.ReadWAV`, prefilled transcript + `devsample.SuggestKeyterms` if available).
+  - Shared form via `loom.TextInput` for `ID` (validating format and uniqueness via `Store.Has`), `Purpose` (`dictation`/`noise`/`voice`), `Transcript`, `Keyterms`, plus own-voice consent prompt and non-empty transcript guard when adding to `voice`.
+- Update `docs/SampleStore.md` (document `editor` / bare `edit` plus existing `publish`/`merge` commands).
+- Unit tests with fake player/recorder/chunk buffer in `t.TempDir()` (zero sleeps, never touching `~/.local/share/voxi/samples/`), followed by `make lint`, full `make test-q1` (or `QUOTA_BYPASS=1 make test`), and `make install`.

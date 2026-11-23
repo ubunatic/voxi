@@ -17,5 +17,5 @@ date: 2026-11-23
 
 ## 2. Milestones
 
-- **M1 (Store Helpers, CLI Routing & Core Browse/Edit/Move/Delete TUI)**: Planned (in progress).
-- **M2 (Playback, Add Mic/Chunks & Docs)**: Pending M1.
+- **M1 (Store Helpers, CLI Routing & Core Browse/Edit/Move/Delete TUI)**: Delivered in `c65065a` (`internal/sample/store.go`, `command.go`, `editor.go`, tests). `make test-q1` passed across 40 packages (`ok ubunatic.com/voxi/internal/sample 1.090s`), `go test -race -count=1 ./internal/sample/...` passed 66 tests (`5.068s`), `make lint` exit 0 (66 pre-existing warnings), `make install` succeeded, and live forked PTY run (`voxi sample editor`, `q`) rendered tabs and exited 0. Reviewed by `rev-224-m1` (`agy:gemini-4-neon`, 1m10s, severity `none`).
+- **M2 (Playback, Add Mic/Chunks & Docs)**: Dispatched to `dev-224` (resume).
