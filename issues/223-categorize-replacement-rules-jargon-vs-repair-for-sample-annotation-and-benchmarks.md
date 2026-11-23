@@ -39,8 +39,12 @@ When evaluating raw ASR model quality in benchmarks (`voxi bench`) or against an
 
 ## Milestones
 
-- **M1 (Schema, CLI & Docs)**: Add `Category` (`jargon`|`repair`) to `feedback.Replacement`, validation & `FilterReplacementsByCategory` / `ApplyReplacementsByCategory`, `voxi feedback replacement` (`add --category`, `set-category`, `list` output), preserve `Category` in `DedupeReplacements` / `import.go`, unit tests in `internal/feedback/replacement_test.go`, and update `docs/VoiceInput.md`.
-- **M2 (Bench Filtering & Verification)**: Wire `--replacements none|jargon|all` into `internal/bench` and `cmd/voxi` bench command, add unit tests in `internal/bench/`, run `make lint` and `make test-q1`, run `make install`, and categorize the 10 existing `taia`/`haiku`/`jules`/`qwen` rules in `~/.config/voxi/replacements.json` as `jargon`.
+- **M1 (Schema, CLI & Docs)** — *Delivered in `ae920e3`*: Added `Category` (`jargon`|`repair`) to `feedback.Replacement`, `NormalizeCategory`, `AddReplacementWithCategory`, `SetReplacementCategory`, `FilterReplacementsByCategory`, `ApplyReplacementsByCategory`, `voxi feedback replacement` (`add --category`, `set-category`, `list`), unit tests in `internal/feedback/replacement_test.go`, and docs in `docs/VoiceInput.md`.
+- **M2 (Bench Filtering & Verification)**:
+  - **Pre-Work / Required Refinements** (from M1 review):
+    1. In `internal/feedback/replacement_test.go` (`TestReplacementCategoryCommands`), add coverage for a rule with both `--category` and `--fixed-case` (combined `add` note and `list` column order).
+    2. In `TestFilterAndApplyReplacementsByCategory`, use a non-identity jargon rule (e.g. `taya` -> `taia`) so `gotJargon` visibly transforms text in addition to checking `appliedJargon`.
+  - Wire `--replacements none|jargon|all` into `internal/bench` and `cmd/voxi` bench command, add unit tests in `internal/bench/`, run `make lint` and `make test-q1`, run `make install` (or `make restart-service`), and categorize the 10 existing `taia`/`haiku`/`jules`/`qwen` rules in `~/.config/voxi/replacements.json` as `jargon`.
 
 ## 4. Implementation & Verification Plan
 
