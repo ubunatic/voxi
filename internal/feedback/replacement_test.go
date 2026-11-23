@@ -333,11 +333,11 @@ func TestSetReplacementCategory(t *testing.T) {
 
 func TestFilterAndApplyReplacementsByCategory(t *testing.T) {
 	rules := []Replacement{
-		{From: "taia", To: "taia", Category: CategoryJargon},
+		{From: "taya", To: "taia", Category: CategoryJargon},
 		{From: "heiko", To: "haiku", Category: CategoryRepair},
 		{From: "jewel", To: "jules"},
 	}
-	if got := FilterReplacementsByCategory(rules, CategoryJargon); len(got) != 1 || got[0].From != "taia" {
+	if got := FilterReplacementsByCategory(rules, CategoryJargon); len(got) != 1 || got[0].From != "taya" {
 		t.Fatalf("jargon filter = %#v", got)
 	}
 	if got := FilterReplacementsByCategory(rules, " REPAIR "); len(got) != 1 || got[0].From != "heiko" {
@@ -350,13 +350,13 @@ func TestFilterAndApplyReplacementsByCategory(t *testing.T) {
 		t.Fatalf("empty category must select uncategorized, got %#v", got)
 	}
 
-	text := "taia heiko jewel"
+	text := "taya heiko jewel"
 	gotJargon, appliedJargon := ApplyReplacementsByCategory(text, rules, CategoryJargon)
-	if gotJargon != "taia heiko jewel" || len(appliedJargon) != 1 || appliedJargon[0].From != "taia" {
+	if gotJargon != "taia heiko jewel" || len(appliedJargon) != 1 || appliedJargon[0].From != "taya" {
 		t.Errorf("jargon apply = %q, %+v", gotJargon, appliedJargon)
 	}
 	gotRepair, appliedRepair := ApplyReplacementsByCategory(text, rules, CategoryRepair)
-	if gotRepair != "taia haiku jewel" || len(appliedRepair) != 1 || appliedRepair[0].From != "heiko" {
+	if gotRepair != "taya haiku jewel" || len(appliedRepair) != 1 || appliedRepair[0].From != "heiko" {
 		t.Errorf("repair apply = %q, %+v", gotRepair, appliedRepair)
 	}
 	gotAll, appliedAll := ApplyReplacementsWithAudit(text, rules)
@@ -408,6 +408,13 @@ func TestReplacementCategoryCommands(t *testing.T) {
 	if err := run("replacement", "add", "ubonatic dot com", "ubunatic.com", "--fixed-case"); err != nil {
 		t.Fatal(err)
 	}
+	if err := run("replacement", "add", "voxi dot com", "voxi.com", "--category", "jargon", "--fixed-case"); err != nil {
+		t.Fatal(err)
+	}
+	wantAdd := "Added transcript replacement \"voxi dot com\" -> \"voxi.com\" (fixed case: always written exactly as given) (category: jargon). Remove it with: voxi feedback replacement remove \"voxi dot com\"\n"
+	if got := out.String(); got != wantAdd {
+		t.Fatalf("add with category and fixed-case output = %q, want %q", got, wantAdd)
+	}
 	if err := run("replacement", "add", "heiko", "haiku"); err != nil {
 		t.Fatal(err)
 	}
@@ -426,7 +433,7 @@ func TestReplacementCategoryCommands(t *testing.T) {
 	if err := run("replacement", "list"); err != nil {
 		t.Fatal(err)
 	}
-	want := "heiko\thaiku\t[repair]\ntaia\ttaia\t[jargon]\nubonatic dot com\tubunatic.com\t[fixed-case]\n"
+	want := "heiko\thaiku\t[repair]\ntaia\ttaia\t[jargon]\nubonatic dot com\tubunatic.com\t[fixed-case]\nvoxi dot com\tvoxi.com\t[jargon]\t[fixed-case]\n"
 	if got := out.String(); got != want {
 		t.Fatalf("list = %q, want %q", got, want)
 	}

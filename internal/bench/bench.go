@@ -53,6 +53,13 @@ type Options struct {
 	Record       bool     // record DurationSecs of live mic audio instead of the reference clip
 	DurationSecs int      // seconds of mic audio to record when Record is set
 	Threads      int      // --threads passed to voxtype
+	// Replacements selects which transcript corrections are applied to each
+	// result's text: "none" (default, raw ASR), "jargon" (jargon-category
+	// rules only), or "all". See NormalizeReplacementMode.
+	Replacements string
+	// Home holds the replacements.json to read when Replacements is not
+	// "none". Tests set it to a temp dir.
+	Home string
 }
 
 // referenceClipURL points at whisper.cpp's own canonical example clip (JFK's
@@ -97,7 +104,11 @@ type Report struct {
 	GeneratedAt time.Time `json:"generated_at"`
 	AudioSecs   float64   `json:"audio_secs"`
 	AudioSource string    `json:"audio_source"` // "recorded" or the WAV path used
-	Results     []Result  `json:"results"`
+	// Replacements is the replacement mode applied to Result.Text: "none",
+	// "jargon", or "all". Baselines recorded with different modes are not
+	// comparable.
+	Replacements string   `json:"replacements"`
+	Results      []Result `json:"results"`
 }
 
 var backendLineRe = regexp.MustCompile(`whisper_backend_init_gpu: (using (\S+) backend|no GPU found)`)
@@ -145,6 +156,17 @@ func Run(ctx context.Context, d deps.Dependencies, opts Options) (*Report, error
 		threads = 6
 	}
 
+	// Validate the replacement mode and load its rules before any recording
+	// or download, so a bad flag or missing dictionary fails fast.
+	replacementMode, err := NormalizeReplacementMode(opts.Replacements)
+	if err != nil {
+		return nil, err
+	}
+	replacementRules, err := loadReplacementRules(replacementMode, opts.Home)
+	if err != nil {
+		return nil, err
+	}
+
 	wavPath := opts.WavFile
 	audioSource := wavPath
 	switch {
@@ -185,7 +207,7 @@ func Run(ctx context.Context, d deps.Dependencies, opts Options) (*Report, error
 		return nil, fmt.Errorf("%s contains no audio", wavPath)
 	}
 
-	report := &Report{GeneratedAt: time.Now(), AudioSecs: audioSecs, AudioSource: audioSource}
+	report := &Report{GeneratedAt: time.Now(), AudioSecs: audioSecs, AudioSource: audioSource, Replacements: replacementMode}
 	for _, backend := range backends {
 		for _, model := range models {
 			switch {
@@ -231,6 +253,7 @@ func Run(ctx context.Context, d deps.Dependencies, opts Options) (*Report, error
 			}
 		}
 	}
+	applyReplacementsToReport(report, replacementMode, replacementRules)
 	return report, nil
 }
 

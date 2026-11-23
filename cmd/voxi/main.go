@@ -351,6 +351,7 @@ func main() {
 
 	// 8. bench command
 	benchOpts := bench.DefaultOptions()
+	benchOpts.Home = d.Getenv("HOME")
 	var benchJSONPath string
 	benchCmd := &cobra.Command{
 		Use:   "bench",
@@ -360,7 +361,8 @@ func main() {
 			"and speedup for each model x backend pair. Unsupported engines (e.g. openai-transcribe)\n" +
 			"are reported as skipped rather than benched. By default it uses a fixed reference clip\n" +
 			"downloaded on demand into the user cache dir (never committed to the repo); pass\n" +
-			"--record for a live microphone clip or --file for a local WAV.",
+			"--record for a live microphone clip or --file for a local WAV. Transcripts are raw ASR output\n" +
+			"unless --replacements jargon or all applies ~/.config/voxi/replacements.json to them.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			report, err := bench.Run(cmd.Context(), d, benchOpts)
@@ -388,6 +390,7 @@ func main() {
 	benchCmd.Flags().StringSliceVar(&benchOpts.Backends, "backends", benchOpts.Backends, fmt.Sprintf("comma-separated backends to bench: cpu, gpu (default: %s)", strings.Join(benchOpts.Backends, ",")))
 	benchCmd.Flags().IntVar(&benchOpts.Threads, "threads", benchOpts.Threads, "threads passed to voxtype/crispasr")
 	benchCmd.Flags().StringVar(&benchJSONPath, "json", "", "write the full bench report as JSON to this path")
+	benchCmd.Flags().StringVar(&benchOpts.Replacements, "replacements", bench.ReplacementsNone, "apply transcript replacements to results: none (raw ASR, default), jargon (jargon-category rules only), or all")
 
 	modelSpec, err := spec.LoadModels()
 	if err != nil {
