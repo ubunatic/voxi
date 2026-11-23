@@ -70,17 +70,18 @@ type sampleEditor struct {
 	mode    editorMode
 	status  string
 
-	search *loom.TextInput
+	search *loom.TextEntry
 
 	// Edit form state. The transcript and keyterms fields are live only in modeEdit.
 	editID      string
 	editPurpose Purpose
-	transcript  *loom.TextInput
-	keyterms    *loom.TextInput
+	transcript  *loom.TextEntry
+	keyterms    *loom.TextEntry
 	editField   int // 0 transcript, 1 keyterms
 
-	// pendingID is the sample a move-consent or delete prompt is about.
+	// pendingID and confirm hold state for move-consent, add-voice-consent, or delete prompts.
 	pendingID string
+	confirm   *loom.Confirm
 
 	// Playback state.
 	playCancel context.CancelFunc
@@ -99,10 +100,10 @@ type sampleEditor struct {
 	chunkCursor  int
 
 	// Add form state.
-	addID         *loom.TextInput
+	addID         *loom.TextEntry
 	addPurpose    Purpose
-	addTranscript *loom.TextInput
-	addKeyterms   *loom.TextInput
+	addTranscript *loom.TextEntry
+	addKeyterms   *loom.TextEntry
 	addField      int // 0 ID, 1 Purpose, 2 Transcript, 3 Keyterms
 	addSource     string
 	addWAVPath    string
@@ -324,11 +325,22 @@ func (e *sampleEditor) browseKey(k loom.KeyEvent) (quit bool) {
 	return false
 }
 
+func newEditorTextEntry(value, prompt string, maxH int, focused bool) *loom.TextEntry {
+	entry := loom.NewTextEntry(loom.TextEntryOptions{
+		Prompt:    prompt,
+		Height:    1,
+		MinHeight: 1,
+		MaxHeight: maxH,
+	})
+	entry.SetValue(value)
+	entry.SetFocus(focused)
+	return entry
+}
+
 // beginSearch opens the filter line. The query stays live as the user types.
 func (e *sampleEditor) beginSearch() {
 	e.mode = modeSearch
-	e.search = loom.NewTextInput(e.query)
-	e.search.Prompt = "/ "
+	e.search = newEditorTextEntry(e.query, "/ ", 1, true)
 	e.setStatus("")
 }
 
@@ -367,10 +379,19 @@ func (e *sampleEditor) beginEdit() {
 	e.mode = modeEdit
 	e.editID = x.ID
 	e.editPurpose = x.Purpose
-	e.transcript = loom.NewTextInput(x.Transcript)
-	e.keyterms = loom.NewTextInput(strings.Join(x.Keyterms, ", "))
+	e.transcript = newEditorTextEntry(x.Transcript, "", 4, true)
+	e.keyterms = newEditorTextEntry(strings.Join(x.Keyterms, ", "), "", 2, false)
 	e.editField = 0
 	e.setStatus("edit " + x.ID)
+}
+
+func (e *sampleEditor) syncEditFocus() {
+	if e.transcript != nil {
+		e.transcript.SetFocus(e.editField == 0)
+	}
+	if e.keyterms != nil {
+		e.keyterms.SetFocus(e.editField == 1)
+	}
 }
 
 // editKey edits the transcript and keyterms fields. Enter saves, Esc cancels.
@@ -382,6 +403,7 @@ func (e *sampleEditor) editKey(k loom.KeyEvent) {
 		e.setStatus("edit cancelled")
 	case "tab", "shift-tab":
 		e.editField = 1 - e.editField
+		e.syncEditFocus()
 	case "enter":
 		e.saveEdit()
 	default:
@@ -448,6 +470,26 @@ func (e *sampleEditor) moveKey(k loom.KeyEvent) {
 	e.chooseMove(x, target)
 }
 
+func (e *sampleEditor) beginConfirm(mode editorMode, prompt string) {
+	e.mode = mode
+	e.confirm = loom.NewConfirm("").DefaultNo()
+	e.setStatus(prompt)
+}
+
+// consumeConfirmKey routes a key through loom.Confirm and reports whether a choice
+// was finalized. Note: loom v0.16.0's Confirm.ConsumeKey returns Ignored on
+// left/right/h/l even though it toggles selection, so we check Answered directly.
+func (e *sampleEditor) consumeConfirmKey(k loom.KeyEvent) (answered, confirmed bool) {
+	if e.confirm == nil {
+		return true, false
+	}
+	e.confirm.ConsumeKey(k)
+	if !e.confirm.Answered() {
+		return false, false
+	}
+	return true, e.confirm.Confirmed()
+}
+
 // chooseMove refuses voice moves without a transcript and asks for own-voice
 // consent before any other move into voice. Other moves run at once.
 func (e *sampleEditor) chooseMove(x Sample, target Purpose) {
@@ -457,9 +499,8 @@ func (e *sampleEditor) chooseMove(x Sample, target Purpose) {
 	case target == Voice && strings.TrimSpace(x.Transcript) == "":
 		e.setStatus(x.ID + " has no transcript; voice samples need one (press e first)")
 	case target == Voice:
-		e.mode = modeConfirmMove
 		e.pendingID = x.ID
-		e.setStatus("This is my own voice and I consent to cloning it? [y/N]")
+		e.beginConfirm(modeConfirmMove, "This is my own voice and I consent to cloning it?")
 	default:
 		e.doMove(x.ID, target)
 	}
@@ -467,18 +508,20 @@ func (e *sampleEditor) chooseMove(x Sample, target Purpose) {
 
 // consentKey confirms or declines own-voice consent. The default is no.
 func (e *sampleEditor) consentKey(k loom.KeyEvent) {
-	switch k.Name() {
-	case "y", "Y":
-		e.mode = modeBrowse
-		if err := e.store.GrantConsent(e.pendingID, e.now()); err != nil {
-			e.setStatus("consent failed: " + err.Error())
-			return
-		}
-		e.doMove(e.pendingID, Voice)
-	case "n", "N", "esc", "enter":
-		e.mode = modeBrowse
-		e.setStatus("move to voice cancelled: no consent")
+	answered, confirmed := e.consumeConfirmKey(k)
+	if !answered {
+		return
 	}
+	e.mode = modeBrowse
+	if !confirmed {
+		e.setStatus("move to voice cancelled: no consent")
+		return
+	}
+	if err := e.store.GrantConsent(e.pendingID, e.now()); err != nil {
+		e.setStatus("consent failed: " + err.Error())
+		return
+	}
+	e.doMove(e.pendingID, Voice)
 }
 
 func (e *sampleEditor) doMove(id string, target Purpose) {
@@ -497,27 +540,28 @@ func (e *sampleEditor) beginDelete() {
 		e.setStatus("no sample selected")
 		return
 	}
-	e.mode = modeConfirmDelete
 	e.pendingID = x.ID
-	e.setStatus(fmt.Sprintf("Delete %s and its audio? [y/N]", x.ID))
+	e.beginConfirm(modeConfirmDelete, fmt.Sprintf("Delete %s and its audio?", x.ID))
 }
 
 func (e *sampleEditor) deleteKey(k loom.KeyEvent) {
-	switch k.Name() {
-	case "y", "Y":
-		id := e.pendingID
-		e.mode = modeBrowse
-		if err := e.store.Delete(id); err != nil {
-			e.reload("")
-			e.setStatus("delete failed: " + err.Error())
-			return
-		}
-		e.reload("")
-		e.setStatus("deleted " + id)
-	case "n", "N", "esc", "enter":
-		e.mode = modeBrowse
-		e.setStatus("delete cancelled")
+	answered, confirmed := e.consumeConfirmKey(k)
+	if !answered {
+		return
 	}
+	e.mode = modeBrowse
+	if !confirmed {
+		e.setStatus("delete cancelled")
+		return
+	}
+	id := e.pendingID
+	if err := e.store.Delete(id); err != nil {
+		e.reload("")
+		e.setStatus("delete failed: " + err.Error())
+		return
+	}
+	e.reload("")
+	e.setStatus("deleted " + id)
 }
 
 // ConsumeMouse ignores the mouse; every action is a key.

@@ -377,11 +377,23 @@ func (e *sampleEditor) openAddFormLocked(source, wavPath, transcript string, key
 	e.addSource = source
 	e.addWAVPath = wavPath
 	e.addPurpose = Dictation
-	e.addID = loom.NewTextInput("")
-	e.addTranscript = loom.NewTextInput(transcript)
-	e.addKeyterms = loom.NewTextInput(strings.Join(NormalizeKeyterms(keyterms), ", "))
+	e.addID = newEditorTextEntry("", "", 1, true)
+	e.addTranscript = newEditorTextEntry(transcript, "", 3, false)
+	e.addKeyterms = newEditorTextEntry(strings.Join(NormalizeKeyterms(keyterms), ", "), "", 2, false)
 	e.addField = 0
 	e.setStatus(status)
+}
+
+func (e *sampleEditor) syncAddFocus() {
+	if e.addID != nil {
+		e.addID.SetFocus(e.mode == modeAddForm && e.addField == 0)
+	}
+	if e.addTranscript != nil {
+		e.addTranscript.SetFocus(e.mode == modeAddForm && e.addField == 2)
+	}
+	if e.addKeyterms != nil {
+		e.addKeyterms.SetFocus(e.mode == modeAddForm && e.addField == 3)
+	}
 }
 
 func (e *sampleEditor) addFormKey(k loom.KeyEvent) {
@@ -392,8 +404,10 @@ func (e *sampleEditor) addFormKey(k loom.KeyEvent) {
 		e.setStatus("add cancelled")
 	case "tab":
 		e.addField = (e.addField + 1) % 4
+		e.syncAddFocus()
 	case "shift-tab":
 		e.addField = (e.addField + 3) % 4
+		e.syncAddFocus()
 	case "enter":
 		e.submitAddFormLocked()
 	default:
@@ -457,22 +471,26 @@ func (e *sampleEditor) submitAddFormLocked() {
 		return
 	}
 	if e.addPurpose == Voice {
-		e.mode = modeConfirmAddVoice
-		e.setStatus("This is my own voice and I consent to cloning it? [y/N]")
+		e.pendingID = id
+		e.beginConfirm(modeConfirmAddVoice, "This is my own voice and I consent to cloning it?")
 		return
 	}
 	e.commitAddLocked(nil)
 }
 
 func (e *sampleEditor) confirmAddVoiceKey(k loom.KeyEvent) {
-	switch k.Name() {
-	case "y", "Y":
+	answered, confirmed := e.consumeConfirmKey(k)
+	if !answered {
+		return
+	}
+	if confirmed {
 		now := e.now().UTC()
 		e.commitAddLocked(&now)
-	case "n", "N", "esc", "enter":
-		e.mode = modeAddForm
-		e.setStatus("voice consent declined; choose another purpose or Esc to cancel")
+		return
 	}
+	e.mode = modeAddForm
+	e.syncAddFocus()
+	e.setStatus("voice consent declined; choose another purpose or Esc to cancel")
 }
 
 func (e *sampleEditor) commitAddLocked(consent *time.Time) {
@@ -556,15 +574,9 @@ func (e *sampleEditor) drawAddForm(c *loom.Canvas, r loom.Rect) {
 		}
 		y++
 	}
-	input := func(in *loom.TextInput, focused bool) {
-		if y < end && in != nil {
-			in.Draw(c, loom.Rect{X: r.X, Y: y, W: r.W, H: 1}, focused)
-		}
-		y++
-	}
 	label("New sample (" + e.addSource + ")")
 	label("ID:")
-	input(e.addID, e.mode == modeAddForm && e.addField == 0)
+	drawTextEntryField(c, r, &y, e.addID)
 	purposeStyle := loom.Style{}
 	if e.mode == modeAddForm && e.addField == 1 {
 		purposeStyle = loom.Style{Bold: true, Underline: true}
@@ -574,9 +586,9 @@ func (e *sampleEditor) drawAddForm(c *loom.Canvas, r loom.Rect) {
 	}
 	y++
 	label("Transcript:")
-	input(e.addTranscript, e.mode == modeAddForm && e.addField == 2)
+	drawTextEntryField(c, r, &y, e.addTranscript)
 	label("Keyterms, comma-separated:")
-	input(e.addKeyterms, e.mode == modeAddForm && e.addField == 3)
+	drawTextEntryField(c, r, &y, e.addKeyterms)
 }
 
 func writeTempWAV(pcm []byte) (string, error) {

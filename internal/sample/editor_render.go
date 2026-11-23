@@ -54,7 +54,7 @@ func (e *sampleEditor) drawTabs(c *loom.Canvas, x, y, w int) {
 
 func (e *sampleEditor) drawSearch(c *loom.Canvas, x, y, w int) {
 	if e.mode == modeSearch && e.search != nil {
-		e.search.Draw(c, loom.Rect{X: x, Y: y, W: w, H: 1}, true)
+		e.search.Draw(c, loom.Rect{X: x, Y: y, W: w, H: 1})
 		return
 	}
 	if e.query == "" {
@@ -64,24 +64,34 @@ func (e *sampleEditor) drawSearch(c *loom.Canvas, x, y, w int) {
 	c.Write(x, y, clip(fmt.Sprintf("/ %s (%d shown)", e.query, len(e.visible())), w), loom.Style{})
 }
 
-// drawBody puts the list beside the detail at splitMinWidth and above it when narrower.
+type widgetFunc func(c *loom.Canvas, r loom.Rect)
+
+func (fn widgetFunc) Draw(c *loom.Canvas, r loom.Rect)              { fn(c, r) }
+func (fn widgetFunc) ConsumeKey(loom.KeyEvent) loom.EventResult     { return loom.Ignored() }
+func (fn widgetFunc) ConsumeMouse(loom.MouseEvent) loom.EventResult { return loom.Ignored() }
+
+// drawBody arranges the list and detail panes using loom.Split: side by side
+// with a divider at splitMinWidth, or stacked vertically when narrower.
 func (e *sampleEditor) drawBody(c *loom.Canvas, r loom.Rect) {
-	if r.H <= 0 {
+	if r.H <= 0 || r.W <= 0 {
 		return
 	}
 	cur, ok := e.selected()
+	split := loom.NewSplit(
+		widgetFunc(func(cv *loom.Canvas, rect loom.Rect) { e.drawList(cv, rect) }),
+		widgetFunc(func(cv *loom.Canvas, rect loom.Rect) { e.drawDetail(cv, rect, cur, ok) }),
+	)
 	if r.W >= splitMinWidth {
-		listW := r.W * 2 / 5
-		for y := 0; y < r.H; y++ {
-			c.Write(r.X+listW, r.Y+y, "│", loom.Style{Dim: true})
-		}
-		e.drawList(c, loom.Rect{X: r.X, Y: r.Y, W: listW, H: r.H})
-		e.drawDetail(c, loom.Rect{X: r.X + listW + 1, Y: r.Y, W: r.W - listW - 1, H: r.H}, cur, ok)
-		return
+		split.Orientation = loom.Horizontal
+		split.Ratio = 0.4
+		split.Gap = 1
+		split.Divider = loom.DividerStyle{Glyph: "│", Style: loom.Style{Dim: true}}
+	} else {
+		split.Orientation = loom.Vertical
+		split.Ratio = 0.5
+		split.Gap = 0
 	}
-	listH := r.H / 2
-	e.drawList(c, loom.Rect{X: r.X, Y: r.Y, W: r.W, H: listH})
-	e.drawDetail(c, loom.Rect{X: r.X, Y: r.Y + listH, W: r.W, H: r.H - listH}, cur, ok)
+	split.Draw(c, r)
 }
 
 func (e *sampleEditor) drawList(c *loom.Canvas, r loom.Rect) {
@@ -114,13 +124,17 @@ func (e *sampleEditor) drawList(c *loom.Canvas, r loom.Rect) {
 	}
 }
 
-// drawDetail shows the selected sample, or the edit form while editing.
+// drawDetail shows the selected sample, or the edit/add/confirm prompt when active.
 func (e *sampleEditor) drawDetail(c *loom.Canvas, r loom.Rect, x Sample, ok bool) {
 	if r.H <= 0 || r.W <= 0 {
 		return
 	}
 	if e.mode == modeEdit && e.transcript != nil {
 		e.drawEditForm(c, r)
+		return
+	}
+	if e.mode == modeConfirmMove || e.mode == modeConfirmDelete || e.mode == modeConfirmAddVoice {
+		e.drawConfirm(c, r)
 		return
 	}
 	if e.drawAddMode(c, r) {
@@ -158,7 +172,36 @@ func (e *sampleEditor) drawDetail(c *loom.Canvas, r loom.Rect, x Sample, ok bool
 	}
 }
 
-// drawEditForm draws the transcript and keyterms inputs with the focused field marked.
+func (e *sampleEditor) drawConfirm(c *loom.Canvas, r loom.Rect) {
+	lines := wrapText(e.status, r.W)
+	y := 0
+	for _, line := range lines {
+		if y >= r.H-1 {
+			break
+		}
+		writeLine(c, r, y, line, loom.Style{Bold: true})
+		y++
+	}
+	if e.confirm != nil && y < r.H {
+		e.confirm.Draw(c, loom.Rect{X: r.X, Y: r.Y + y, W: r.W, H: 1})
+	}
+}
+
+func drawTextEntryField(c *loom.Canvas, r loom.Rect, y *int, in *loom.TextEntry) {
+	end := r.Y + r.H
+	if *y >= end || in == nil || r.W <= 0 {
+		*y++
+		return
+	}
+	h := max(1, in.Measure(r.W).Height)
+	if avail := end - *y; h > avail {
+		h = avail
+	}
+	in.Draw(c, loom.Rect{X: r.X, Y: *y, W: r.W, H: h})
+	*y += h
+}
+
+// drawEditForm draws the transcript and keyterms entries with dynamic wrapped heights.
 func (e *sampleEditor) drawEditForm(c *loom.Canvas, r loom.Rect) {
 	y := r.Y
 	end := r.Y + r.H
@@ -168,17 +211,11 @@ func (e *sampleEditor) drawEditForm(c *loom.Canvas, r loom.Rect) {
 		}
 		y++
 	}
-	input := func(in *loom.TextInput, focused bool) {
-		if y < end {
-			in.Draw(c, loom.Rect{X: r.X, Y: y, W: r.W, H: 1}, focused)
-		}
-		y++
-	}
 	label("Edit " + e.editID + " (" + string(e.editPurpose) + ")")
 	label("Transcript:")
-	input(e.transcript, e.editField == 0)
+	drawTextEntryField(c, r, &y, e.transcript)
 	label("Keyterms, comma-separated:")
-	input(e.keyterms, e.editField == 1)
+	drawTextEntryField(c, r, &y, e.keyterms)
 }
 
 // hints returns the key hints for the active mode.

@@ -499,3 +499,46 @@ func TestWrapTextKeepsRunesWhole(t *testing.T) {
 		t.Fatalf("zero width = %q", got)
 	}
 }
+
+func TestEditorLoomWidgetsWrapEditConfirmAndSplit(t *testing.T) {
+	long := "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma"
+	e, s := newTestEditor(t, Sample{ID: "wrap", Purpose: Dictation, Transcript: long, Keyterms: []string{"alpha", "sigma"}})
+
+	// Wide screen uses horizontal loom.Split with vertical divider; narrow omits it.
+	if wide := screenText(e, 80, 14); !strings.Contains(wide, "│") {
+		t.Fatalf("expected horizontal Split divider in 80x14:\n%s", wide)
+	}
+	if narrow := screenText(e, 40, 14); strings.Contains(narrow, "│") {
+		t.Fatalf("did not expect horizontal divider in stacked 40x14:\n%s", narrow)
+	}
+
+	// Edit form wraps long transcript across multiple lines via loom.TextEntry.
+	press(e, "e")
+	if !e.transcript.Focused() || e.keyterms.Focused() {
+		t.Fatalf("expected transcript focused on edit start")
+	}
+	editOut := screenText(e, 80, 14)
+	if !strings.Contains(editOut, "alpha beta") || !strings.Contains(editOut, "omicron") {
+		t.Fatalf("wrapped TextEntry missing lines:\n%s", editOut)
+	}
+	press(e, "\t")
+	if e.transcript.Focused() || !e.keyterms.Focused() {
+		t.Fatalf("expected keyterms focused after Tab")
+	}
+	press(e, "\x1b")
+
+	// Confirm defaults to No on Enter; arrow/l selects Yes and confirms on Enter.
+	press(e, "d")
+	confOut := screenText(e, 80, 14)
+	if !strings.Contains(confOut, "Yes") || !strings.Contains(confOut, "▶ No") {
+		t.Fatalf("expected Confirm Yes / ▶ No prompt:\n%s", confOut)
+	}
+	press(e, "\r")
+	if has, _ := s.Has("wrap"); !has || e.status != "delete cancelled" {
+		t.Fatalf("DefaultNo Enter should cancel: has=%v status=%q", has, e.status)
+	}
+	pressKeys(e, "d", "l", "\r")
+	if has, _ := s.Has("wrap"); has || e.status != "deleted wrap" {
+		t.Fatalf("Confirm l+Enter should delete: has=%v status=%q", has, e.status)
+	}
+}
