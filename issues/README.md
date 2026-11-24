@@ -70,4 +70,5 @@
 | 218 | [218-try-and-benchmark-lfm3-2b-audio-omni-and-generic-variants.md](218-try-and-benchmark-lfm3-2b-audio-omni-and-generic-variants.md) | Try and benchmark LFM3 2B (Audio, Omni and Generic variants) | Open |
 | 221 | [221-monitor-shows-intel-gpu-load-not-only-amd.md](221-monitor-shows-intel-gpu-load-not-only-amd.md) | Monitor shows Intel GPU load, not only AMD | Open |
 | 222 | [222-fresh-machine-r2t2-fallback-download-model-files-warn-instead-of-fail-doctor-fix-repair.md](222-fresh-machine-r2t2-fallback-download-model-files-warn-instead-of-fail-doctor-fix-repair.md) | Fresh-machine R2T2 fallback: download model files, warn instead of fail, doctor --fix repair | In Progress — code done and verified in an isolated home; waiting for llama-server on this host |
+| 225 | [225-clean-up-sample-editor-loom-v0-16-0-widget-workarounds-after-loom-458-461.md](225-clean-up-sample-editor-loom-v0-16-0-widget-workarounds-after-loom-458-461.md) | Clean up sample editor loom v0.16.0 widget workarounds after loom 458-461 | Open |
 <!-- harnez:end issues-active-index -->

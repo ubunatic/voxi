@@ -109,7 +109,8 @@ voxi sample show ID
 voxi sample play ID
 voxi sample record [--purpose P] ID                    default purpose: dictation
 voxi sample add ID --chunk N|--last [--purpose P]      replaces save-chunk / save-last
-voxi sample edit ID                                    transcript in $VISUAL/$EDITOR (166)
+voxi sample edit [ID]                                  TUI editor without ID (224); $VISUAL/$EDITOR with ID (166)
+voxi sample editor                                     TUI editor for browse, play, record, edit, move, delete (224)
 voxi sample move ID PURPOSE                            consent gate for voice
 voxi sample delete ID...                               replaces remove
 voxi sample publish ID [--no-speech]                   noise only, FLAC into testdata/samples (173)
@@ -182,6 +183,7 @@ fixtures in `testdata/speech-context/` still use the removed `corpus.tsv` format
 - Publish encodes to FLAC with ffmpeg and needs an explicit no-speech confirmation (`--no-speech`).
 - The legacy `voice-training.txt` allowlist is no longer read; clone/train print a note if it exists.
 - Help texts share one glossary (`internal/glossary`); change wording there, then regenerate man pages.
+- **Sample editor `loom v0.16.0` widget workarounds (`internal/sample/editor*.go`)**: `beginConfirm`/`consumeConfirmKey` pass an empty prompt to `loom.NewConfirm` and inspect `Answered()` directly, `drawConfirm` wraps `e.status` separately, `editKey`/`addFormKey` intercept `Tab`/`Shift-Tab` before `TextEntry.ConsumeKey`, and search/forms use `loom.TextEntry` rather than `loom.SearchBar`/`loom.Form`. Each works around a gap in `ubunatic.com/loom v0.16.0` (tracked upstream as `loom` `#458`–`#461` and for cleanup in issue 225). For live PTY smoke checks against `loom`, see [LiveMicMeter.md](LiveMicMeter.md) (DSR `\x1b[6n` reply and startup input drain).
 
 ## 10. Deliberately Not Changed
 
